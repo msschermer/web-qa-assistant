@@ -1,0 +1,45 @@
+# Privacy and data boundary
+
+Web QA Assistant is designed to inspect only the page state required for a user-requested QA action.
+
+## Local inspection
+
+The extension performs browser rules, axe, target registration and same-origin link verification locally. Localhost, private IP ranges and `.local` / `.internal` environments remain local-only.
+
+## Gateway context contract
+
+For public pages, connected context receives a sanitized report rather than the raw browser runtime. The gateway envelope intentionally excludes raw axe node payloads, target markup, form state and per-URL incomplete-check lists. URL query values are replaced before transmission.
+
+The gateway may receive bounded metadata needed to correlate a finding, including rule IDs, titles/details, confidence, sanitized selectors, status codes, environment and high-level page metadata.
+
+## AI Evidence Contract
+
+Before OpenAI is called, evidence is narrowed again to the selected finding and relevant supporting facts. The contract explicitly excludes:
+
+- whole DOM snapshots
+- form/input values
+- passwords
+- cookies
+- localStorage/sessionStorage
+- authentication tokens, nonces and credentials
+- arbitrary `data-*` attributes
+- query-string values
+- unrelated page content
+
+A bounded markup excerpt may be used only for the selected target and is attribute-sanitized first.
+
+## Connected services
+
+Meta State, Performance Monitor and WCAG Translator are called server-side through the assistant gateway. The extension does not directly expose those service URLs or require host permissions for them.
+
+## Public renderer
+
+The public scanner accepts HTTP/HTTPS URLs only. Its browser is isolated from the application network and uses the dedicated egress proxy, which rejects private/local destinations. Renderer and proxy services are not exposed publicly in the recommended deployment.
+
+## Access keys
+
+`ASSISTANT_ACCESS_TOKEN` can protect team extension routes. The token is an access control for an authorized client, not a secret from the person using that client. Do not reuse a high-value credential. Rotate it if the extension package or team access changes.
+
+## Logging
+
+Request IDs may be logged to correlate failures. Do not add raw page bodies, form submissions, cookies or full evidence graphs to production logs.

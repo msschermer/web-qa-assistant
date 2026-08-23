@@ -1,0 +1,60 @@
+:root{
+  /* Canvas and surfaces. The canvas recedes; content sits on white cards so the
+     eye lands on findings rather than on chrome. */
+  --wqa-canvas:#F1F4F8;
+  --wqa-surface:#FFFFFF;
+  --wqa-sunken:#F7F9FB;
+
+  /* Ink ramp */
+  --wqa-ink:#101828;
+  --wqa-ink-soft:#475467;
+  --wqa-ink-faint:#8A94A6;
+
+  /* Hairlines. Deliberately light: the previous build outlined every component,
+     which is what made it read as a debug panel. */
+  --wqa-line:#E4E9F0;
+  --wqa-line-strong:#D3DAE4;
+
+  /* Brand: restrained navy, used for Frank and for focus, never as decoration. */
+  --wqa-brand:#12395E;
+  --wqa-brand-ink:#0C2A46;
+  --wqa-brand-soft:#EAF0F6;
+
+  /* Semantic states */
+  --wqa-critical:#B42318;
+  --wqa-critical-soft:#FEF3F2;
+  --wqa-warn:#B54708;
+  --wqa-warn-soft:#FFFAEB;
+  --wqa-ok:#067647;
+  --wqa-ok-soft:#ECFDF3;
+  --wqa-info:#12395E;
+  --wqa-info-soft:#EAF0F6;
+
+  --wqa-focus:#12395E;
+
+  --wqa-r-sm:6px;
+  --wqa-r:8px;
+  --wqa-r-lg:12px;
+  --wqa-r-pill:999px;
+
+  --wqa-shadow:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06);
+  --wqa-shadow-lg:0 12px 32px rgba(16,24,40,.16),0 2px 6px rgba(16,24,40,.08);
+
+  /* Plex Sans carries everything a person reads. Mono is reserved for things a
+     person copies: selectors, rule IDs, HTTP codes, scores. */
+  --wqa-sans:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --wqa-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+
+  /* Legacy aliases kept so any unmigrated rule degrades gracefully rather than
+     falling back to an unstyled browser default. */
+  --wqa-paper:var(--wqa-canvas);
+  --wqa-surface-strong:var(--wqa-surface);
+  --wqa-rule:var(--wqa-line-strong);
+  --wqa-rule-soft:var(--wqa-line);
+  --wqa-blue:var(--wqa-brand);
+  --wqa-blue-wash:var(--wqa-brand-soft);
+  --wqa-live:var(--wqa-ok);
+  --wqa-danger:var(--wqa-critical);
+  --wqa-warning:var(--wqa-warn);
+  --wqa-radius:var(--wqa-r);
+}

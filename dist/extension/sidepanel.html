@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Web QA Assistant</title>
+  <link rel="stylesheet" href="ui-tokens.css">
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="app-id">
+    <h1 id="app-name">Web QA Assistant</h1>
+    <p id="host">Current page</p>
+  </div>
+  <button id="scan" class="btn btn-primary">Rescan</button>
+</header>
+
+<div class="contextbar">
+  <span id="environment-state" class="chip"></span>
+  <span id="new-count" class="chip chip-quiet"></span>
+  <label class="env-control">
+    <span>Environment</span>
+    <select id="environment" aria-label="Environment">
+      <option value="auto">Auto</option>
+      <option value="production">Production</option>
+      <option value="staging">Staging</option>
+      <option value="preview">Preview</option>
+      <option value="local">Local</option>
+    </select>
+  </label>
+</div>
+
+<main>
+  <div id="notice" role="status" aria-live="polite"></div>
+  <details id="diagnostic" class="panel diagnostic" hidden>
+    <summary>Technical diagnostics</summary>
+    <div class="panel-body">
+      <dl class="kv"><dt>Diagnostic ID</dt><dd id="diagnostic-id"></dd><dt>Operation</dt><dd id="diagnostic-operation"></dd><dt>Version</dt><dd id="diagnostic-version"></dd></dl>
+      <pre id="diagnostic-message"></pre>
+      <button id="copy-diagnostic" class="btn btn-quiet">Copy diagnostics</button>
+    </div>
+  </details>
+
+  <div id="scanner-view">
+    <section id="summary" hidden>
+      <article id="frank-overview" class="brief" data-state="loading">
+        <div class="brief-top">
+          <span class="frank-mark" aria-hidden="true">F</span>
+          <span class="frank-name">Frank</span>
+          <span id="reasoning-mode" class="chip chip-quiet">Standard guidance</span>
+        </div>
+        <h2 id="judgment-title">Analysing this page</h2>
+        <p id="brief"></p>
+        <div class="brief-meta">
+          <span id="material-count"></span>
+          <span id="coverage-state"></span>
+        </div>
+      </article>
+
+      <!-- Impact ledger: the cross-discipline balance, made visible. This is the
+           product's thesis; it is why the feed is not just an axe list. -->
+      <div id="ledger" class="ledger" aria-label="Issues by impact area"></div>
+
+      <div class="section-head"><h3>Priority</h3><button id="show-all" class="btn btn-text">Show all checks</button></div>
+      <div id="findings"></div>
+
+      <details class="panel"><summary><span>Scan coverage</span><span id="coverage-summary" class="summary-note"></span></summary><div class="panel-body"><div id="coverage" class="kv"></div><div id="coverage-notes" class="coverage-notes"></div></div></details>
+      <details id="session-panel" class="panel"><summary><span>Site session</span><span id="session-summary" class="summary-note"></span></summary><div class="panel-body"><div id="session-pages"></div><button id="clear-session" class="btn btn-text">Clear session</button></div></details>
+      <section id="resolved-panel" class="panel resolved" hidden><div class="panel-head"><span>Resolved this scan</span><b id="resolved-count"></b></div><div id="resolved-items"></div></section>
+
+      <div class="actions">
+        <button id="copy-md" class="btn btn-quiet">Copy report</button>
+        <button id="copy-json" class="btn btn-quiet">Copy JSON</button>
+        <button id="watch" class="btn btn-quiet">Watch this site</button>
+      </div>
+
+      <details id="connection-settings" class="panel"><summary><span>Connection settings</span></summary><div class="panel-body settings-grid">
+        <label>Assistant gateway<input id="gateway-url" type="url" placeholder="https://assistant.msschermer.us"></label>
+        <label>Access key<input id="gateway-key" type="password" autocomplete="off" placeholder="Required for protected team gateways"></label>
+        <div class="settings-actions"><button id="save-gateway" class="btn btn-quiet">Save connection</button><button id="test-gateway" class="btn btn-quiet">Test connection</button></div>
+        <p id="gateway-status" class="gateway-status" role="status" aria-live="polite"></p>
+        <div id="gateway-integrations" class="integration-list"></div>
+        <p class="fine-print">Page inspection stays in the browser. Connected context receives a sanitised, bounded report; connected AI receives a narrower evidence contract. Whole DOM, cookies and form values are excluded.</p>
+      </div></details>
+    </section>
+  </div>
+
+  <section id="frank-view" hidden aria-labelledby="frank-title">
+    <div class="frank-head">
+      <div class="brief-top"><span class="frank-mark" aria-hidden="true">F</span><span class="frank-name">Frank</span><span id="frank-mode" class="chip chip-quiet"></span></div>
+      <button id="frank-exit" class="btn btn-quiet">Exit</button>
+    </div>
+    <h2 id="frank-title" tabindex="-1"></h2>
+    <p id="frank-summary" class="frank-summary"></p>
+    <div id="frank-assessment" class="assessment"><b id="frank-assessment-status"></b><span id="frank-assessment-statement"></span><small id="frank-assessment-limitations"></small></div>
+    <nav class="frank-progress" aria-label="Frank walkthrough"><span id="frank-step-count"></span><div><span id="frank-progress-bar"></span></div></nav>
+    <article class="frank-step">
+      <span id="frank-step-type" class="eyebrow"></span>
+      <h3 id="frank-step-headline"></h3>
+      <p id="frank-step-body"></p>
+      <dl id="frank-metrics" class="metrics" hidden></dl>
+      <pre id="frank-code" class="code" hidden></pre>
+      <div id="frank-sources" class="source-chips"></div>
+      <details id="frank-evidence" class="evidence"><summary>Evidence used</summary><div></div></details>
+    </article>
+    <div id="frank-action-state" class="action-state" hidden role="status" aria-live="polite"></div>
+    <div class="frank-controls">
+      <button id="frank-back" class="btn btn-quiet">Back</button>
+      <button id="frank-preview" class="btn btn-quiet" hidden>Show me</button>
+      <button id="frank-reset" class="btn btn-quiet" hidden>Reset preview</button>
+      <button id="frank-copy-selector" class="btn btn-quiet" hidden>Copy selector</button>
+      <button id="frank-recheck" class="btn btn-quiet" hidden>Recheck issue</button>
+      <button id="frank-next" class="btn btn-primary">Next</button>
+    </div>
+  </section>
+</main>
+
+<template id="card">
+  <article class="finding">
+    <div class="finding-top">
+      <span class="chips">
+        <span class="chip chip-class"></span>
+        <span class="chip chip-confidence"></span>
+        <span class="chip chip-instances" hidden></span>
+      </span>
+    </div>
+    <h2></h2>
+    <p class="detail"></p>
+    <p class="finding-context"></p>
+    <div class="finding-actions">
+      <button class="ask-frank btn btn-brand">Ask Frank</button>
+      <button class="highlight btn btn-quiet">Highlight</button>
+      <button class="recheck btn btn-quiet">Recheck</button>
+      <button class="copy btn btn-quiet">Copy issue</button>
+    </div>
+    <div class="action-state" hidden role="status" aria-live="polite"></div>
+    <details class="instances" hidden><summary><span class="instances-label"></span></summary><ul class="instance-list"></ul></details>
+    <details class="technical"><summary>Evidence and technical details</summary>
+      <dl class="kv"><dt>Rule</dt><dd class="rule-id"></dd><dt>Sources</dt><dd class="technical-sources"></dd><dt class="selector-label">Selector</dt><dd class="selector"></dd><dt class="evidence-label">Evidence</dt><dd class="evidence-value"></dd></dl>
+      <button class="ignore btn btn-text">Ignore this rule on site</button>
+    </details>
+  </article>
+</template>
+<script src="sidepanel.js"></script>
+</body>
+</html>

@@ -1,0 +1,235 @@
+# Production deployment
+
+Recommended production topology:
+
+```text
+Chrome extension / public web
+        |
+        v
+assistant.msschermer.us (Caddy / TLS)
+        |
+        v
+127.0.0.1:8787  Web QA Assistant API
+        |
+        +--> Meta State
+        +--> Performance Monitor
+        +--> WCAG Translator
+        +--> OpenAI (optional)
+        |
+        v
+internal renderer --> internal egress proxy --> public internet only
+```
+
+Only the API is bound to host loopback. The renderer and egress proxy stay on internal Docker networks.
+
+## 1. Prepare the server
+
+On the Linux host:
+
+```bash
+git clone https://github.com/msschermer/web-qa-assistant.git
+cd web-qa-assistant
+git checkout v1.5.1
+cp .env.example .env
+```
+
+Generate independent random values:
+
+```bash
+openssl rand -hex 32   # RENDERER_TOKEN
+openssl rand -hex 32   # ASSISTANT_ACCESS_TOKEN
+```
+
+Edit `.env`.
+
+Recommended team configuration:
+
+```dotenv
+RENDERER_TOKEN=<random-renderer-token>
+ASSISTANT_ACCESS_TOKEN=<random-team-access-token>
+OPENAI_API_KEY=<server-side-openai-key>
+OPENAI_MODEL=gpt-5.6-terra
+PUBLIC_AI_ENABLED=false
+ALLOWED_ORIGINS=chrome-extension://<installed-extension-id>
+
+META_STATE_URL=https://meta-state.msschermer.us
+PERFORMANCE_MONITOR_URL=https://psi.msschermer.us
+WCAG_TRANSLATOR_URL=https://wcag-translator.msschermer.us
+```
+
+`ASSISTANT_ACCESS_TOKEN` protects extension-only connected routes. Treat it as an authorized-client access token, not as a secret from the authorized user who has the extension.
+
+`PUBLIC_AI_ENABLED=false` is recommended. The public web scanner will use deterministic Frank even when OpenAI is configured; team extension requests can still use connected reasoning through the protected gateway.
+
+## 2. Start the Docker stack
+
+```bash
+docker compose up -d --build
+```
+
+Check:
+
+```bash
+docker compose ps
+curl http://127.0.0.1:8787/api/health
+```
+
+Expected API fields include version `1.5.1`, OpenAI configuration state and `publicAiEnabled`.
+
+The renderer has a Docker healthcheck. The API waits for a healthy renderer before the normal container dependency is considered ready.
+
+## 2b. Shared portfolio network (recommended on the existing droplet)
+
+The droplet already runs a shared Caddy on the external network created by the
+`portfolio-infra` stack. Earlier releases required hand-editing `docker-compose.yml`
+on the server to join that network, which meant the change could be lost on every
+upgrade. `docker-compose.portfolio.yml` removes that step.
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.portfolio.yml \
+  up -d --build
+```
+
+Confirm the external network exists first:
+
+```bash
+docker network ls | grep portfolio-infra_web
+```
+
+If the name differs on your droplet, change `name:` in `docker-compose.portfolio.yml`
+rather than editing the base file.
+
+With the override in place, Caddy reaches the gateway by service name:
+
+```caddy
+assistant.msschermer.us {
+  encode zstd gzip
+  reverse_proxy web-qa-api:8787
+}
+```
+
+The loopback publish in the base file stays. It binds only to `127.0.0.1`, so it
+remains useful for `curl` checks on the droplet without being externally reachable.
+
+## 3. Configure DNS and Caddy
+
+Create/confirm DNS for:
+
+```text
+assistant.msschermer.us -> deployment server
+```
+
+The provided `Caddyfile.snippet` assumes Caddy runs on the host:
+
+```caddy
+assistant.msschermer.us {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:8787
+}
+```
+
+Reload Caddy using the method appropriate to the host, for example:
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
+Then verify:
+
+```bash
+curl https://assistant.msschermer.us/api/health
+```
+
+## 4. Verify protected integration health
+
+With `ASSISTANT_ACCESS_TOKEN` configured:
+
+```bash
+curl \
+  -H "x-web-qa-key: <team-access-token>" \
+  https://assistant.msschermer.us/api/health/integrations
+```
+
+The response reports gateway-side availability for Meta State, Performance Monitor, WCAG Translator and OpenAI configuration without exposing credentials.
+
+A connector marked unavailable does not automatically mean a client site has a problem. It is a service/coverage condition.
+
+## 5. Configure the extension
+
+Load the release extension, then under **Connection settings**:
+
+- Gateway: leave blank to use `https://assistant.msschermer.us`, or enter it explicitly
+- Access key: the `ASSISTANT_ACCESS_TOKEN` value
+- Save connection
+- Test connection
+
+For an unpacked extension, find the extension ID at `chrome://extensions` and use `chrome-extension://<id>` in `ALLOWED_ORIGINS` if you are enforcing exact CORS origins.
+
+## 6. Security requirements
+
+- Do not expose renderer port `8790` or egress proxy `8899` publicly.
+- Keep the API published only to `127.0.0.1:8787`; Caddy is the public entry point.
+- Never place `OPENAI_API_KEY` in extension source or Chrome storage.
+- Keep `PUBLIC_AI_ENABLED=false` unless public AI usage is intentionally enabled and cost/abuse controls are accepted.
+- Do not log raw page bodies, form values, cookies or unsanitized evidence graphs.
+- Rotate `ASSISTANT_ACCESS_TOKEN` if team access changes.
+- Keep specialized integration credentials/URLs server-side.
+
+## 7. Observability
+
+Requests carry `X-Web-QA-Request-ID`. Extension diagnostics and API responses include the request ID where possible. Use it to correlate:
+
+```text
+extension -> assistant gateway -> connector / renderer -> OpenAI
+```
+
+Useful commands:
+
+```bash
+docker compose logs -f web-qa-api
+docker compose logs -f renderer
+docker compose logs -f egress-proxy
+```
+
+## 8. Upgrade
+
+After a tested release tag is published:
+
+```bash
+git fetch --tags
+git checkout v1.5.1
+docker compose -f docker-compose.yml -f docker-compose.portfolio.yml up -d --build
+curl http://127.0.0.1:8787/api/health
+```
+
+Drop the `-f` flags if you are not using the shared portfolio network.
+
+Confirm the upgrade landed:
+
+```bash
+curl -s http://127.0.0.1:8787/api/health | grep 1.5.1
+curl -s -H "x-web-qa-key: <team-access-token>" \
+  http://127.0.0.1:8787/api/health/integrations
+```
+
+Integration health in 1.5.1 reports `available`, `unauthorized`, `not-found`,
+`degraded` or `unavailable`. Earlier releases reported any response under HTTP 500
+as `available`, so a misconfigured integration URL returning 404 looked healthy.
+If an integration that previously read as available now reads as `not-found`, the
+URL was already wrong; the status is newly accurate, not newly broken.
+
+Install/reload the matching extension artifact from the same release tag.
+
+## 9. Rollback
+
+Server rollback:
+
+```bash
+git checkout v1.5.1
+docker compose -f docker-compose.yml -f docker-compose.portfolio.yml up -d --build
+```
+
+Extension rollback: load the extension artifact from the same previous release. Keep server and extension versions aligned when validating behavior.

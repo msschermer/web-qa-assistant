@@ -1,0 +1,24 @@
+import fs from 'node:fs';
+import path from 'node:path';
+const root=process.cwd(),src=path.join(root,'apps/extension'),out=path.join(root,'dist/extension');
+fs.rmSync(out,{recursive:true,force:true});fs.mkdirSync(out,{recursive:true});
+for(const name of ['manifest.json','background.js','content.js','sidepanel.html','sidepanel.css','sidepanel.js'])fs.copyFileSync(path.join(src,name),path.join(out,name));
+fs.copyFileSync(path.join(root,'packages/ui/tokens.css'),path.join(out,'ui-tokens.css'));
+fs.copyFileSync(path.join(root,'packages/ai/evidence-contract.js'),path.join(out,'evidence-contract.js'));
+fs.copyFileSync(path.join(root,'packages/rules/browser-rules.js'),path.join(out,'browser-rules.js'));
+fs.copyFileSync(path.join(root,'packages/rules/image-purpose.js'),path.join(out,'image-purpose.js'));
+fs.copyFileSync(path.join(root,'packages/findings/correlate.js'),path.join(out,'correlate.js'));
+fs.copyFileSync(path.join(root,'packages/findings/compose.js'),path.join(out,'compose.js'));
+fs.copyFileSync(path.join(root,'packages/findings/impact.js'),path.join(out,'impact.js'));
+fs.copyFileSync(path.join(root,'packages/findings/signals.js'),path.join(out,'signals.js'));
+fs.copyFileSync(path.join(root,'packages/findings/confidence.js'),path.join(out,'confidence.js'));
+fs.copyFileSync(path.join(root,'packages/findings/policy.js'),path.join(out,'policy.js'));
+fs.copyFileSync(path.join(root,'packages/environment/classify.js'),path.join(out,'environment.js'));
+fs.copyFileSync(path.join(root,'packages/frank/evidence.js'),path.join(out,'frank-evidence.js'));
+// Keep the original module filename too because frank-plan.js imports ./evidence.js.
+fs.copyFileSync(path.join(root,'packages/frank/evidence.js'),path.join(out,'evidence.js'));
+fs.copyFileSync(path.join(root,'packages/frank/guidance.js'),path.join(out,'guidance.js'));
+fs.copyFileSync(path.join(root,'packages/frank/plan.js'),path.join(out,'frank-plan.js'));
+fs.mkdirSync(path.join(out,'vendor'),{recursive:true});fs.copyFileSync(path.join(root,'node_modules/axe-core/axe.min.js'),path.join(out,'vendor/axe.min.js'));
+fs.mkdirSync(path.join(out,'icons'),{recursive:true});for(const n of ['16.png','32.png','48.png','128.png'])fs.copyFileSync(path.join(src,'icons',n),path.join(out,'icons',n));
+console.log(`Built ${out}`);

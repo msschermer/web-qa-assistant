@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Web QA Assistant | Evidence-first engineering QA</title>
+  <meta name="description" content="Inspect a public page with deterministic browser QA, connected evidence, and guided engineering investigation by Frank.">
+  <meta name="robots" content="index,follow,max-image-preview:large">
+  <meta name="author" content="Mike Schermer">
+  <meta name="theme-color" content="#16202C">
+  <link rel="canonical" href="https://assistant.msschermer.us/">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/ui/tokens.css"><link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<a class="skip" href="#scanner">Skip to scanner</a>
+<div class="sheet">
+  <header class="masthead"><div><h1>WEB QA ASSISTANT</h1><p>Evidence-first QA with guided engineering investigation by Frank</p></div><nav><a href="https://github.com/msschermer/web-qa-assistant">Source</a><a href="https://msschermer.us">Portfolio</a></nav></header>
+  <main id="scanner">
+    <section class="intro"><div><span class="label">Public URL scan</span><h2>Find what matters. Prove it. Then fix it.</h2><p>Browser rules and axe establish local evidence. Meta State, Performance Monitor, and WCAG Translator add relevant context through the assistant gateway. Frank explains only what the evidence supports.</p></div><div class="install"><span class="label">Chrome extension</span><p>Use the extension for authenticated pages, live element highlighting, targeted rechecks, site QA sessions, SPA changes, and safe previews.</p><a id="extension-link" href="https://github.com/msschermer/web-qa-assistant">Extension package</a></div></section>
+    <form id="scan-form" class="scanbox"><label for="url">Public URL</label><div><input id="url" type="url" required value="https://msschermer.us" placeholder="https://example.com"><button>Run scan</button></div><p>Public HTTP/HTTPS targets only. Private-network destinations are blocked by renderer egress policy.</p></form>
+    <div id="status" role="status" aria-live="polite"></div>
+    <section id="report" hidden>
+      <div class="report-head"><div><span class="label">Observed page</span><h2 id="report-url"></h2><span id="report-environment" class="report-environment"></span></div><div class="report-actions"><button id="copy-md">Copy report</button><button id="copy-json">Copy JSON</button></div></div>
+      <article id="web-overview" class="frank-overview"><div class="overview-top"><span class="frank-brand">FRANK</span><span id="web-reasoning-mode" class="reasoning-mode"></span></div><h2 id="web-judgment"></h2><p id="brief"></p><div class="overview-meta"><span id="web-material-count"></span><span id="web-coverage-state"></span></div></article>
+      <div class="counts"><button data-filter="fix"><b id="fix-count">0</b><span>Fix</span></button><button data-filter="review"><b id="review-count">0</b><span>Review</span></button><button data-filter="context"><b id="context-count">0</b><span>Context</span></button></div>
+      <details class="coverage"><summary><span>Scan coverage</span><span id="coverage-summary"></span></summary><div id="coverage"></div><div id="coverage-notes" class="coverage-notes"></div></details>
+      <div class="filterbar"><button data-filter="all">Frank findings</button><button id="show-all-checks" type="button">Show all checks</button></div><div id="findings"></div>
+    </section>
+  </main>
+  <footer><span>Deterministic evidence decides what exists. Frank helps explain and resolve it.</span><span>Whole-page markup, cookies, form values, and session data are not sent to connected reasoning.</span></footer>
+</div>
+<template id="card"><article class="finding"><div class="finding-top"><span><span class="kind"></span><span class="finding-priority"></span><span class="finding-confidence"></span></span><span class="sources"></span></div><h3></h3><p class="detail"></p><p class="finding-context"></p><div class="finding-actions"><button class="ask-frank">Ask Frank</button><button class="copy-issue">Copy issue</button></div><div class="finding-state" role="status" aria-live="polite"></div><details class="technical"><summary>Evidence & technical details</summary><dl><dt>Rule</dt><dd class="rule-id"></dd><dt>Sources</dt><dd class="technical-sources"></dd><dt class="selector-label">Selector</dt><dd class="selector"></dd><dt class="evidence-label">Evidence</dt><dd class="evidence-value"></dd></dl></details></article></template>
+<section id="frank-overlay" class="frank-overlay" hidden aria-modal="true" role="dialog" aria-labelledby="frank-dialog-title">
+  <div class="frank-shell"><header class="frank-overlay-head"><div><span class="frank-brand">FRANK</span><span id="frank-web-mode"></span></div><button id="frank-close" aria-label="Close Frank">Exit</button></header><div class="frank-layout"><div class="frank-stage"><div id="frank-stage-empty"><span class="label">Guided view</span><p>Frank uses a focused rendered view only when the finding maps to a visible element.</p></div><img id="frank-snapshot" alt="Rendered page with the affected element spotlighted" hidden></div><aside class="frank-panel"><h2 id="frank-dialog-title" tabindex="-1"></h2><p id="frank-web-summary"></p><div id="frank-web-assessment" class="frank-assessment"><b id="frank-web-assessment-status"></b><span id="frank-web-assessment-statement"></span><small id="frank-web-assessment-limitations"></small></div><div class="frank-progress"><span id="frank-web-count"></span><div><span id="frank-web-bar"></span></div></div><article class="frank-step"><span id="frank-web-type" class="label"></span><h3 id="frank-web-headline"></h3><p id="frank-web-body"></p><dl id="frank-web-metrics" hidden></dl><pre id="frank-web-code" hidden></pre><div id="frank-web-sources"></div><details id="frank-web-evidence"><summary>Evidence used</summary><div></div></details></article><div id="frank-web-status" role="status" aria-live="polite"></div><div class="frank-web-controls"><button id="frank-web-back">Back</button><button id="frank-web-next">Next</button></div></aside></div></div>
+</section>
+<script src="/app.js"></script>
+</body>
+</html>

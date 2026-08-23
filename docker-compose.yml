@@ -1,0 +1,75 @@
+services:
+  web-qa-api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    environment:
+      PORT: 8787
+      RENDERER_URL: http://renderer:8790
+      RENDERER_TOKEN: ${RENDERER_TOKEN}
+      META_STATE_URL: ${META_STATE_URL:-https://meta-state.msschermer.us}
+      META_STATE_PATH: ${META_STATE_PATH:-/api/inspect}
+      META_STATE_HEALTH_PATH: ${META_STATE_HEALTH_PATH:-}
+      PERFORMANCE_MONITOR_URL: ${PERFORMANCE_MONITOR_URL:-https://psi.msschermer.us}
+      PERFORMANCE_MONITOR_HEALTH_PATH: ${PERFORMANCE_MONITOR_HEALTH_PATH:-}
+      WCAG_TRANSLATOR_URL: ${WCAG_TRANSLATOR_URL:-https://wcag-translator.msschermer.us}
+      WCAG_TRANSLATOR_PATH: ${WCAG_TRANSLATOR_PATH:-/v1/translate}
+      WCAG_TRANSLATOR_HEALTH_PATH: ${WCAG_TRANSLATOR_HEALTH_PATH:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.6-terra}
+      OPENAI_BRIEF_MODEL: ${OPENAI_BRIEF_MODEL:-}
+      PUBLIC_AI_ENABLED: ${PUBLIC_AI_ENABLED:-false}
+      ASSISTANT_ACCESS_TOKEN: ${ASSISTANT_ACCESS_TOKEN:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+      EXTENSION_STORE_URL: ${EXTENSION_STORE_URL:-}
+      CONNECTOR_TIMEOUT_MS: ${CONNECTOR_TIMEOUT_MS:-5000}
+      OPENAI_TIMEOUT_MS: ${OPENAI_TIMEOUT_MS:-12000}
+      FRANK_CACHE_MS: ${FRANK_CACHE_MS:-1800000}
+      SCAN_TIMEOUT_MS: ${SCAN_TIMEOUT_MS:-30000}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8787:8787"
+    networks: [default, renderer_net]
+    depends_on:
+      renderer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8787/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  renderer:
+    build:
+      context: .
+      dockerfile: services/renderer/Dockerfile
+    environment:
+      RENDERER_TOKEN: ${RENDERER_TOKEN}
+      EGRESS_PROXY_URL: http://egress-proxy:8899
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    shm_size: 256mb
+    mem_limit: 768m
+    cpus: 0.75
+    networks: [renderer_net]
+    depends_on: [egress-proxy]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8790/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  egress-proxy:
+    build:
+      context: .
+      dockerfile: services/egress-proxy/Dockerfile
+    restart: unless-stopped
+    networks: [renderer_net, egress_net]
+
+networks:
+  renderer_net:
+    internal: true
+  egress_net: {}

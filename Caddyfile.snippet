@@ -1,0 +1,13 @@
+# Host-installed Caddy, API published on loopback (base compose only).
+assistant.msschermer.us {
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:8787
+}
+
+# Containerised Caddy on the shared portfolio-infra_web network.
+# Use this form when deploying with docker-compose.portfolio.yml.
+#
+# assistant.msschermer.us {
+#   encode zstd gzip
+#   reverse_proxy web-qa-api:8787
+# }
