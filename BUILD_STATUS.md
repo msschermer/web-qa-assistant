@@ -1,8 +1,8 @@
-# Build status: Web QA Assistant 1.7.1
+# Build status: Web QA Assistant 1.7.2
 
 ## Delivery candidate
 
-1.7.0 is the cross-discipline product release. It keeps the 1.6 readiness/session/evidence architecture and adds a consumer presentation layer, dedicated Security QA area, privacy-bounded Report bug workflow, broader Frank validation, and a redesigned SaaS-style workspace.
+1.7.2 is the target-integrity patch release on top of the 1.7.1 cross-discipline workspace. It keeps deterministic evidence authoritative when the renderer receives a Cloudflare challenge or other substituted document instead of the requested page.
 
 ## Release objectives
 
@@ -17,6 +17,14 @@
 ## Validation
 
 Exact final test/check/build/release results are recorded during packaging in `RELEASE_PROVENANCE.txt` and `docs/QA-1.7.0.md`.
+
+## 1.7.2 target integrity
+
+- Detect when the renderer receives a challenge/interstitial or blocked response instead of the requested page.
+- Withhold page-derived SEO, accessibility, link, and Recommended Order conclusions for blocked or substituted targets.
+- Report honest coverage (`blocked`, `not_applicable`, `incomplete`) instead of complete-with-zero-links false positives.
+- Package integrity runtime modules in the renderer Docker image.
+- Declare stable shared-network alias `web-qa-api` for durable Caddy routing across container recreates.
 
 ## 1.7.1 target resolution
 
@@ -42,3 +50,4 @@ Merged from the alternate 1.6.1 branch and revised in review.
   splitter does not parse axe's `>>>` format.
 - Shadow-root discovery is uncached and runs per resolution attempt.
 - Iframe content remains untargetable; the content script runs in the top frame.
+- Cloudflare-gated sites may remain blocked at the gateway renderer while a normal browser session reaches the real page; target integrity now handles that safely but does not guarantee scan completion.

@@ -1,5 +1,5 @@
-Web QA Assistant 1.7.1
+Web QA Assistant 1.7.2
 
-Automated validation: 210/210 tests PASS; npm run check PASS across 63 JavaScript files; npm run build:extension PASS; RELEASE_TAG=v1.7.1 npm run release:validate PASS.
+Automated validation: 227/227 tests PASS; npm run check PASS; npm run build:extension PASS; RELEASE_TAG=v1.7.2 npm run release:validate PASS.
 
-Contents: 1.7.0 product architecture plus the target-resolution subsystem from the alternate branch, revised per code review (no page mutation, no ambiguous-match guessing, resolver stage reporting).
+Contents: 1.7.1 cross-discipline workspace plus target-integrity safe suppression for blocked/substituted renderer targets, renderer Docker integrity packaging, and stable shared-network alias web-qa-api for Caddy routing.

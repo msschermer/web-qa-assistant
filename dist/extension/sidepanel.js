@@ -1,7 +1,7 @@
 import { localFrankRuntime, localFrankWalkthrough, probeLocalAi, setLocalAiTraceSink, localAiDiagnostics } from './local-ai.js';
 import { presentFinding, presentArea, QA_AREA_ORDER } from './presentation.js';
 import { RuntimeTrace, buildBugReport, bugReportPrivacySummary } from './bug-report.js';
-const RELEASE_VERSION = '1.7.0';
+const RELEASE_VERSION = '1.7.2';
 const runtimeTrace = new RuntimeTrace();
 setLocalAiTraceSink((type,data)=>runtimeTrace.record(`local-ai:${type}`,data));
 

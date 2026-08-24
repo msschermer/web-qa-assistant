@@ -4,3 +4,8 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
+
+# Local Cursor/WebQA development state
+.cursor/webqa.env
+qa-runs/
+tools/cursor-webqa/node_modules/

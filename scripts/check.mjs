@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { provenanceMatchesVersion } from './release-metadata.mjs';
 
 const files = [];
 function walk(dir) {
@@ -40,7 +41,7 @@ const readmeSource = fs.readFileSync('README.md','utf8');
 const provenanceSource = fs.readFileSync('RELEASE_PROVENANCE.txt','utf8');
 const buildStatusSource = fs.readFileSync('BUILD_STATUS.md','utf8');
 if (!readmeSource.includes(`Current delivery candidate: **${pkg.version}**`)) { bad++; console.error('release metadata regression: README delivery candidate is stale'); }
-if (!provenanceSource.startsWith(`Web QA Assistant ${pkg.version}\n`)) { bad++; console.error('release metadata regression: provenance version is stale'); }
+if (!provenanceMatchesVersion(provenanceSource, pkg.version)) { bad++; console.error('release metadata regression: provenance version is stale'); }
 if (!buildStatusSource.includes(`Web QA Assistant ${pkg.version}`)) { bad++; console.error('release metadata regression: build status version is stale'); }
 
 for (const p of ['activeTab', 'scripting', 'sidePanel', 'storage']) {
@@ -143,7 +144,7 @@ function scanForClientData(dir) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
-      if (['node_modules', '.git', 'dist'].includes(e.name)) continue;
+      if (['node_modules', '.git', 'dist', 'qa-runs'].includes(e.name)) continue;
       scanForClientData(full);
       continue;
     }

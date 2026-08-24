@@ -29,7 +29,7 @@ On the Linux host:
 ```bash
 git clone https://github.com/msschermer/web-qa-assistant.git
 cd web-qa-assistant
-git checkout v1.7.1
+git checkout v1.7.2
 cp .env.example .env
 ```
 
@@ -80,7 +80,7 @@ docker compose ps
 curl http://127.0.0.1:8787/api/health
 ```
 
-Expected API fields include version `1.7.1`, OpenAI configuration state and `publicAiEnabled`.
+Expected API fields include version `1.7.2`, OpenAI configuration state and `publicAiEnabled`.
 
 The renderer has a Docker healthcheck. The API waits for a healthy renderer before the normal container dependency is considered ready.
 
@@ -208,7 +208,7 @@ After a tested release tag is published:
 
 ```bash
 git fetch --tags
-git checkout v1.7.1
+git checkout v1.7.2
 docker compose -f docker-compose.yml -f docker-compose.portfolio.yml up -d --build
 curl http://127.0.0.1:8787/api/health
 ```
@@ -218,7 +218,7 @@ Drop the `-f` flags if you are not using the shared portfolio network.
 Confirm the upgrade landed:
 
 ```bash
-curl -s http://127.0.0.1:8787/api/health | grep 1.7.1
+curl -s http://127.0.0.1:8787/api/health | grep 1.7.2
 curl -s -H "x-web-qa-key: <team-access-token>" \
   http://127.0.0.1:8787/api/health/integrations
 ```
@@ -236,7 +236,7 @@ Install/reload the matching extension artifact from the same release tag.
 Server rollback:
 
 ```bash
-git checkout v1.7.1
+git checkout v1.7.2
 docker compose -f docker-compose.yml -f docker-compose.portfolio.yml up -d --build
 ```
 
