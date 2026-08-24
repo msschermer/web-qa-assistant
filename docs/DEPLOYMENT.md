@@ -29,7 +29,7 @@ On the Linux host:
 ```bash
 git clone https://github.com/msschermer/web-qa-assistant.git
 cd web-qa-assistant
-git checkout v1.5.1
+git checkout v1.5.2
 cp .env.example .env
 ```
 
@@ -52,7 +52,8 @@ PUBLIC_EXTENSION_ACCESS_ENABLED=true
 INSTALL_TOKEN_SECRET=<random-install-signing-secret>
 INSTALL_TOKEN_TTL_MS=2592000000
 INSTALL_AI_DAILY_LIMIT=200
-OPENAI_API_KEY=<server-side-openai-key>
+EXTENSION_CLOUD_AI_ENABLED=false
+OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.6-terra
 PUBLIC_AI_ENABLED=false
 ALLOWED_ORIGINS=chrome-extension://<installed-extension-id>
@@ -64,7 +65,7 @@ WCAG_TRANSLATOR_URL=https://wcag-translator.msschermer.us
 
 `ASSISTANT_ACCESS_TOKEN` remains a developer/team override. With `PUBLIC_EXTENSION_ACCESS_ENABLED=true`, normal installs can register for an expiring signed installation token and do not need the shared value. `INSTALL_TOKEN_SECRET` stays server-side and signs those tokens. Managed access is public distribution access with per-install limits; it is not a hidden browser secret.
 
-`PUBLIC_AI_ENABLED=false` is recommended. The public web scanner will use deterministic Frank even when OpenAI is configured; team extension requests can still use connected reasoning through the protected gateway.
+`PUBLIC_AI_ENABLED=false` and `EXTENSION_CLOUD_AI_ENABLED=false` are recommended for a zero-provider-charge deployment. Normal extension Frank uses Chrome built-in AI on the user device when available, and verified deterministic guidance otherwise. Configure `OPENAI_API_KEY` only if you intentionally enable a metered cloud path.
 
 ## 2. Start the Docker stack
 
@@ -79,7 +80,7 @@ docker compose ps
 curl http://127.0.0.1:8787/api/health
 ```
 
-Expected API fields include version `1.5.1`, OpenAI configuration state and `publicAiEnabled`.
+Expected API fields include version `1.5.2`, OpenAI configuration state and `publicAiEnabled`.
 
 The renderer has a Docker healthcheck. The API waits for a healthy renderer before the normal container dependency is considered ready.
 
@@ -158,7 +159,7 @@ curl \
   https://assistant.msschermer.us/api/health/integrations
 ```
 
-The response reports gateway-side availability for Meta State, Performance Monitor and WCAG Translator, plus a cached live check showing whether Frank AI is operational rather than merely configured, without exposing credentials.
+The response reports gateway-side availability for Meta State, Performance Monitor and WCAG Translator. Cloud AI is not probed unless the server enables it and the extension explicitly requests the optional cloud check. On-device Frank availability is checked by Chrome in the extension, not by the gateway.
 
 A connector marked unavailable does not automatically mean a client site has a problem. It is a service/coverage condition.
 
@@ -168,7 +169,7 @@ Load the release extension. With managed installation access enabled, no access 
 
 - leave Gateway blank to use `https://assistant.msschermer.us`, or enter a custom gateway
 - enter the optional **Developer access key** (`ASSISTANT_ACCESS_TOKEN`) to override managed access for a private gateway
-- run **Test connection** to verify authorization, Frank AI operational status and connector capability health
+- run **Test connection** to verify authorization, connector capability health, Chrome on-device Frank availability, and the optional cloud fallback state
 
 For an unpacked extension, find the extension ID at `chrome://extensions` and use `chrome-extension://<id>` in `ALLOWED_ORIGINS` if you are enforcing exact CORS origins.
 
@@ -177,7 +178,8 @@ For an unpacked extension, find the extension ID at `chrome://extensions` and us
 - Do not expose renderer port `8790` or egress proxy `8899` publicly.
 - Keep the API published only to `127.0.0.1:8787`; Caddy is the public entry point.
 - Never place `OPENAI_API_KEY` in extension source or Chrome storage.
-- Keep `PUBLIC_AI_ENABLED=false` unless public AI usage is intentionally enabled and cost/abuse controls are accepted.
+- Keep `PUBLIC_AI_ENABLED=false` unless public web AI usage is intentionally enabled and cost/abuse controls are accepted.
+- Keep `EXTENSION_CLOUD_AI_ENABLED=false` unless extension users are intentionally allowed to make metered provider requests.
 - Do not log raw page bodies, form values, cookies or unsanitized evidence graphs.
 - Rotate `ASSISTANT_ACCESS_TOKEN` if team access changes, and rotate `INSTALL_TOKEN_SECRET` when all managed installation tokens should be invalidated.
 - Keep specialized integration credentials/URLs server-side.
@@ -187,7 +189,9 @@ For an unpacked extension, find the extension ID at `chrome://extensions` and us
 Requests carry `X-Web-QA-Request-ID`. Extension diagnostics and API responses include the request ID where possible. Use it to correlate:
 
 ```text
-extension -> assistant gateway -> connector / renderer -> OpenAI
+extension -> assistant gateway -> connector / renderer
+Ask Frank -> Chrome built-in AI on device
+optional cloud fallback -> assistant gateway -> provider
 ```
 
 Useful commands:
@@ -204,7 +208,7 @@ After a tested release tag is published:
 
 ```bash
 git fetch --tags
-git checkout v1.5.1
+git checkout v1.5.2
 docker compose -f docker-compose.yml -f docker-compose.portfolio.yml up -d --build
 curl http://127.0.0.1:8787/api/health
 ```
@@ -214,12 +218,12 @@ Drop the `-f` flags if you are not using the shared portfolio network.
 Confirm the upgrade landed:
 
 ```bash
-curl -s http://127.0.0.1:8787/api/health | grep 1.5.1
+curl -s http://127.0.0.1:8787/api/health | grep 1.5.2
 curl -s -H "x-web-qa-key: <team-access-token>" \
   http://127.0.0.1:8787/api/health/integrations
 ```
 
-Integration health in 1.5.1 reports `available`, `unauthorized`, `not-found`,
+Integration health in 1.5.2 reports `available`, `unauthorized`, `not-found`,
 `degraded` or `unavailable`. Earlier releases reported any response under HTTP 500
 as `available`, so a misconfigured integration URL returning 404 looked healthy.
 If an integration that previously read as available now reads as `not-found`, the
@@ -232,7 +236,7 @@ Install/reload the matching extension artifact from the same release tag.
 Server rollback:
 
 ```bash
-git checkout v1.5.1
+git checkout v1.5.2
 docker compose -f docker-compose.yml -f docker-compose.portfolio.yml up -d --build
 ```
 

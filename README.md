@@ -24,7 +24,12 @@ observation
 
 The scanner may retain lower-priority observations, but Frank's default view is intentionally selective. Inconclusive evidence never becomes a defect. A timeout, blocked checker or unavailable integration is reported as a coverage limitation instead of an issue.
 
-## What 1.4 adds
+## What 1.5.2 adds
+
+- Chrome built-in AI as Frank's preferred on-device reasoning layer in supported desktop Chrome
+- zero-metered-provider-cost defaults for normal extension scans and Frank walkthroughs
+- structured local AI output with evidence-specific adversarial validation before it can replace deterministic wording
+- optional cloud fallback as a double opt-in rather than an implicit dependency
 
 - redesigned extension and web UI led by Frank's judgment rather than raw scanner counts
 - progressive-disclosure finding cards with human meaning first and technical evidence second
@@ -54,11 +59,14 @@ Connected context is routed through the assistant gateway:
 - **Meta State** for published metadata, indexing/crawler directives, redirects and structured-data state
 - **Performance Monitor** for historical mobile/desktop context
 - **WCAG Translator** when accessibility findings need standards mapping
-- **OpenAI Responses API** for optional connected reasoning after deterministic evidence exists
+- **Chrome built-in Prompt API** for Frank's preferred on-device reasoning in supported Chrome versions
+- **OpenAI Responses API** only as an optional, explicitly enabled metered cloud fallback
 
 The extension does not need direct host permissions to those specialized services.
 
 For normal distribution, the gateway can enable **managed installation access**. The extension then receives an expiring per-install signed token automatically, so users do not paste a shared gateway key. No reusable gateway secret is bundled in the extension. Managed public access is intentionally opt-in and rate/quota limited; private deployments can continue to require a developer access key.
+
+Normal extension scans and normal Frank walkthroughs do **not** call a metered model provider. `EXTENSION_CLOUD_AI_ENABLED=false` is the server default, and the extension's Cloud AI fallback toggle is off by default. `PUBLIC_AI_ENABLED=false` keeps the portfolio web scanner deterministic as well.
 
 ## Frank
 
@@ -74,8 +82,9 @@ Visual findings use a deterministic target registry. Document-level, historical 
 
 The UI explicitly distinguishes:
 
-- **Connected reasoning**: OpenAI is available and used only after the QA engine establishes the finding.
-- **Fallback guidance**: deterministic Frank guidance using the same verified evidence when connected reasoning is disabled or fails. The UI states the fallback reason instead of implying AI ran successfully.
+- **On-device reasoning**: Chrome built-in AI improved the deterministic guidance locally. Page evidence was not sent to an AI provider.
+- **Cloud reasoning**: the user explicitly enabled the optional metered cloud fallback and the gateway returned a valid evidence-contracted walkthrough.
+- **Verified guidance**: deterministic Frank guidance remains actionable when on-device AI is unsupported, still downloading, fails quality checks, or is intentionally unavailable. The UI states the reason instead of implying AI ran.
 
 ## Environment intelligence
 
@@ -100,7 +109,7 @@ Repeated links to the same destination are grouped into one underlying problem w
 
 ## Privacy boundary
 
-The extension sends a sanitized, bounded report to the assistant gateway for connected context. It does not send a whole DOM. Before cloud AI is used, Frank applies an even narrower AI Evidence Contract.
+The extension sends a sanitized, bounded report to the assistant gateway for connected service context. It does not send a whole DOM. Frank's preferred AI improvement runs on-device with Chrome built-in AI. If the optional cloud fallback is explicitly enabled, Frank applies an even narrower AI Evidence Contract before any finding evidence leaves the product boundary.
 
 Excluded from connected AI include:
 
@@ -154,16 +163,17 @@ Detailed procedures:
 
 - `docs/INSTALLATION.md`
 - `docs/DEPLOYMENT.md`
-- `docs/QA-1.5.1.md`
+- `docs/QA-1.5.2.md`
 - `docs/RELEASE-CHECKLIST.md`
 
 ## Release workflow
 
 `main` is the known-good release branch. Development happens on feature/fix branches. GitHub Actions runs the extension build, static checks and tests on every PR. A `v*` tag validates version alignment and packages both the clean extension zip and full source zip for the GitHub Release.
 
-Current delivery candidate: **1.5.1**.
+Current delivery candidate: **1.5.2**.
 
 
 ## Documentation
 
-- `docs/BOSS-DELIVERY-SUMMARY.md` - final four-agent and boss delivery gate
+- `RELEASE_NOTES_1.5.2.md` - current release changes
+- `docs/FINAL-REVIEW-1.5.2.md` - final multi-role, adversarial, and product review gate

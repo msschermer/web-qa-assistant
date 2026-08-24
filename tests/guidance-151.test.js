@@ -14,3 +14,11 @@ test('browser performance guidance is metric-specific and evidence-led',()=>{
   const lcp=guidanceFor({ruleId:'performance.browser.lcp',performanceObservation:{largestContentfulPaintMs:5100,lcpElement:{selector:'#hero'}}});assert.match(lcp.interpretation,/#hero/);assert.match(lcp.remediation,/LCP element|image|text/i);
   const weight=guidanceFor({ruleId:'performance.browser.weight',performanceObservation:{transferBytes:7340032,unknownTransferCount:3,transferIsLowerBound:true}});assert.match(weight.interpretation,/at least 7\.0MB/i);assert.match(weight.remediation,/heaviest/i);
 });
+
+test('contrast guidance normalizes ratios that already include :1',()=>{
+  const f={ruleId:'axe.color-contrast',targetText:'RUNNING',axe:{checks:{any:[{data:{contrastRatio:3.3,expectedContrastRatio:'4.5:1',fgColor:'#2d2d2d',bgColor:'#00ff95'}}],all:[],none:[]}}};
+  const g=guidanceFor(f,{type:'production'});
+  assert.match(g.interpretation,/3\.3:1/);
+  assert.match(g.interpretation,/4\.5:1/);
+  assert.doesNotMatch(g.interpretation,/:1:1/);
+});

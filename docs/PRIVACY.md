@@ -14,7 +14,7 @@ The gateway may receive bounded metadata needed to correlate a finding, includin
 
 ## AI Evidence Contract
 
-Before OpenAI is called, evidence is narrowed again to the selected finding and relevant supporting facts. The contract explicitly excludes:
+Frank prefers Chrome built-in AI, which runs the reasoning step on the user device. For that path, finding evidence is not sent to an AI provider. If the optional cloud fallback is explicitly enabled, evidence is narrowed again to the selected finding and relevant supporting facts before the provider is called. The contract explicitly excludes:
 
 - whole DOM snapshots
 - form/input values
@@ -26,7 +26,7 @@ Before OpenAI is called, evidence is narrowed again to the selected finding and 
 - query-string values
 - unrelated page content
 
-A bounded markup excerpt may be used only for the selected target and is attribute-sanitized first.
+A bounded markup excerpt may be used only for the selected target and is attribute-sanitized first. The on-device Frank module excludes markup from its compact prompt and has no network/model-provider API calls.
 
 ## Connected services
 

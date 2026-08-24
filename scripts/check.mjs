@@ -186,7 +186,7 @@ function scanSyntheticFixtureIdentity(dir='tests') {
 scanSyntheticFixtureIdentity();
 scanSyntheticFixtureIdentity('fixtures');
 
-// --- 1.5.1 product invariants -------------------------------------------------
+// --- 1.5.x product invariants -------------------------------------------------
 
 // The image-purpose classifier must be injected before browser-rules, otherwise
 // semantic context silently degrades and Frank falls back to the old fork.
@@ -276,9 +276,9 @@ if (/ASSISTANT_ACCESS_TOKEN/.test(backgroundSource)) {
   bad++;
   console.error('managed-access regression: never bundle the shared assistant access token into extension runtime source');
 }
-if (!/\/api\/install\/register/.test(backgroundSource) || !/Frank AI operational/.test(backgroundSource)) {
+if (!/\/api\/install\/register/.test(backgroundSource)) {
   bad++;
-  console.error('managed-access regression: extension must support managed registration and report operational Frank AI health');
+  console.error('managed-access regression: extension must support managed registration without bundling a shared secret');
 }
 const planSource = fs.readFileSync('packages/frank/plan.js', 'utf8');
 for (const file of ['packages/frank/plan.js', 'apps/extension/content.js']) {
@@ -290,6 +290,79 @@ for (const file of ['packages/frank/plan.js', 'apps/extension/content.js']) {
 if (!/contrast-ratio/.test(planSource) || !/contrast-required/.test(planSource) || !/foreground-color/.test(planSource) || !/background-color/.test(planSource)) {
   bad++;
   console.error('Frank guidance regression: contrast walkthrough must retain observed ratio, requirement, and color evidence');
+}
+
+
+
+// --- 1.5.2 on-device Frank / cost-control invariants --------------------------
+const panelSource = fs.readFileSync('apps/extension/sidepanel.js', 'utf8');
+const panelHtmlSource = fs.readFileSync('apps/extension/sidepanel.html', 'utf8');
+const localAiPath = 'apps/extension/local-ai.js';
+const localAiSource = fs.existsSync(localAiPath) ? fs.readFileSync(localAiPath, 'utf8') : '';
+const composeSource = fs.readFileSync('docker-compose.yml', 'utf8');
+const envExampleSource = fs.readFileSync('.env.example', 'utf8');
+
+if (!fs.existsSync(localAiPath)) {
+  bad++;
+  console.error('on-device Frank regression: apps/extension/local-ai.js is missing');
+}
+if (/\bfetch\s*\(|XMLHttpRequest|WebSocket|api\.openai|ANTHROPIC|OPENAI_API_KEY/i.test(localAiSource)) {
+  bad++;
+  console.error('privacy/cost regression: local-ai.js must not call network/model-provider APIs or contain cloud credentials');
+}
+if (!/(?:LanguageModel|languageModel)\.availability/.test(localAiSource) || !/(?:LanguageModel|languageModel)\.create/.test(localAiSource)) {
+  bad++;
+  console.error('on-device Frank regression: Chrome LanguageModel availability/create path is missing');
+}
+if (!/responseConstraint/.test(localAiSource) || !/omitResponseConstraintInput:\s*true/.test(localAiSource)) {
+  bad++;
+  console.error('on-device Frank regression: structured Prompt API output contract is missing');
+}
+const frankUiStart = panelSource.indexOf('async function startFrank');
+const frankUiPrepare = panelSource.indexOf("type: 'PREPARE_FRANK'", frankUiStart);
+const frankUiLocalStart = panelSource.indexOf('beginLocalFrankSession', frankUiStart);
+if (frankUiStart < 0 || frankUiLocalStart < frankUiStart || frankUiPrepare < 0 || frankUiLocalStart > frankUiPrepare) {
+  bad++;
+  console.error('on-device Frank regression: model session must begin directly from the Ask Frank user gesture before awaited preparation');
+}
+if (!/type="module"\s+src="sidepanel\.js"/.test(panelHtmlSource)) {
+  bad++;
+  console.error('on-device Frank regression: sidepanel must load as an ES module');
+}
+if (!/id="cloud-ai-fallback"/.test(panelHtmlSource) || !/optional · metered/.test(panelHtmlSource) || !/cloudAiFallback:false/.test(backgroundSource)) {
+  bad++;
+  console.error('cost-control regression: cloud AI must remain explicit, labelled metered, and off by default');
+}
+if (!/EXTENSION_CLOUD_AI_ENABLED=false/.test(envExampleSource) || !/EXTENSION_CLOUD_AI_ENABLED:\s*\$\{EXTENSION_CLOUD_AI_ENABLED:-false\}/.test(composeSource)) {
+  bad++;
+  console.error('cost-control regression: server cloud AI must default off in env and compose');
+}
+if (!/await enrich\(req\.body, req\.webQaRequestId, \{ allowAi: false \}\)/.test(apiSource)) {
+  bad++;
+  console.error('cost-control regression: routine extension context enrichment must explicitly disable metered AI');
+}
+const contextStart = apiSource.indexOf("app.post('/api/context'");
+const contextEnd = apiSource.indexOf("app.post('/api/brief'", contextStart);
+if (contextStart >= 0 && /consumeManagedAiQuota|frankWalkthrough|probeAiHealth/.test(apiSource.slice(contextStart, contextEnd))) {
+  bad++;
+  console.error('cost-control regression: routine /api/context must not consume AI quota or invoke model APIs');
+}
+for (const route of ['/api/brief', '/api/frank/plan']) {
+  const idx = apiSource.indexOf(`app.post('${route}'`);
+  const next = apiSource.indexOf('app.post(', idx + 1);
+  const block = idx >= 0 ? apiSource.slice(idx, next >= 0 ? next : undefined) : '';
+  if (idx < 0 || !/extensionCloudAiEnabled\(\)/.test(block) || !/CLOUD_AI_DISABLED/.test(block)) {
+    bad++;
+    console.error(`cost-control regression: ${route} must be server-gated behind EXTENSION_CLOUD_AI_ENABLED`);
+  }
+}
+if (!/local-ai\.js/.test(fs.readFileSync('scripts/build-extension.mjs','utf8'))) {
+  bad++;
+  console.error('build regression: local-ai.js is not copied into the extension distribution');
+}
+if (/Standard guidance/.test(panelHtmlSource) || /This is the evidence behind the finding/.test(panelSource + localAiSource)) {
+  bad++;
+  console.error('Frank UX regression: generic/filler guidance labels have returned');
 }
 
 // The overlay must not duplicate the side panel's remediation surface.
@@ -306,7 +379,7 @@ if (fs.existsSync(distManifestPath)) {
     bad++;
     console.error(`stale extension build: dist is ${distManifest.version}, source is ${manifest.version}. Run npm run build:extension.`);
   }
-  for (const name of ['confidence.js', 'compose.js', 'impact.js', 'image-purpose.js']) {
+  for (const name of ['confidence.js', 'compose.js', 'impact.js', 'image-purpose.js', 'local-ai.js']) {
     if (!fs.existsSync(`dist/extension/${name}`)) {
       bad++;
       console.error(`stale extension build: ${name} is missing from dist/extension.`);

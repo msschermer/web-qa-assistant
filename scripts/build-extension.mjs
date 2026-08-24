@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 const root=process.cwd(),src=path.join(root,'apps/extension'),out=path.join(root,'dist/extension');
 fs.rmSync(out,{recursive:true,force:true});fs.mkdirSync(out,{recursive:true});
-for(const name of ['manifest.json','background.js','content.js','sidepanel.html','sidepanel.css','sidepanel.js'])fs.copyFileSync(path.join(src,name),path.join(out,name));
+for(const name of ['manifest.json','background.js','content.js','sidepanel.html','sidepanel.css','sidepanel.js','local-ai.js'])fs.copyFileSync(path.join(src,name),path.join(out,name));
 fs.copyFileSync(path.join(root,'packages/ui/tokens.css'),path.join(out,'ui-tokens.css'));
 fs.copyFileSync(path.join(root,'packages/ai/evidence-contract.js'),path.join(out,'evidence-contract.js'));
 fs.copyFileSync(path.join(root,'packages/rules/browser-rules.js'),path.join(out,'browser-rules.js'));

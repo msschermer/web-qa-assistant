@@ -70,8 +70,8 @@ test('scan enrichment distinguishes missing and rejected gateway keys from an ou
 });
 
 test('connection test checks the values currently visible in the form', () => {
-  assert.match(panel, /type: 'TEST_GATEWAY', apiBase, apiKey/);
-  assert.match(background, /testGateway\(\{apiBase:msg\.apiBase,apiKey:msg\.apiKey\}\)/);
+  assert.match(panel, /type: 'TEST_GATEWAY', apiBase, apiKey, cloudAiFallback/);
+  assert.match(background, /testGateway\(\{apiBase:msg\.apiBase,apiKey:msg\.apiKey,cloudAiFallback:Boolean\(msg\.cloudAiFallback\)\}\)/);
   assert.match(panel, /Saving first is not required/);
 });
 

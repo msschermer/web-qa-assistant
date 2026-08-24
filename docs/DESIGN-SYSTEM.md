@@ -28,8 +28,10 @@ The extension and web app share `packages/ui/tokens.css` and the portfolio visua
 
 Use:
 
-- `Connected reasoning` when OpenAI generated the structured walkthrough/brief
-- `Fallback guidance` for deterministic Frank when connected reasoning is unavailable or intentionally disabled
+- `Evidence summary` for the scan overview, which does not imply that an AI request occurred
+- `On-device reasoning` when Chrome built-in AI improved a walkthrough locally
+- `Cloud reasoning` only when the optional metered cloud fallback was explicitly enabled and succeeded
+- `Verified guidance` for deterministic Frank when local AI is unavailable, still preparing, or fails evidence-quality validation
 - `Confirmed`, `Corroborated`, `Inferred` for evidence strength
 - `Incomplete coverage` for checker uncertainty
 

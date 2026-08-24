@@ -220,7 +220,7 @@ test('custom gateway setup requests only the selected origin and can test connec
   assert.match(bg,/\/api\/health\/integrations/);
 });
 
-test('public web scanner keeps AI opt-in while team extension can use connected reasoning',()=>{
+test('public web scanner and extension cloud AI remain opt-in while the extension prefers on-device reasoning',()=>{
   const api=read('services/api/server.js');
   const env=read('.env.example');
   assert.match(api,/function publicAiEnabled/);
@@ -228,12 +228,14 @@ test('public web scanner keeps AI opt-in while team extension can use connected 
   assert.match(api,/reasoning = \{ status: 'operational', mode: 'ai'/);
   assert.match(api,/allowAi: publicAiEnabled\(\)/);
   assert.match(env,/PUBLIC_AI_ENABLED=false/);
+  assert.match(env,/EXTENSION_CLOUD_AI_ENABLED=false/);
+  assert.match(api,/preferredFrankAi: 'chrome-built-in'/);
 });
 
 
 test('extension manifest pins a stable unpacked identity for settings continuity',()=>{
   const manifest=JSON.parse(read('apps/extension/manifest.json'));
-  assert.equal(manifest.version,'1.5.1');
+  assert.equal(manifest.version,'1.5.2');
   assert.match(manifest.key,/^[A-Za-z0-9+/=]+$/);
   assert.ok(manifest.key.length>300);
 });

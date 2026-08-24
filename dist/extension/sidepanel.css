@@ -190,3 +190,7 @@ body[data-mode=frank] .contextbar,body[data-mode=frank] #scan{display:none}
   .frank-controls .btn{flex:1 1 auto}
 }
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.frank-progress>div>span,.btn{transition:none}}
+.settings-grid .settings-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--wqa-line);border-radius:var(--wqa-r-sm);padding:8px 10px;background:var(--wqa-sunken)}
+.settings-grid .settings-toggle>span{display:inline;line-height:1.35}
+.settings-grid .settings-toggle input[type=checkbox]{width:16px;height:16px;padding:0;margin:0;flex:0 0 auto;font-family:inherit}
+.integration-row[data-status=not-applicable] span{color:var(--wqa-ink-muted)}

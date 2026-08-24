@@ -12,7 +12,7 @@ const LOCAL_APIS = ['http://localhost:3000', 'http://localhost:8787'];
 const GATEWAY_TIMEOUT_MS = 10000;
 const FRANK_TIMEOUT_MS = 16000;
 const dirtyTimers = new Map();
-const RELEASE_VERSION = '1.5.1';
+const RELEASE_VERSION = '1.5.2';
 
 function diagnosticHash(input){let h=2166136261;for(let i=0;i<input.length;i++){h^=input.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36).toUpperCase()}
 function requestId(operation='REQ'){return `WQA-${operation}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,7).toUpperCase()}`}
@@ -31,7 +31,7 @@ chrome.runtime.onInstalled.addListener(()=>chrome.sidePanel.setPanelBehavior({op
 chrome.runtime.onStartup.addListener(()=>chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:false}).catch(()=>{}));
 chrome.action.onClicked.addListener(tab=>{if(!tab?.windowId)return;chrome.sidePanel.open({windowId:tab.windowId}).catch(()=>{});chrome.runtime.sendMessage({type:'ACTION_INVOKED',tabId:tab.id}).catch(()=>{})});
 
-async function settings(){return chrome.storage.local.get({apiBase:'',apiKey:'',installationId:'',installToken:'',installTokenExpiresAt:0,watchedOrigins:[],scanState:{},siteSessions:{},ignoredRulesByOrigin:{},environmentOverridesByOrigin:{}})}
+async function settings(){return chrome.storage.local.get({apiBase:'',apiKey:'',cloudAiFallback:false,installationId:'',installToken:'',installTokenExpiresAt:0,watchedOrigins:[],scanState:{},siteSessions:{},ignoredRulesByOrigin:{},environmentOverridesByOrigin:{}})}
 async function ensureInjected(tabId){try{await chrome.tabs.sendMessage(tabId,{type:'PING'});return}catch{}await chrome.scripting.executeScript({target:{tabId},files:['vendor/axe.min.js','image-purpose.js','browser-rules.js','content.js']})}
 async function activeTab(){return(await chrome.tabs.query({active:true,currentWindow:true}))[0]}
 function pageKey(url){const u=new URL(url);return u.origin+u.pathname}
@@ -120,24 +120,22 @@ async function testGateway(overrides={}){
   catch(error){reachError=String(error?.message||error)}
   if(!reachable)return{gateway:root,reachable:false,auth:'unknown',health:null,integrations:null,summary:`Gateway did not respond: ${reachError}`,requestId:rid};
   let integrations=null,auth=credential.type==='managed'?'managed':credential.type==='shared'?'accepted':'open',authError='';
-  try{integrations=await fetchJson(root+'/api/health/integrations?force=1',{headers},10000)}
+  try{integrations=await fetchJson(root+`/api/health/integrations${overrides.cloudAiFallback?'?cloud=1':''}`,{headers},10000)}
   catch(error){
     const status=Number(error?.status||0);
     if(status===401&&credential.type==='managed'){
       credential=await gatewayCredential(root,{refresh:true});
-      if(credential.token)try{integrations=await fetchJson(root+'/api/health/integrations?force=1',{headers:{'x-web-qa-request-id':rid,'x-web-qa-key':credential.token}},10000);auth='managed'}catch(retry){authError=String(retry?.message||retry);auth='rejected'}
+      if(credential.token)try{integrations=await fetchJson(root+`/api/health/integrations${overrides.cloudAiFallback?'?cloud=1':''}`,{headers:{'x-web-qa-request-id':rid,'x-web-qa-key':credential.token}},10000);auth='managed'}catch(retry){authError=String(retry?.message||retry);auth='rejected'}
       else auth='required';
     }else if(status===401)auth=manualKey?'rejected':'required';
     else{auth='unknown';authError=String(error?.message||error)}
   }
   const rows=Object.values(integrations?.integrations||{}),available=rows.filter(x=>x?.status==='available').length,problems=rows.filter(x=>x&&x.status!=='available').map(x=>`${x.label}: ${x.status}`);
-  const ai=integrations?.openai||null;if(ai&&!ai.operational)problems.push(`Frank AI: ${ai.status||'unavailable'}`);
-  const aiLabel=ai?.operational?'Frank AI operational':health?.aiConfigured?'Frank AI configured but not operational':'Frank AI not configured';
   const accessLabel=auth==='managed'?'managed installation access':auth==='accepted'?'developer access key':'open access';
   const summary=auth==='rejected'?'Gateway is reachable, but assistant access was rejected.'
     :auth==='required'?'Gateway is reachable, but assistant access could not be established automatically. A developer access key may be required.'
     :auth==='unknown'&&authError?`Gateway is reachable. Integration health could not be read: ${authError}`
-    :`Gateway reachable, v${health?.version||'unknown'}, ${aiLabel}, ${accessLabel}${rows.length?`, ${available}/${rows.length} integrations available`:''}.`;
+    :`Gateway reachable, v${health?.version||'unknown'}, ${accessLabel}${rows.length?`, ${available}/${rows.length} integrations available`:''}.`;
   return{gateway:root,reachable:true,auth,health,integrations,available,integrationCount:rows.length,problems,summary,requestId:health?.requestId||rid};
 }
 
@@ -157,20 +155,37 @@ async function enrich(report,tabId=null){
   return report;
 }
 async function targetContext(tabId,targetId,selector,ruleId=''){if(!tabId||(!targetId&&!selector))return null;try{const result=await chrome.tabs.sendMessage(tabId,{type:'TARGET_CONTEXT',targetId,selector,ruleId});return result?.found?result:null}catch{return null}}
-async function askFrank({finding,report,tabId}){
-  if(!finding||!report?.page)throw new Error('Frank needs a current finding and scan report.');const inspectedTabId=tabId||(await activeTab())?.id;if(!inspectedTabId)throw new Error('The inspected browser tab is no longer available.');try{await chrome.tabs.sendMessage(inspectedTabId,{type:'PING'})}catch{await ensureInjected(inspectedTabId)}
-  let sourceReport=report;if(!isPrivateHost(report.page.hostname||'')&&(!report.context?.services||Object.keys(report.context.services).length===0)){try{sourceReport=await enrich(report,inspectedTabId)}catch{}}
-  const target=finding.targetType==='visual'?await targetContext(inspectedTabId,finding.targetId,finding.selector,finding.ruleId):null,latestFinding=sourceReport.findings?.find(x=>x.id===finding.id)||finding;
-  const graph=buildEvidenceGraph({finding:latestFinding,page:sourceReport.page,coverage:sourceReport.coverage,context:sourceReport.context||{},targetContext:target,environment:sourceReport.environment||sourceReport.page?.environment});let plan=deterministicFrankPlan(graph),gateway='',reasoning={status:'local-fallback',mode:'deterministic',code:'LOCAL_ONLY',message:'Connected reasoning was not attempted for this page.'};
-  if(!isPrivateHost(sourceReport.page.hostname||'')){
-    try{
-      const result=await gatewayPost('/api/frank/plan',{graph:gatewayFrankGraph(graph)},FRANK_TIMEOUT_MS,'FRANK');
-      if(result?.plan&&validateFrankPlan(result.plan,graph)){plan=result.plan;gateway=result.gateway||'';reasoning=result.reasoning||{status:plan.mode==='ai'?'operational':'fallback',mode:plan.mode,message:plan.mode==='ai'?'Connected reasoning completed.':'The gateway returned fallback guidance.'}}
-      else reasoning={status:'fallback',mode:'deterministic',code:'INVALID_GATEWAY_PLAN',message:'The gateway returned a walkthrough that did not pass local validation.'};
-    }catch(error){reasoning={status:'fallback',mode:'deterministic',code:error?.code||'GATEWAY_FRANK_FAILED',message:String(error?.message||'Connected reasoning could not be reached.').slice(0,240)}}
-  }
-  const start=await chrome.tabs.sendMessage(inspectedTabId,{type:'FRANK_START',plan,targets:graph.targets});if(!start?.started)throw new Error('Frank could not start on the inspected page.');return{plan,graph,tabId:inspectedTabId,gateway,aiMode:plan.mode,reasoning};
+async function prepareFrank({finding,report,tabId}){
+  if(!finding||!report?.page)throw new Error('Frank needs a current finding and scan report.');
+  const inspectedTabId=tabId||(await activeTab())?.id;if(!inspectedTabId)throw new Error('The inspected browser tab is no longer available.');
+  try{await chrome.tabs.sendMessage(inspectedTabId,{type:'PING'})}catch{await ensureInjected(inspectedTabId)}
+  let sourceReport=report;
+  if(!isPrivateHost(report.page.hostname||'')&&(!report.context?.services||Object.keys(report.context.services).length===0)){try{sourceReport=await enrich(report,inspectedTabId)}catch{}}
+  const target=finding.targetType==='visual'?await targetContext(inspectedTabId,finding.targetId,finding.selector,finding.ruleId):null;
+  const latestFinding=sourceReport.findings?.find(x=>x.id===finding.id)||finding;
+  const graph=buildEvidenceGraph({finding:latestFinding,page:sourceReport.page,coverage:sourceReport.coverage,context:sourceReport.context||{},targetContext:target,environment:sourceReport.environment||sourceReport.page?.environment});
+  const plan=deterministicFrankPlan(graph);
+  return{plan,graph,tabId:inspectedTabId,reasoning:{status:'ready',mode:'deterministic',provider:'deterministic',message:'Verified deterministic guidance is ready for optional on-device improvement.'}};
 }
+async function cloudFrankPlan({graph}){
+  if(!graph?.finding||!graph?.page)throw new Error('Frank needs a prepared evidence graph.');
+  if(isPrivateHost(graph.page.hostname||''))return{plan:null,reasoning:{status:'disabled',mode:'deterministic',provider:'openai',code:'PRIVATE_PAGE',message:'Cloud AI is disabled for private pages.'}};
+  try{
+    const result=await gatewayPost('/api/frank/plan',{graph:gatewayFrankGraph(graph)},FRANK_TIMEOUT_MS,'FRANK');
+    if(result?.plan&&validateFrankPlan(result.plan,graph))return{plan:result.plan,gateway:result.gateway||'',reasoning:result.reasoning||{status:result.plan.mode==='ai'?'operational':'fallback',mode:result.plan.mode,provider:'openai',message:result.plan.mode==='ai'?'Cloud reasoning completed.':'The gateway returned deterministic guidance.'}};
+    return{plan:null,reasoning:{status:'fallback',mode:'deterministic',provider:'openai',code:'INVALID_GATEWAY_PLAN',message:'The cloud fallback returned a walkthrough that did not pass local validation.'}};
+  }catch(error){return{plan:null,reasoning:{status:'fallback',mode:'deterministic',provider:'openai',code:error?.code||'GATEWAY_FRANK_FAILED',message:String(error?.message||'Cloud reasoning could not be reached.').slice(0,240)}}}
+}
+async function startFrankPlan({plan,graph,tabId}){
+  if(!plan||!graph||!validateFrankPlan(plan,graph))throw new Error('Frank refused to start an invalid walkthrough plan.');
+  const inspectedTabId=tabId||(await activeTab())?.id;if(!inspectedTabId)throw new Error('The inspected browser tab is no longer available.');
+  const start=await chrome.tabs.sendMessage(inspectedTabId,{type:'FRANK_START',plan,targets:graph.targets});if(!start?.started)throw new Error('Frank could not start on the inspected page.');
+  return{started:true,tabId:inspectedTabId};
+}
+// Backwards-compatible message for older side panels: deterministic only. New
+// 1.5.2 panels use PREPARE_FRANK, run Chrome built-in AI locally, then call
+// FRANK_START_PLAN with the locally validated plan.
+async function askFrank(message){const prepared=await prepareFrank(message);await startFrankPlan({plan:prepared.plan,graph:prepared.graph,tabId:prepared.tabId});return prepared}
 async function recheckFinding({finding,tabId}){
   if(!finding||!tabId)throw new Error('A current finding and inspected tab are required.');
   if(finding.link?.url){
@@ -191,6 +206,9 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{(async()=>{
   if(msg.type==='SCAN_ACTIVE'){const current=await activeTab(),report=await localScan(current);return{tab:{id:current.id,windowId:current.windowId,url:report.page.url},report}}
   if(msg.type==='SCAN_TAB'){const report=await scanExistingTab(msg.tabId);return{tab:{id:msg.tabId,url:report.page.url},report}}
   if(msg.type==='ENRICH'){const enriched=await enrich(msg.report,msg.tabId||null);if(msg.tabId&&enriched?.page?.url)await updateState({id:msg.tabId,url:enriched.page.url},enriched);return{report:enriched}}
+  if(msg.type==='PREPARE_FRANK')return prepareFrank(msg);
+  if(msg.type==='CLOUD_FRANK_PLAN')return cloudFrankPlan(msg);
+  if(msg.type==='FRANK_START_PLAN')return startFrankPlan(msg);
   if(msg.type==='ASK_FRANK')return askFrank(msg);
   if(msg.type==='RECHECK_FINDING')return recheckFinding(msg);
   if(msg.type==='FRANK_GOTO')return frankMessage(msg.tabId,{type:'FRANK_GOTO',index:msg.index});
@@ -198,11 +216,11 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{(async()=>{
   if(msg.type==='FRANK_PREVIEW')return frankMessage(msg.tabId,{type:'FRANK_PREVIEW',targetId:msg.targetId,preview:msg.preview});
   if(msg.type==='FRANK_RESET_PREVIEW')return frankMessage(msg.tabId,{type:'FRANK_RESET_PREVIEW'});
   if(msg.type==='HIGHLIGHT'){const tabId=msg.tabId||(await activeTab())?.id;if(!tabId)throw new Error('No inspected browser tab was found.');try{await chrome.tabs.sendMessage(tabId,{type:'PING'})}catch{try{await ensureInjected(tabId)}catch{throw new Error('Page access expired. Click the toolbar icon on this page and try Highlight again.')}}return chrome.tabs.sendMessage(tabId,{type:'HIGHLIGHT',targetId:msg.targetId,selector:msg.selector})}
-  if(msg.type==='GET_ACTIVE'){const s=await settings();return{tab:await activeTab(),settings:{apiBase:s.apiBase,apiKey:s.apiKey,managedAccess:Boolean(s.installToken),managedAccessExpiresAt:Number(s.installTokenExpiresAt||0)}}}
+  if(msg.type==='GET_ACTIVE'){const s=await settings();return{tab:await activeTab(),settings:{apiBase:s.apiBase,apiKey:s.apiKey,cloudAiFallback:Boolean(s.cloudAiFallback),managedAccess:Boolean(s.installToken),managedAccessExpiresAt:Number(s.installTokenExpiresAt||0)}}}
   if(msg.type==='GET_SITE_SESSION'){const s=await settings(),url=msg.pageUrl||(await activeTab())?.url;if(!url)return{session:null};return{session:s.siteSessions[new URL(url).origin]||null}}
   if(msg.type==='CLEAR_SITE_SESSION'){const s=await settings(),url=msg.pageUrl||(await activeTab())?.url;if(url){delete s.siteSessions[new URL(url).origin];await chrome.storage.local.set({siteSessions:s.siteSessions})}return{cleared:true}}
-  if(msg.type==='SAVE_GATEWAY_SETTINGS'){const apiBase=String(msg.apiBase||'').trim().replace(/\/$/,''),apiKey=String(msg.apiKey||'').trim();if(apiBase&&!/^https?:\/\//i.test(apiBase))throw new Error('Gateway URL must use HTTP or HTTPS.');await chrome.storage.local.set({apiBase,apiKey});return{saved:true}}
-  if(msg.type==='TEST_GATEWAY')return testGateway({apiBase:msg.apiBase,apiKey:msg.apiKey});
+  if(msg.type==='SAVE_GATEWAY_SETTINGS'){const apiBase=String(msg.apiBase||'').trim().replace(/\/$/,''),apiKey=String(msg.apiKey||'').trim(),cloudAiFallback=Boolean(msg.cloudAiFallback);if(apiBase&&!/^https?:\/\//i.test(apiBase))throw new Error('Gateway URL must use HTTP or HTTPS.');await chrome.storage.local.set({apiBase,apiKey,cloudAiFallback});return{saved:true}}
+  if(msg.type==='TEST_GATEWAY')return testGateway({apiBase:msg.apiBase,apiKey:msg.apiKey,cloudAiFallback:Boolean(msg.cloudAiFallback)});
   if(msg.type==='IGNORE_RULE'){const current=await activeTab(),s=await settings(),url=msg.pageUrl||current?.url;if(!url)throw new Error('Page context is unavailable.');const origin=new URL(url).origin,list=s.ignoredRulesByOrigin[origin]||[];s.ignoredRulesByOrigin[origin]=[...new Set([...list,msg.ruleId])];await chrome.storage.local.set({ignoredRulesByOrigin:s.ignoredRulesByOrigin});return{ignored:true}}
   if(msg.type==='SET_ENVIRONMENT'){const url=msg.pageUrl||(await activeTab())?.url;if(!url)throw new Error('Page context is unavailable.');const origin=new URL(url).origin,allowed=new Set(['production','staging','preview','local','auto']);if(!allowed.has(msg.environment))throw new Error('Unsupported environment value.');const s=await settings();if(msg.environment==='auto')delete s.environmentOverridesByOrigin[origin];else s.environmentOverridesByOrigin[origin]=msg.environment;await chrome.storage.local.set({environmentOverridesByOrigin:s.environmentOverridesByOrigin});return{saved:true}}
   if(msg.type==='WATCH_DIRTY'&&sender.tab){const s=await settings(),origin=new URL(sender.tab.url).origin;if(s.watchedOrigins.includes(origin))scheduleWatched(sender.tab);return{scheduled:true}}

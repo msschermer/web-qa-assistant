@@ -1,8 +1,9 @@
-Web QA Assistant 1.5.1
-Release focus: trust-and-correctness stabilization over the complete 1.5.0 feature set, plus Frank reasoning reliability and managed installation access.
-Automated validation: npm test 122/122 PASS; npm run check PASS (47 JavaScript files); npm run build:extension PASS; RELEASE_TAG=v1.5.1 npm run release:validate PASS.
-Dependency note: a fresh npm ci did not complete within the execution environment window; package-lock.json remains the source dependency lock and the extension build uses the locked vendored axe-core artifact.
-Security boundary: the OpenAI API key remains server-side. Normal extension installs can use revocable, expiring per-install gateway credentials when managed access is enabled; the shared assistant token remains an optional developer/team override and is never bundled in the extension.
-AI reliability: "AI configured" is separate from operational model health. Frank only reports connected reasoning after a valid evidence-contracted AI walkthrough; provider, timeout, or validation failures are surfaced as explicit deterministic fallback reasons.
-Evidence quality: color-contrast guidance carries available observed/required ratios and colors, and generic evidence-filler walkthrough steps are excluded.
+Web QA Assistant 1.5.2
+Release focus: on-device Frank reasoning, explicit zero-metered-cost defaults, evidence-locked AI output, and production hardening over the complete 1.5.1 feature set.
+Automated validation: 146/146 tests PASS; npm run check PASS across 51 JavaScript files; npm run build:extension PASS; RELEASE_TAG=v1.5.2 npm run release:validate PASS.
+Cost boundary: routine extension scans call no model provider. Chrome built-in AI is preferred for Ask Frank. Extension cloud AI and public web AI both default off and require explicit server enablement before metered provider usage is possible.
+Security boundary: provider keys and managed-install signing secrets remain server-side. No shared assistant token is bundled in the extension. Local Frank has no network/model-provider API calls and treats page-derived evidence as untrusted prompt data.
+AI reliability: local AI may improve only summary/interpretation/impact/remediation/verification text; deterministic findings, targets, evidence refs, metrics, assessment and verification actions remain authoritative. Invalid, generic, contradictory, invented-standard/URL/contrast-ratio, decorative-alt-regressing, or performance-overclaiming output is rejected.
 Fixture policy: release tests and acceptance fixtures use neutral synthetic labels and reserved example domains only; real external test-site identities and copied site content are prohibited.
+Dependency-install note: a fresh npm ci was attempted in the execution environment but did not complete within the available execution window. The final extension build used the previously vendored axe-core 4.13.0 artifact matching package-lock.json. A fresh dependency install should still be run by CI or the deployment environment.
+Runtime acceptance note: this environment could not load the unpacked extension with a usable Chrome built-in Prompt API runtime. Contract-level local-AI tests pass; one qualifying real-desktop-Chrome acceptance run remains required.

@@ -57,12 +57,17 @@ function contrastFactsFromFinding(f){
   }
   return null;
 }
+function contrastRatio(value){
+  const text=String(value??'').trim();
+  if(!text)return'';
+  return /:1$/.test(text)?text:`${text}:1`;
+}
 function axeAdvice(f){
   const id=String(f.ruleId||'');
   const summary=String(f.axe?.failureSummary||'').replace(/^Fix (?:any|all) of the following:\s*/i,'').trim();
   if(/color-contrast/.test(id)){
     const c=contrastFactsFromFinding(f)||{},text=String(f.targetText||'').trim(),label=text?`The affected text "${text.slice(0,80)}"`:'The affected text';
-    const observed=c.contrastRatio!=null?`${c.contrastRatio}:1`:'below the required threshold',required=c.expectedContrastRatio!=null?`${c.expectedContrastRatio}:1`:'the applicable WCAG threshold';
+    const observed=c.contrastRatio!=null?contrastRatio(c.contrastRatio):'below the required threshold',required=c.expectedContrastRatio!=null?contrastRatio(c.expectedContrastRatio):'the applicable WCAG threshold';
     const colors=c.fgColor&&c.bgColor?` The computed foreground is ${c.fgColor} against ${c.bgColor}.`:'';
     return{
       interpretation:`${label} has an observed contrast ratio of ${observed}; this check requires ${required}.${colors}`,

@@ -17,8 +17,9 @@ const port = Number(process.env.PORT || 3000);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frankCache = new Map();
 const FRANK_CACHE_MS = Number(process.env.FRANK_CACHE_MS || 30 * 60 * 1000);
-const RELEASE_VERSION = '1.5.1';
+const RELEASE_VERSION = '1.5.2';
 function publicAiEnabled(){return /^(1|true|yes)$/i.test(String(process.env.PUBLIC_AI_ENABLED||''))}
+function extensionCloudAiEnabled(){return /^(1|true|yes)$/i.test(String(process.env.EXTENSION_CLOUD_AI_ENABLED||''))}
 function publicExtensionAccessEnabled(){return /^(1|true|yes)$/i.test(String(process.env.PUBLIC_EXTENSION_ACCESS_ENABLED||''))}
 function installationSecret(){return String(process.env.INSTALL_TOKEN_SECRET||process.env.ASSISTANT_ACCESS_TOKEN||'')}
 function revokedInstallationIds(){return String(process.env.REVOKED_INSTALLATION_IDS||'').split(',').map(x=>x.trim()).filter(Boolean)}
@@ -145,7 +146,7 @@ async function rendererPost(pathname, payload, timeoutMs = Number(process.env.SC
   } finally { clearTimeout(timer); }
 }
 
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'web-qa-assistant', version: RELEASE_VERSION, frank: true, aiConfigured: Boolean(process.env.OPENAI_API_KEY), model: process.env.OPENAI_MODEL || 'gpt-5.6-terra', publicAiEnabled: publicAiEnabled(), managedExtensionAccess: publicExtensionAccessEnabled(), requestId: req.webQaRequestId }));
+app.get('/api/health', (req, res) => res.json({ ok: true, service: 'web-qa-assistant', version: RELEASE_VERSION, frank: true, aiConfigured: Boolean(process.env.OPENAI_API_KEY), model: process.env.OPENAI_MODEL || 'gpt-5.6-terra', publicAiEnabled: publicAiEnabled(), extensionCloudAiEnabled: extensionCloudAiEnabled(), preferredFrankAi: 'chrome-built-in', managedExtensionAccess: publicExtensionAccessEnabled(), requestId: req.webQaRequestId }));
 app.post('/api/install/register', async (req, res) => {
   if (!publicExtensionAccessEnabled()) return res.status(403).json({ ok: false, code: 'MANAGED_ACCESS_DISABLED', error: 'Managed installation access is not enabled on this gateway.', requestId: req.webQaRequestId });
   const installationId = String(req.body?.installationId || '');
@@ -155,8 +156,12 @@ app.post('/api/install/register', async (req, res) => {
   } catch (error) { res.status(400).json({ ok: false, code: 'INSTALL_REGISTRATION_FAILED', error: error.message, requestId: req.webQaRequestId }); }
 });
 app.get('/api/health/integrations', requireExtensionKey, async (req, res) => {
-  const [health, openai] = await Promise.all([integrationHealth({ requestId: req.webQaRequestId }), probeAiHealth({ force: String(req.query?.force || '') === '1' })]);
-  res.json({ ok: true, requestId: req.webQaRequestId, integrations: health, openai, renderer: { status: 'configured', url: process.env.RENDERER_URL || 'http://localhost:8790' }, tools: TOOL_REGISTRY, access: req.webQaAuth?.type || 'open' });
+  const health = await integrationHealth({ requestId: req.webQaRequestId });
+  const cloudRequested = extensionCloudAiEnabled() && String(req.query?.cloud || '') === '1';
+  const openai = cloudRequested
+    ? await probeAiHealth({ force: true })
+    : { status: extensionCloudAiEnabled() ? 'not-probed' : 'disabled', operational: false, configured: Boolean(process.env.OPENAI_API_KEY), model: process.env.OPENAI_MODEL || 'gpt-5.6-terra', message: extensionCloudAiEnabled() ? 'Cloud AI fallback is enabled but was not probed.' : 'Cloud AI fallback is disabled. Frank prefers Chrome built-in AI on the user device.' };
+  res.json({ ok: true, requestId: req.webQaRequestId, integrations: health, openai, extensionCloudAiEnabled: extensionCloudAiEnabled(), preferredFrankAi: 'chrome-built-in', renderer: { status: 'configured', url: process.env.RENDERER_URL || 'http://localhost:8790' }, tools: TOOL_REGISTRY, access: req.webQaAuth?.type || 'open' });
 });
 app.get('/api/config', (req, res) => res.json({ extensionStoreUrl: process.env.EXTENSION_STORE_URL || '', sourceUrl: 'https://github.com/msschermer/web-qa-assistant', frank: true, version: RELEASE_VERSION }));
 
@@ -164,16 +169,19 @@ app.get('/api/config', (req, res) => res.json({ extensionStoreUrl: process.env.E
 app.post('/api/context', requireExtensionKey, async (req, res) => {
   if (!validReport(req.body)) return res.status(400).json({ ok: false, error: 'Invalid local report', requestId: req.webQaRequestId });
   if (privateLike(req.body.page?.hostname)) return res.status(400).json({ ok: false, error: 'Private page evidence must stay local.', requestId: req.webQaRequestId });
-  if (!consumeManagedAiQuota(req, res)) return;
-  try { res.json(await enrich(req.body, req.webQaRequestId)); } catch (e) { res.status(502).json({ ok: false, error: e.message, requestId: req.webQaRequestId }); }
+  // Context enrichment uses deterministic correlation only. Normal extension scans
+  // must not incur a cloud-model charge simply because OPENAI_API_KEY exists.
+  try { res.json(await enrich(req.body, req.webQaRequestId, { allowAi: false })); } catch (e) { res.status(502).json({ ok: false, error: e.message, requestId: req.webQaRequestId }); }
 });
 app.post('/api/brief', requireExtensionKey, async (req, res) => {
+  if (!extensionCloudAiEnabled()) return res.status(403).json({ ok: false, code: 'CLOUD_AI_DISABLED', error: 'Metered cloud AI is disabled for extension users.', requestId: req.webQaRequestId });
   const findings = Array.isArray(req.body?.findings) ? req.body.findings : null;
   if (!findings) return res.status(400).json({ ok: false, error: 'Findings required', requestId: req.webQaRequestId });
   if (!consumeManagedAiQuota(req, res)) return;
   try { res.json({ ok: true, requestId: req.webQaRequestId, brief: await priorityBrief(findings, req.body?.coverage || {}, req.body?.environment || {}, req.body?.linkAudit || null) }); } catch (e) { res.status(502).json({ ok: false, error: e.message, requestId: req.webQaRequestId }); }
 });
 app.post('/api/frank/plan', requireExtensionKey, async (req, res) => {
+  if (!extensionCloudAiEnabled()) return res.status(403).json({ ok: false, code: 'CLOUD_AI_DISABLED', error: 'Metered cloud AI fallback is disabled for extension users.', requestId: req.webQaRequestId });
   const graph = req.body?.graph;
   if (!validGraph(graph)) return res.status(400).json({ ok: false, error: 'A valid Frank evidence graph is required.', requestId: req.webQaRequestId });
   if (privateLike(graph.page?.hostname)) return res.status(400).json({ ok: false, error: 'Private page evidence must stay local.', requestId: req.webQaRequestId });

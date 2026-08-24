@@ -25,8 +25,9 @@ test('managed public access is explicit, opt-in, expiring and quota limited',()=
   assert.match(api,/INSTALL_DAILY_LIMIT/);
 });
 
-test('connection health probes whether Frank AI is operational, not only configured',()=>{
-  assert.match(api,/probeAiHealth\(\{ force:/);
-  assert.match(bg,/Frank AI operational/);
-  assert.match(bg,/Frank AI configured but not operational/);
+test('connection health treats cloud AI as optional while preserving on-device Frank',()=>{
+  assert.match(api,/preferredFrankAi: 'chrome-built-in'/);
+  assert.match(api,/extensionCloudAiEnabled/);
+  assert.match(html,/On-device|Chrome built-in AI/);
+  assert.doesNotMatch(bg,/Frank AI configured but not operational/);
 });

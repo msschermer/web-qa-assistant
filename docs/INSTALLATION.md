@@ -100,7 +100,7 @@ npm test
 git status
 ```
 
-Do not merge to `main` until the real-browser acceptance checklist in `docs/QA-1.5.1.md` passes.
+Do not merge to `main` until the real-browser acceptance checklist in `docs/QA-1.5.2.md` passes.
 
 ## Branch -> main delivery
 
@@ -117,8 +117,8 @@ Open a pull request. GitHub CI must pass. After merging:
 ```powershell
 git checkout main
 git pull
-git tag v1.5.1
-git push origin v1.5.1
+git tag v1.5.2
+git push origin v1.5.2
 ```
 
 The release workflow validates tag/package/manifest alignment and publishes the extension and full-source release artifacts.

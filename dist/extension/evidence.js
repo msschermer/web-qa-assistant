@@ -3,6 +3,7 @@ import { signalForFinding, SIGNALS } from './signals.js';
 function text(value){return String(value??'').trim()}
 function clip(value,max=900){const s=text(value).replace(/\s+/g,' ');return s.length>max?s.slice(0,max-1)+'…':s}
 function hash(input){let h=2166136261;for(let i=0;i<input.length;i++){h^=input.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36)}
+function contrastRatioText(value){const raw=String(value??'').trim();if(!raw)return'';return raw.includes(':')?raw:`${raw}:1`}
 function push(list,{source,kind,label,value,scope='finding',confidence='deterministic',targetId=''}){
   if(value===undefined||value===null||value==='')return;
   const normalized=typeof value==='string'?clip(value):value;
@@ -88,8 +89,8 @@ export function buildEvidenceGraph({finding,page={},coverage={},context={},targe
     for(const bucket of ['any','all','none'])for(const check of finding.axe.checks?.[bucket]||[])push(evidence,{source:'axe',kind:`check.${bucket}`,label:check.id||`${bucket} check`,value:check.data!=null?{message:check.message||'',data:check.data}:(check.message||''),scope:'current-page',targetId});
     const contrast=contrastFacts(finding.axe);
     if(contrast){
-      push(evidence,{source:'axe',kind:'contrast-ratio',label:'Observed contrast ratio',value:contrast.contrastRatio!=null?`${contrast.contrastRatio}:1`:'',scope:'current-page',targetId});
-      push(evidence,{source:'axe',kind:'contrast-required',label:'Required contrast ratio',value:contrast.expectedContrastRatio!=null?`${contrast.expectedContrastRatio}:1`:'',scope:'standard',targetId});
+      push(evidence,{source:'axe',kind:'contrast-ratio',label:'Observed contrast ratio',value:contrastRatioText(contrast.contrastRatio),scope:'current-page',targetId});
+      push(evidence,{source:'axe',kind:'contrast-required',label:'Required contrast ratio',value:contrastRatioText(contrast.expectedContrastRatio),scope:'standard',targetId});
       push(evidence,{source:'axe',kind:'foreground-color',label:'Foreground color',value:contrast.fgColor,scope:'computed-style',targetId});
       push(evidence,{source:'axe',kind:'background-color',label:'Background color',value:contrast.bgColor,scope:'computed-style',targetId});
       push(evidence,{source:'axe',kind:'font-size',label:'Text size',value:contrast.fontSize,scope:'computed-style',targetId});

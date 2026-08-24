@@ -48,7 +48,7 @@
         <div class="brief-top">
           <span class="frank-mark" aria-hidden="true">F</span>
           <span class="frank-name">Frank</span>
-          <span id="reasoning-mode" class="chip chip-quiet">Standard guidance</span>
+          <span id="reasoning-mode" class="chip chip-quiet">Evidence summary</span>
         </div>
         <h2 id="judgment-title">Analysing this page</h2>
         <p id="brief"></p>
@@ -78,10 +78,11 @@
       <details id="connection-settings" class="panel"><summary><span>Connection settings</span></summary><div class="panel-body settings-grid">
         <label>Assistant gateway<input id="gateway-url" type="url" placeholder="https://assistant.msschermer.us"></label>
         <label>Developer access key <span class="summary-note">optional</span><input id="gateway-key" type="password" autocomplete="off" placeholder="Leave blank for managed installation access"></label>
+        <label class="settings-toggle"><span>Cloud AI fallback <span class="summary-note">optional · metered</span></span><input id="cloud-ai-fallback" type="checkbox"></label>
         <div class="settings-actions"><button id="save-gateway" class="btn btn-quiet">Save connection</button><button id="test-gateway" class="btn btn-quiet">Test connection</button></div>
         <p id="gateway-status" class="gateway-status" role="status" aria-live="polite"></p>
         <div id="gateway-integrations" class="integration-list"></div>
-        <p class="fine-print">Normal installs use managed installation access when the gateway enables it; no shared secret is bundled in the extension. A developer access key can override that for private gateways. Page inspection stays in the browser. Connected context receives a sanitised, bounded report; connected AI receives a narrower evidence contract. Whole DOM, cookies and form values are excluded.</p>
+        <p class="fine-print">Normal installs use managed installation access when the gateway enables it; no shared secret is bundled in the extension. Frank prefers Chrome built-in AI on the user's device, so normal walkthroughs do not require an AI API key or metered model request. Cloud AI fallback is off by default and may incur provider charges when explicitly enabled. Connected context receives a sanitised, bounded report. Whole DOM, cookies and form values are excluded.</p>
       </div></details>
     </section>
   </div>
@@ -95,7 +96,7 @@
     <p id="frank-summary" class="frank-summary"></p>
     <div id="frank-assessment" class="assessment"><b id="frank-assessment-status"></b><span id="frank-assessment-statement"></span><small id="frank-assessment-limitations"></small></div>
     <nav class="frank-progress" aria-label="Frank walkthrough"><span id="frank-step-count"></span><div><span id="frank-progress-bar"></span></div></nav>
-    <article class="frank-step">
+    <article class="frank-step" aria-live="polite" aria-atomic="true">
       <span id="frank-step-type" class="eyebrow"></span>
       <h3 id="frank-step-headline"></h3>
       <p id="frank-step-body"></p>
@@ -142,6 +143,6 @@
     </details>
   </article>
 </template>
-<script src="sidepanel.js"></script>
+<script type="module" src="sidepanel.js"></script>
 </body>
 </html>

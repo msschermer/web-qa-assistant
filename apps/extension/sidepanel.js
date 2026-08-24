@@ -1,5 +1,6 @@
+import { beginLocalFrankSession, localFrankWalkthrough, probeLocalAi, resolveLocalFrankSession } from './local-ai.js';
 let report = null, filter = 'all', tab = null, scanInFlight = false, frank = null,
-    showAllChecks = false, lastDiagnostic = null, siteSession = null, classFilter = '';
+    showAllChecks = false, lastDiagnostic = null, siteSession = null, classFilter = '', cloudAiFallback = false, frankReturnFocus = null;
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -232,7 +233,7 @@ function renderOverviewOnly() {
     : `${groups} grouped from ${findings} findings`;
   $('#coverage-state').textContent = incompleteCoverage() ? `${incompleteCoverage()} coverage gap${incompleteCoverage() === 1 ? '' : 's'}` : 'Primary coverage available';
   const mode = report.priorityMode === 'ai' ? 'ai' : 'deterministic';
-  $('#reasoning-mode').textContent = mode === 'ai' ? 'Connected reasoning' : (report.priorityReason ? 'Fallback guidance' : 'Standard guidance');
+  $('#reasoning-mode').textContent = mode === 'ai' ? 'Cloud-enhanced summary' : 'Evidence summary';
   $('#reasoning-mode').dataset.mode = mode;
 }
 
@@ -378,40 +379,85 @@ function enterFrank() {
   setTimeout(() => $('#frank-title').focus(), 0);
 }
 function leaveFrankLocal() {
+  const returnFocus = frankReturnFocus; frankReturnFocus = null;
   frank = null; document.body.dataset.mode = '';
   $('#scanner-view').hidden = false; $('#frank-view').hidden = true;
   $('#host').textContent = report?.page?.hostname || report?.page?.url || 'Current page';
   $('#frank-action-state').hidden = true;
+  setTimeout(() => returnFocus?.isConnected && returnFocus.focus(), 0);
 }
 
 async function startFrank(finding, card) {
   if (!report || !tab?.id) return actionState(card, 'Run a current scan before asking Frank.', 'error');
   const button = card.querySelector('.ask-frank');
+  frankReturnFocus = button;
   button.disabled = true; button.textContent = 'Starting Frank';
-  actionState(card, 'Gathering the evidence needed for this finding.');
-  const r = await send({ type: 'ASK_FRANK', finding, report, tabId: tab.id }, 24000);
-  button.disabled = false; button.textContent = 'Ask Frank';
-  if (!r.ok || !r.plan) {
-    actionState(card, r.error || 'Frank could not build a walkthrough.', 'error');
-    if (r.diagnostic) showFailure(r, 'Frank could not build a walkthrough.');
+  actionState(card, 'Preparing on-device reasoning and gathering verified evidence.');
+
+  // Start Chrome built-in AI directly from the click gesture. If the model has
+  // not been downloaded yet, Chrome may require this user activation.
+  const localSessionPromise = beginLocalFrankSession({
+    onDownloadProgress: ratio => actionState(card, `Preparing on-device AI · ${Math.round(ratio * 100)}%`, 'ok')
+  });
+
+  const prepared = await send({ type: 'PREPARE_FRANK', finding, report, tabId: tab.id }, 24000);
+  if (!prepared.ok || !prepared.plan || !prepared.graph) {
+    button.disabled = false; button.textContent = 'Ask Frank';
+    frankReturnFocus = null;
+    Promise.resolve(localSessionPromise).then(result => { try { result?.session?.destroy?.(); } catch {} }).catch(() => {});
+    actionState(card, prepared.error || 'Frank could not prepare this finding.', 'error');
+    if (prepared.diagnostic) showFailure(prepared, 'Frank could not prepare this finding.');
     return;
   }
-  frank = { plan: r.plan, graph: r.graph, tabId: r.tabId || tab.id, index: 0, finding, reasoning: r.reasoning || null };
+
+  let plan = prepared.plan;
+  let reasoning = { status: 'fallback', mode: 'deterministic', provider: 'deterministic', code: 'LOCAL_AI_UNAVAILABLE', message: 'On-device reasoning was not available, so Frank kept the verified deterministic guidance.' };
+  const local = await resolveLocalFrankSession(localSessionPromise);
+  if (local.ok && local.session) {
+    try {
+      plan = await localFrankWalkthrough({ session: local.session, graph: prepared.graph, deterministicPlan: prepared.plan });
+      reasoning = { status: 'operational', mode: 'ai', provider: 'chrome-built-in', model: 'Chrome built-in model', location: 'device', message: 'Frank improved the verified guidance with on-device reasoning. Page evidence stayed on this device.' };
+    } catch (error) {
+      reasoning = { status: 'fallback', mode: 'deterministic', provider: 'chrome-built-in', code: error?.code || 'LOCAL_AI_FAILED', message: String(error?.message || "On-device reasoning did not pass Frank's evidence checks.").slice(0, 240) };
+    } finally { try { local.session.destroy?.(); } catch {} }
+  } else if (local?.message) {
+    reasoning = { status: 'fallback', mode: 'deterministic', provider: 'chrome-built-in', code: local.code || 'LOCAL_AI_UNAVAILABLE', message: local.message };
+  }
+
+  if (plan.mode !== 'ai' && cloudAiFallback) {
+    actionState(card, 'On-device reasoning unavailable. Trying the optional cloud fallback…', 'warn');
+    const cloud = await send({ type: 'CLOUD_FRANK_PLAN', graph: prepared.graph }, 22000);
+    if (cloud.ok && cloud.plan?.mode === 'ai') { plan = cloud.plan; reasoning = cloud.reasoning || { status: 'operational', mode: 'ai', provider: 'openai', location: 'cloud' }; }
+    else if (cloud?.reasoning?.message) reasoning = { ...reasoning, message: `${reasoning.message} Cloud fallback: ${cloud.reasoning.message}`.slice(0, 240) };
+  }
+
+  const started = await send({ type: 'FRANK_START_PLAN', plan, graph: prepared.graph, tabId: prepared.tabId || tab.id }, 9000);
+  button.disabled = false; button.textContent = 'Ask Frank';
+  if (!started.ok) {
+    frankReturnFocus = null;
+    actionState(card, started.error || 'Frank could not start the walkthrough.', 'error');
+    if (started.diagnostic) showFailure(started, 'Frank could not start the walkthrough.');
+    return;
+  }
+
+  frank = { plan, graph: prepared.graph, tabId: prepared.tabId || tab.id, index: 0, finding, reasoning };
   enterFrank();
   $('#frank-title').textContent = frank.plan.title;
   $('#frank-summary').textContent = frank.plan.summary;
   const aiOperational = frank.plan.mode === 'ai' && frank.reasoning?.status === 'operational';
-  $('#frank-mode').textContent = aiOperational ? 'Connected reasoning' : 'Fallback guidance';
+  const onDevice = aiOperational && frank.reasoning?.provider === 'chrome-built-in';
+  $('#frank-mode').textContent = onDevice ? 'On-device reasoning' : aiOperational ? 'Cloud reasoning' : 'Verified guidance';
   $('#frank-mode').dataset.mode = aiOperational ? 'ai' : 'deterministic';
-  $('#frank-mode').title = aiOperational ? 'Frank completed a connected AI walkthrough grounded in the current evidence.' : (frank.reasoning?.message || 'Frank is using deterministic fallback guidance.');
+  $('#frank-mode').title = onDevice ? 'Frank used Chrome built-in AI on this device. The finding evidence was not sent to an AI provider.' : aiOperational ? 'Frank used the optional cloud AI fallback.' : (frank.reasoning?.message || 'Frank is using deterministic evidence-grounded guidance.');
   const a = frank.plan.assessment || {};
   $('#frank-assessment-status').textContent = a.status || 'review';
   $('#frank-assessment-statement').textContent = a.statement || '';
   $('#frank-assessment-limitations').textContent = a.limitations || '';
   $('#frank-assessment-limitations').hidden = !a.limitations;
   renderFrankStep(0);
-  if (aiOperational) notice('Frank is guiding the current finding with connected reasoning.', 'ok');
-  else notice(`Frank is using fallback guidance${frank.reasoning?.message ? `: ${frank.reasoning.message}` : '.'}`, 'warn');
+  if (onDevice) notice('Frank is reasoning on this device. No metered AI request was used.', 'ok');
+  else if (aiOperational) notice('Frank is using the optional metered cloud fallback.', 'warn');
+  else notice(`Frank is using verified deterministic guidance${frank.reasoning?.message ? `: ${frank.reasoning.message}` : '.'}`, 'warn');
 }
 
 async function gotoFrank(index) {
@@ -449,7 +495,7 @@ async function rescan() {
     report.priorityBrief = 'Local evidence is ready. Connected context is still running.';
     render();
     const scanned = new Date(report.scannedAt || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    notice('Local checks complete. Verifying published state, monitored performance, standards context and connected reasoning…');
+    notice('Local checks complete. Verifying published state, monitored performance and standards context…');
     const enriched = await send({ type: 'ENRICH', report, tabId: tab?.id }, 32000);
     if (enriched.ok) {
       report = enriched.report;
@@ -460,11 +506,11 @@ async function rescan() {
       const unavailable = Object.entries(report.coverage || {}).filter(([, v]) => /unavailable/i.test(String(v))).map(([k]) => k);
       if (report.connectedMode === 'auth-required') {
         const connection = $('#connection-settings'); if (connection) connection.open = true;
-        notice('Browser QA completed locally. The assistant gateway requires an access key. Enter it under Connection settings to restore connected reasoning.', 'warn');
+        notice('Browser QA completed locally. The assistant gateway requires an access key. Enter it under Connection settings to restore connected services.', 'warn');
       } else if (report.connectedMode === 'auth-rejected') {
         const connection = $('#connection-settings'); if (connection) connection.open = true;
-        notice('Browser QA completed locally. The saved assistant access key was rejected. Verify the key under Connection settings.', 'warn');
-      } else if (report.connectedMode === 'unavailable') notice('Browser QA completed. The assistant gateway could not be reached, so Frank is using standard guidance.', 'warn');
+        notice('Browser QA completed locally. The saved assistant access key was rejected. Verify the key under Connection settings to restore connected services.', 'warn');
+      } else if (report.connectedMode === 'unavailable') notice('Browser QA completed. The assistant gateway could not be reached. Browser QA remains available with local evidence and verified guidance.', 'warn');
       else notice(unavailable.length ? `Scan complete with limited coverage: ${unavailable.join(', ')}.` : `Scan complete at ${scanned}.`, unavailable.length ? 'warn' : 'ok');
     } else showFailure(enriched, 'Local scan completed, but connected context could not finish.');
     await updateWatch();
@@ -483,6 +529,8 @@ async function loadSettings() {
   if (r.ok) {
     $('#gateway-url').value = r.settings?.apiBase || '';
     $('#gateway-key').value = r.settings?.apiKey || '';
+    cloudAiFallback = Boolean(r.settings?.cloudAiFallback);
+    const cloudToggle = $('#cloud-ai-fallback'); if (cloudToggle) cloudToggle.checked = cloudAiFallback;
     if (r.tab?.id && !tab) tab = r.tab;
   }
 }
@@ -543,15 +591,23 @@ async function runGatewayTest() {
   button.disabled = true; status.textContent = 'Checking gateway and integration health…'; status.dataset.kind = ''; list.innerHTML = '';
   try {
     // Test exactly what is visible in the form. Saving first is not required.
-    const r = await send({ type: 'TEST_GATEWAY', apiBase, apiKey }, 13000);
+    const r = await send({ type: 'TEST_GATEWAY', apiBase, apiKey, cloudAiFallback: $('#cloud-ai-fallback')?.checked === true }, 13000);
     if (!r.ok) { status.textContent = r.error || 'Gateway check failed.'; status.dataset.kind = 'error'; return r; }
     status.textContent = r.summary;
     status.dataset.kind = !r.reachable ? 'error' : (r.auth === 'rejected' || r.auth === 'required' || (r.problems || []).length) ? 'warn' : 'ok';
+    const localAi = await probeLocalAi();
+    const localRow = document.createElement('div');
+    localRow.className = 'integration-row';
+    localRow.dataset.status = localAi.status === 'available' ? 'available' : localAi.status === 'unavailable' ? 'degraded' : 'not-applicable';
+    localRow.innerHTML = `<b>On-device Frank</b><span>${esc(localAi.status || 'unavailable')}</span>`;
+    localRow.title = localAi.message || '';
+    list.appendChild(localRow);
     const ai = r.integrations?.openai;
     if (ai) {
       const el = document.createElement('div');
-      el.className = 'integration-row'; el.dataset.status = ai.operational ? 'available' : 'degraded';
-      el.innerHTML = `<b>Frank AI</b><span>${esc(ai.operational ? 'operational' : (ai.status || 'unavailable'))}${ai.latencyMs ? ` · ${esc(ai.latencyMs)}ms` : ''}</span>`;
+      const cloudEnabled = $('#cloud-ai-fallback')?.checked === true;
+      el.className = 'integration-row'; el.dataset.status = ai.operational ? 'available' : ai.status === 'disabled' || !cloudEnabled ? 'not-applicable' : 'degraded';
+      el.innerHTML = `<b>Cloud AI fallback</b><span>${esc(!cloudEnabled ? 'off in extension' : (ai.operational ? 'operational' : (ai.status || 'unavailable')))}${ai.latencyMs ? ` · ${esc(ai.latencyMs)}ms` : ''}</span>`;
       if (ai.message) el.title = ai.message;
       list.appendChild(el);
     }
@@ -572,7 +628,8 @@ $('#save-gateway').onclick = async () => {
     $('#gateway-status').dataset.kind = 'error';
     return;
   }
-  const r = await send({ type: 'SAVE_GATEWAY_SETTINGS', apiBase, apiKey: $('#gateway-key').value }, 8000);
+  cloudAiFallback = $('#cloud-ai-fallback')?.checked === true;
+  const r = await send({ type: 'SAVE_GATEWAY_SETTINGS', apiBase, apiKey: $('#gateway-key').value, cloudAiFallback }, 8000);
   if (!r.ok) {
     notice(r.error || 'Could not save connection settings.', 'error');
     $('#gateway-status').textContent = r.error || 'Could not save connection settings.';

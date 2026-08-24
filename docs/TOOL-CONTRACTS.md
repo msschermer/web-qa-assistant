@@ -26,11 +26,17 @@ Default endpoint: `POST ${WCAG_TRANSLATOR_URL}/v1/translate`.
 
 It is routed only when non-inconclusive axe findings make accessibility standards context relevant.
 
-## OpenAI
+## Chrome built-in Prompt API
 
-Purpose: optional structured reasoning after deterministic findings/evidence exist.
+Purpose: preferred Frank wording/interpretation improvement after deterministic findings and evidence exist.
 
-The OpenAI Responses API is called server-side. The model receives only the AI Evidence Contract. It cannot create findings or selectors and its structured plan must validate against existing evidence/target IDs.
+The Prompt API runs in the Chrome extension on the user device. The local model receives a compact evidence object plus deterministic guidance and returns structured text fields. It cannot create findings, targets, evidence references, metrics, or assessment state; those remain deterministic and are locally validated before the walkthrough starts.
+
+## Optional cloud AI
+
+Purpose: explicit metered fallback when on-device AI is unavailable and the user/deployment intentionally enables it.
+
+The OpenAI Responses API is called server-side only when both the extension's Cloud AI fallback toggle and `EXTENSION_CLOUD_AI_ENABLED=true` permit it. The model receives only the AI Evidence Contract. It cannot create findings or selectors and its structured plan must validate against existing evidence/target IDs.
 
 ## Routing
 

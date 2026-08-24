@@ -1,27 +1,24 @@
-# Build status: Web QA Assistant 1.5.1
+# Build status: Web QA Assistant 1.5.2
 
 ## Delivery candidate
 
-1.5.1 is a stabilization and quality release layered on the complete 1.5.0 feature set. It preserves the impact composer, conservative image-purpose classifier, interpretation-first recommendation contract, browser performance discipline, integration-health states, redesigned interface, impact ledger, compact overlay, and portfolio Docker override.
+1.5.2 is the Frank reasoning and cost-control overhaul layered on the complete 1.5.1 trust/correctness release. All 1.5.0 and 1.5.1 scanner, prioritization, performance, integration-health, privacy, UI, compact-overlay, and deployment improvements remain in place.
 
-## 1.5.1 corrections and improvements
+## 1.5.2 improvements
 
-- image-purpose adjacent text now survives the real classifier -> finding -> evidence -> Frank path
-- LCP uses a buffered PerformanceObserver rather than unsupported getEntriesByType access
-- transfer weight is explicitly a measurable lower bound when cached/cross-origin transfer sizes are unavailable
-- performance findings have metric-specific Frank interpretation and remediation for TTFB, LCP, and payload weight
-- AI evidence uses an explicit finding allowlist and sanitizes nested performance resource URLs
-- rule-specific Frank guidance expanded for canonical, title/description, heading, opener, charset, meta-refresh, and Open Graph findings
-- renderer now loads the same image-purpose classifier as the extension
-- synthetic known-answer acceptance page added; test-fixture identity gates strengthened
-- release metadata/version/provenance consistency is enforced automatically
-- integration health validates real capability endpoints instead of guessed `/health` routes
-- Frank AI failures are explicit; connected reasoning and deterministic fallback can no longer be confused
-- connection health actively distinguishes AI configuration from an operational model request
-- generic evidence filler was removed from Frank; rule-specific interpretation is now the walkthrough focus
-- contrast findings preserve observed/required ratio and color evidence when supplied by Axe
-- managed installation access can remove shared-key setup for normal installs without embedding a permanent secret
+- Chrome built-in Prompt API is Frank's preferred reasoning layer in supported Chrome versions
+- on-device model work begins only from the explicit **Ask Frank** user gesture and uses structured JSON output
+- deterministic findings, targets, evidence references, assessment state, metrics, and verification remain authoritative; local AI may improve wording but cannot replace the plan structure
+- adversarial quality gates reject generic AI filler, contrast guidance that drops or invents measured ratios, unsupported standards/URLs, decorative-image alt regressions, and performance claims that overstate a one-browser lab observation
+- first-use model download no longer blocks Frank indefinitely; verified deterministic guidance remains immediately usable while Chrome finishes preparing the local model
+- routine extension scans explicitly disable metered model calls on the gateway
+- optional cloud Frank requires both an extension user opt-in and the server `EXTENSION_CLOUD_AI_ENABLED=true` gate; both default off
+- managed installation access remains independent from AI and normal users do not paste a shared gateway key
+- connection health treats on-device Frank and optional cloud fallback separately from the three connected QA integrations
+- Frank's UI labels now distinguish **Evidence summary**, **On-device reasoning**, **Cloud reasoning**, and **Verified guidance** instead of implying that every scan ran AI
+- keyboard focus returns to the originating finding after a Frank walkthrough and changing walkthrough content is announced as a live region
+- a pre-existing contrast-evidence defect that could format `4.5:1` as `4.5:1:1` was found during adversarial review and fixed
 
 ## Validation
 
-Exact test/check/build results are recorded during packaging. See RELEASE_PROVENANCE.txt and docs/QA-1.5.1.md.
+Exact test/check/build results are recorded during packaging. See `RELEASE_PROVENANCE.txt` and `docs/QA-1.5.2.md`.
