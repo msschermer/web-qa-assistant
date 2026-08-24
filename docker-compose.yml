@@ -56,6 +56,9 @@ services:
     environment:
       RENDERER_TOKEN: ${RENDERER_TOKEN}
       EGRESS_PROXY_URL: http://egress-proxy:8899
+      HOME: /tmp
+      XDG_CONFIG_HOME: /tmp/.chromium
+      XDG_CACHE_HOME: /tmp/.chromium
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
