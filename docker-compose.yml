@@ -38,7 +38,12 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8787:8787"
-    networks: [default, renderer_net]
+    networks:
+      default: {}
+      renderer_net: {}
+      portfolio_web:
+        aliases:
+          - web-qa-api
     depends_on:
       renderer:
         condition: service_healthy
@@ -85,3 +90,6 @@ networks:
   renderer_net:
     internal: true
   egress_net: {}
+  portfolio_web:
+    external: true
+    name: portfolio-infra_web

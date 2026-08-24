@@ -1,13 +1,12 @@
 # Portfolio deployment override.
 #
-# The droplet already runs a shared Caddy on the external network created by the
-# portfolio-infra stack. Previously the base compose file had to be hand-edited
-# on the server to join it, which meant every upgrade risked losing the change
-# or drifting from the repo. This override keeps the base file pristine:
+# Shared Caddy routing and the external portfolio-infra_web network are declared
+# in docker-compose.yml so recreating web-qa-api cannot drop public connectivity.
+# This file keeps portfolio-only metadata for operators and tooling.
 #
 #   docker compose -f docker-compose.yml -f docker-compose.portfolio.yml up -d --build
 #
-# Caddy then reaches the gateway by service name over the shared network:
+# Caddy reaches the gateway by the stable network alias declared in the base file:
 #
 #   assistant.msschermer.us {
 #     encode zstd gzip
@@ -20,15 +19,6 @@
 
 services:
   web-qa-api:
-    networks:
-      - default
-      - renderer_net
-      - portfolio_web
     labels:
       portfolio.service: "web-qa-assistant"
       portfolio.public-host: "assistant.msschermer.us"
-
-networks:
-  portfolio_web:
-    external: true
-    name: portfolio-infra_web

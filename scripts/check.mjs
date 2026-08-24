@@ -400,6 +400,32 @@ if (!/EXTENSION_CLOUD_AI_ENABLED=false/.test(envExampleSource) || !/EXTENSION_CL
   bad++;
   console.error('cost-control regression: server cloud AI must default off in env and compose');
 }
+
+// Public Caddy routing depends on web-qa-api joining the shared external network
+// with a stable alias. Renderer and egress-proxy must stay off that network.
+if (!/portfolio_web:\s*\r?\n\s*external:\s*true\s*\r?\n\s*name:\s*portfolio-infra_web/.test(composeSource)) {
+  bad++;
+  console.error('docker networking regression: docker-compose.yml must declare external portfolio_web -> portfolio-infra_web');
+}
+const apiComposeBlock = composeSource.slice(composeSource.indexOf('  web-qa-api:'), composeSource.indexOf('\n  renderer:'));
+if (!/portfolio_web/.test(apiComposeBlock)) {
+  bad++;
+  console.error('docker networking regression: web-qa-api must join portfolio_web for shared Caddy routing');
+}
+if (!/aliases:\s*\r?\n\s*- web-qa-api/.test(apiComposeBlock)) {
+  bad++;
+  console.error('docker networking regression: web-qa-api must expose stable alias web-qa-api on portfolio_web');
+}
+for (const service of ['renderer', 'egress-proxy']) {
+  const start = composeSource.indexOf(`  ${service}:`);
+  const end = composeSource.indexOf('\n  ', start + 1);
+  const block = start >= 0 ? composeSource.slice(start, end > start ? end : undefined) : '';
+  if (/portfolio_web|portfolio-infra_web/.test(block)) {
+    bad++;
+    console.error(`docker networking regression: ${service} must not join portfolio_web`);
+  }
+}
+
 if (!/await enrich\(req\.body, req\.webQaRequestId, \{ allowAi: false \}\)/.test(apiSource)) {
   bad++;
   console.error('cost-control regression: routine extension context enrichment must explicitly disable metered AI');
