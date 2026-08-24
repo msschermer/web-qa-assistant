@@ -195,6 +195,20 @@ if (!/files:\['vendor\/axe\.min\.js','image-purpose\.js','target-integrity\.brow
   console.error('injection order regression: target-integrity.browser.js and image-purpose.js must load before browser-rules.js');
 }
 
+// Renderer Docker images must include every local packages/* runtime dependency.
+const rendererSource = fs.readFileSync('services/renderer/server.js', 'utf8');
+const rendererDockerSource = fs.readFileSync('services/renderer/Dockerfile', 'utf8');
+const rendererPackageRefs = new Set();
+for (const m of rendererSource.matchAll(/\.\.\/\.\.\/packages\/([^/'"\s]+)/g)) rendererPackageRefs.add(m[1]);
+const rendererDockerPackages = new Set();
+for (const m of rendererDockerSource.matchAll(/^COPY\s+packages\/(\S+)/gm)) rendererDockerPackages.add(m[1].replace(/\/\.\//g, '').split('/')[0]);
+for (const pkg of rendererPackageRefs) {
+  if (!rendererDockerPackages.has(pkg)) {
+    bad++;
+    console.error(`renderer docker packaging regression: services/renderer/Dockerfile must COPY packages/${pkg} (referenced by services/renderer/server.js)`);
+  }
+}
+
 // Screenshot capture was evaluated and rejected: it would require broad host
 // permissions and would send page pixels past the AI evidence contract.
 const screenshotApis = /captureVisibleTab|chrome\.tabs\.captureVisible|getDisplayMedia|html2canvas/;
