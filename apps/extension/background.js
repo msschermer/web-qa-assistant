@@ -3,6 +3,7 @@ import { buildEvidenceGraph } from './frank-evidence.js';
 import { deterministicFrankPlan, validateFrankPlan } from './frank-plan.js';
 import { classifyEnvironment } from './environment.js';
 import { applyFindingPolicy } from './policy.js';
+import { attachTargetIntegrity, finalizeBlockedTargetReport } from './apply-report.js';
 import { composeAttention } from './compose.js';
 import { IMPACT_CLASSES } from './impact.js';
 import { gatewayContextEnvelope, gatewayFrankGraph } from './evidence-contract.js';
@@ -32,18 +33,21 @@ chrome.runtime.onStartup.addListener(()=>chrome.sidePanel.setPanelBehavior({open
 chrome.action.onClicked.addListener(tab=>{if(!tab?.windowId)return;chrome.sidePanel.open({windowId:tab.windowId}).catch(()=>{});chrome.runtime.sendMessage({type:'ACTION_INVOKED',tabId:tab.id}).catch(()=>{})});
 
 async function settings(){return chrome.storage.local.get({apiBase:'',apiKey:'',cloudAiFallback:false,installationId:'',installToken:'',installTokenExpiresAt:0,watchedOrigins:[],scanState:{},siteSessions:{},ignoredRulesByOrigin:{},environmentOverridesByOrigin:{}})}
-async function ensureInjected(tabId){try{await chrome.tabs.sendMessage(tabId,{type:'PING'});return}catch{}await chrome.scripting.executeScript({target:{tabId},files:['vendor/axe.min.js','image-purpose.js','browser-rules.js','content.js']})}
+async function ensureInjected(tabId){try{await chrome.tabs.sendMessage(tabId,{type:'PING'});return}catch{}await chrome.scripting.executeScript({target:{tabId},files:['vendor/axe.min.js','image-purpose.js','target-integrity.browser.js','browser-rules.js','content.js']})}
 async function activeTab(){return(await chrome.tabs.query({active:true,currentWindow:true}))[0]}
 function pageKey(url){const u=new URL(url);return u.origin+u.pathname}
 function isPrivateHost(host){const h=String(host||'').toLowerCase();if(h==='localhost'||h.endsWith('.local')||h.endsWith('.internal'))return true;if(/^127\./.test(h)||/^10\./.test(h)||/^192\.168\./.test(h)||/^169\.254\./.test(h))return true;const m=/^172\.(\d+)\./.exec(h);return!!(m&&Number(m[1])>=16&&Number(m[1])<=31)}
 async function contextualize(report,context=null){
   if(!report?.page?.url)return report;const s=await settings(),origin=new URL(report.page.url).origin,override=s.environmentOverridesByOrigin?.[origin]||'',monitored=context?.performance?.data?.monitored===true||context?.performance?.monitored===true;
   const environment=classifyEnvironment(report.page,{override,canonical:report.page.canonical,monitored});environment.pathname=new URL(report.page.url).pathname;
-  const findings=applyFindingPolicy(report.findings||[],environment);
+  const attached=attachTargetIntegrity(report);
+  const policyFindings=applyFindingPolicy(attached.findings||[],environment);
+  const finalized=finalizeBlockedTargetReport(attached,policyFindings);
+  const findings=finalized.findings;
   // Attention is composed once here so every surface (panel, brief, markdown
   // export) reads the same grouped, cross-discipline view.
   const attention=composeAttention(findings,{limit:8});
-  return{...report,environment,page:{...report.page,environment},findings,attention:{groups:attention.groups.map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead.id,selectors:g.selectors,instanceIds:g.instances.map(x=>x.id)})),classCounts:attention.classCounts,materialGroupCount:attention.materialGroupCount,materialFindingCount:attention.materialFindingCount,representedClasses:attention.representedClasses,classLabels:Object.fromEntries(Object.entries(IMPACT_CLASSES).map(([k,v])=>[k,v.label]))}};
+  return{...finalized,environment,page:{...finalized.page,environment},findings,attention:{groups:attention.groups.map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead.id,selectors:g.selectors,instanceIds:g.instances.map(x=>x.id)})),classCounts:attention.classCounts,materialGroupCount:attention.materialGroupCount,materialFindingCount:attention.materialFindingCount,representedClasses:attention.representedClasses,classLabels:Object.fromEntries(Object.entries(IMPACT_CLASSES).map(([k,v])=>[k,v.label]))},priorityBrief:finalized.priorityBrief||report.priorityBrief||null,targetIntegrityBlocked:finalized.targetIntegrityBlocked||false};
 }
 function mergeGatewayReport(local,remote){
   if(!remote)return local;const byId=new Map((local.findings||[]).map(f=>[f.id||f.fingerprint,f]));
@@ -150,7 +154,7 @@ async function enrich(report,tabId=null){
     const s=await settings(),status=Number(error?.status||0),connectedMode=status===401?((s.apiKey||s.installToken)?'auth-rejected':'auth-required'):status===403?'auth-rejected':'unavailable';
     const coverage={...report.coverage,published:'unavailable',performance:'unavailable',wcag:'unavailable',ai:'deterministic'};
     const connectedError=connectedMode==='auth-required'?'The assistant gateway requires an access key.':connectedMode==='auth-rejected'?'The saved assistant access key was rejected.':String(error?.message||error);
-    return{...report,coverage,priorityBrief:deterministicBrief(report.findings,{coverage,linkAudit:report.linkAudit}),priorityMode:'deterministic',connectedMode,connectedError,context:{performance:null,services:{}}};
+    return{...report,coverage,priorityBrief:deterministicBrief(report.findings,{coverage,linkAudit:report.linkAudit,targetIntegrity:report.page?.targetIntegrity}),priorityMode:'deterministic',connectedMode,connectedError,context:{performance:null,services:{}}};
   }
   return report;
 }

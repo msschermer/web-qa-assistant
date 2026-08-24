@@ -10,6 +10,8 @@ import { buildEvidenceGraph, evidenceHash } from '../../packages/frank/evidence.
 import { deterministicFrankPlan, validateFrankPlan } from '../../packages/frank/plan.js';
 import { classifyEnvironment } from '../../packages/environment/classify.js';
 import { applyFindingPolicy } from '../../packages/findings/policy.js';
+import { applyTargetIntegrityReport, attachTargetIntegrity, finalizeBlockedTargetReport } from '../../packages/integrity/apply-report.js';
+import { targetIntegrityLimitsAudit } from '../../packages/integrity/target-integrity.js';
 import { issueInstallationToken, verifyInstallationToken } from '../../packages/auth/install-access.js';
 
 const app = express();
@@ -99,27 +101,41 @@ function coverageStatus(result, kind) {
 }
 
 async function enrich(local, requestId = '', { allowAi = true } = {}) {
-  const context = await allContext(local, { requestId });
-  const correlated = correlate(local, context);
-  const environment = classifyEnvironment(local.page || {}, { canonical: local.page?.canonical, monitored: context.performance?.data?.monitored === true });
-  const findings = applyFindingPolicy(correlated, environment);
+  const base = attachTargetIntegrity(local, {
+    requestedUrl: local.page?.requestedUrl || local.page?.url,
+    html: local.page?.documentHtmlSample || ''
+  });
+  const context = await allContext(base, { requestId });
+  const correlated = correlate(base, context);
+  const environment = classifyEnvironment(base.page || {}, { canonical: base.page?.canonical, monitored: context.performance?.data?.monitored === true });
+  const policyFindings = applyFindingPolicy(correlated, environment);
   const coverage = {
-    ...local.coverage,
+    ...base.coverage,
     published: coverageStatus(context.meta, 'published'),
     performance: coverageStatus(context.performance, 'performance'),
     wcag: coverageStatus(context.wcag, 'wcag')
   };
-  const brief = allowAi ? await priorityBrief(findings, coverage, environment, local.linkAudit || null) : { text: deterministicBrief(findings,{ coverage, linkAudit: local.linkAudit || null }), mode: 'deterministic' };
+  const finalized = finalizeBlockedTargetReport({ ...base, coverage }, policyFindings);
+  const briefContext = {
+    coverage: finalized.coverage,
+    linkAudit: finalized.linkAudit || null,
+    targetIntegrity: finalized.page?.targetIntegrity || null
+  };
+  const brief = finalized.targetIntegrityBlocked || targetIntegrityLimitsAudit(finalized.page?.targetIntegrity)
+    ? { text: finalized.priorityBrief || deterministicBrief(finalized.findings, briefContext), mode: 'deterministic', reason: 'target-integrity' }
+    : allowAi
+      ? await priorityBrief(finalized.findings, finalized.coverage, environment, finalized.linkAudit || null)
+      : { text: deterministicBrief(finalized.findings, briefContext), mode: 'deterministic' };
   coverage.ai = brief.mode === 'ai' ? 'complete' : 'deterministic';
   return {
     ok: true,
     requestId,
     report: {
-      ...local,
+      ...finalized,
       environment,
-      page: { ...local.page, environment },
-      findings,
-      coverage,
+      page: { ...finalized.page, environment },
+      findings: finalized.findings,
+      coverage: { ...finalized.coverage, ai: coverage.ai },
       context: {
         performance: context.performance?.data || null,
         routing: context.routing || null,

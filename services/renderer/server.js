@@ -3,6 +3,7 @@ import { chromium } from 'playwright';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { applyTargetIntegrityReport } from '../../packages/integrity/apply-report.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -89,6 +90,7 @@ app.post('/scan', async (req, res) => {
     opened = await openPage(url);
     const { page, response } = opened;
     await page.addScriptTag({ path: path.resolve(__dirname, '../../node_modules/axe-core/axe.min.js') });
+    await page.addScriptTag({ path: path.resolve(__dirname, '../../packages/integrity/target-integrity.browser.js') });
     await page.addScriptTag({ path: path.resolve(__dirname, '../../packages/rules/image-purpose.js') });
     await page.addScriptTag({ path: path.resolve(__dirname, '../../packages/rules/browser-rules.js') });
     const report = await page.evaluate(async () => {
@@ -100,8 +102,12 @@ app.post('/scan', async (req, res) => {
     });
     report.page.httpStatus = response?.status() || null;
     report.page.finalUrl = page.url();
+    report.page.requestedUrl = url;
     report.coverage.renderer = 'complete';
-    res.json({ ok: true, report });
+    const html = await page.content();
+    report.page.documentHtmlSample = html.slice(0, 80000);
+    const finalized = applyTargetIntegrityReport(report, { requestedUrl: url, html });
+    res.json({ ok: true, report: finalized });
   } catch (e) { res.status(422).json({ ok: false, error: `Unable to render public page: ${e.message}` }); }
   finally { if (opened) await opened.context.close(); }
 });

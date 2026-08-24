@@ -190,9 +190,9 @@ scanSyntheticFixtureIdentity('fixtures');
 
 // The image-purpose classifier must be injected before browser-rules, otherwise
 // semantic context silently degrades and Frank falls back to the old fork.
-if (!/files:\['vendor\/axe\.min\.js','image-purpose\.js','browser-rules\.js','content\.js'\]/.test(backgroundSource)) {
+if (!/files:\['vendor\/axe\.min\.js','image-purpose\.js','target-integrity\.browser\.js','browser-rules\.js','content\.js'\]/.test(backgroundSource)) {
   bad++;
-  console.error('injection order regression: image-purpose.js must load before browser-rules.js');
+  console.error('injection order regression: target-integrity.browser.js and image-purpose.js must load before browser-rules.js');
 }
 
 // Screenshot capture was evaluated and rejected: it would require broad host

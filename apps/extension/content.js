@@ -21,6 +21,21 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       });
     } catch {}
     const report = window.WebQARules.merge(local, axeResults, { findings: [], checked: 0 });
+    report.page.requestedUrl = location.href;
+    report.page.finalUrl = location.href;
+    if (globalThis.WebQATargetIntegrity) {
+      report.page.targetIntegrity = globalThis.WebQATargetIntegrity.assessTargetIntegrity({
+        requestedUrl: location.href,
+        finalUrl: location.href,
+        title: report.page.title,
+        linkCount: report.page.linkCount,
+        interactiveCount: report.page.interactiveCount,
+        domSignals: globalThis.WebQATargetIntegrity.collectDomSignals({
+          html: document.documentElement?.innerHTML || '',
+          bodyText: document.body?.innerText || ''
+        })
+      });
+    }
     report.coverage.links = 'pending';
     return report;
   }

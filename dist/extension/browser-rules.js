@@ -651,7 +651,8 @@
   function merge(local,axeResults,linkResult={findings:[],checked:0}){
     const findings=[...local.findings,...axeFindings(axeResults),...(linkResult.findings||[])],seen=new Map();
     for(const f of findings){const key=`${f.ruleId}|${f.selector}|${f.evidence}`;if(!seen.has(key))seen.set(key,f)}
-    return{...local,browserPerformance:local.browserPerformance||null,findings:[...seen.values()],linkAudit:{checked:linkResult.checked||0,verifiedHealthy:linkResult.verifiedHealthy||0,confirmedIssues:linkResult.confirmedIssues||0,inconclusive:linkResult.inconclusive||0,incompleteChecks:linkResult.incompleteChecks||[],reachedLimit:!!linkResult.reachedLimit,degraded:!!linkResult.degraded,cached:linkResult.cached||0},coverage:{...local.coverage,links:linkResult.status==='partial'?'partial':linkResult.status==='unavailable'?'unavailable':'complete',axe:axeResults?'complete':'unavailable'}};
+    const linksStatus=linkResult.status==='partial'?'partial':linkResult.status==='unavailable'?'unavailable':Number(linkResult.checked||0)===0?'none_checked':'complete';
+    return{...local,browserPerformance:local.browserPerformance||null,findings:[...seen.values()],linkAudit:{checked:linkResult.checked||0,verifiedHealthy:linkResult.verifiedHealthy||0,confirmedIssues:linkResult.confirmedIssues||0,inconclusive:linkResult.inconclusive||0,incompleteChecks:linkResult.incompleteChecks||[],reachedLimit:!!linkResult.reachedLimit,degraded:!!linkResult.degraded,cached:linkResult.cached||0},coverage:{...local.coverage,links:linksStatus,axe:axeResults?'complete':'unavailable'}};
   }
 
   globalThis.WebQARules={run,axeFindings,resolvedTargetState,auditLinks,recheckLink,merge,selectorFor,resolveTarget,performanceSignals,preparePerformanceSignals,semanticContextFor,targetContextFor(targetId,selector='',ruleId=''){

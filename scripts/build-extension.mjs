@@ -12,6 +12,18 @@ fs.copyFileSync(path.join(root,'packages/ui/tokens.css'),path.join(out,'ui-token
 fs.copyFileSync(path.join(root,'packages/ai/evidence-contract.js'),path.join(out,'evidence-contract.js'));
 fs.copyFileSync(path.join(root,'packages/rules/browser-rules.js'),path.join(out,'browser-rules.js'));
 fs.copyFileSync(path.join(root,'packages/rules/image-purpose.js'),path.join(out,'image-purpose.js'));
+fs.copyFileSync(path.join(root,'packages/integrity/target-integrity.js'),path.join(out,'target-integrity.js'));
+fs.copyFileSync(path.join(root,'packages/integrity/apply-report.js'),path.join(out,'apply-report.js'));
+function buildIntegrityBrowserBundle(root, outDir) {
+  let src = fs.readFileSync(path.join(root, 'packages/integrity/target-integrity.js'), 'utf8');
+  src = src.replace(/^export const /gm, 'const ');
+  src = src.replace(/^export function /gm, 'function ');
+  const bundle = `(() => {\n${src}\nglobalThis.WebQATargetIntegrity = { TARGET_STATES, collectDomSignals, assessTargetIntegrity, targetIntegrityReached, targetIntegrityBlocksAudit, suppressFindingsForTargetIntegrity, adjustCoverageForTargetIntegrity, targetIntegrityBrief, isPageDerivedFinding };\n})();\n`;
+  fs.writeFileSync(path.join(root, 'packages/integrity/target-integrity.browser.js'), bundle);
+  fs.writeFileSync(path.join(outDir, 'target-integrity.browser.js'), bundle);
+}
+
+buildIntegrityBrowserBundle(root, out);
 fs.copyFileSync(path.join(root,'packages/findings/correlate.js'),path.join(out,'correlate.js'));
 fs.copyFileSync(path.join(root,'packages/findings/compose.js'),path.join(out,'compose.js'));
 fs.copyFileSync(path.join(root,'packages/findings/impact.js'),path.join(out,'impact.js'));

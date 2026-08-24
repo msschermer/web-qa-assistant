@@ -63,6 +63,6 @@ export function correlate(local,context={}){
 // problem and leave room for links, indexing and performance.
 export function deterministicBrief(findings, context={}){
   const composition=composeAttention(findings);
-  return composedBrief(composition,{linkAudit:context?.linkAudit||null,coverage:context?.coverage||{}});
+  return composedBrief(composition,{linkAudit:context?.linkAudit||null,coverage:context?.coverage||{},targetIntegrity:context?.targetIntegrity||context?.page?.targetIntegrity||null});
 }
 export { composeAttention, composedBrief } from './compose.js';

@@ -96,12 +96,20 @@ function phrase(group) {
   return title;
 }
 
-export function composedBrief(composition, { linkAudit = null, coverage = {} } = {}) {
+export function composedBrief(composition, { linkAudit = null, coverage = {}, targetIntegrity = null } = {}) {
   const { groups, materialGroupCount, classCounts } = composition;
   const inconclusive = Number(linkAudit?.inconclusive || 0);
-  const unavailable = Object.entries(coverage || {}).filter(([, v]) => /unavailable/i.test(String(v))).map(([k]) => k);
+  const unavailable = Object.entries(coverage || {}).filter(([, v]) => /unavailable|substituted|blocked|not_applicable/i.test(String(v))).map(([k]) => k);
 
   const checked = Number(linkAudit?.checked || 0);
+  if (targetIntegrity?.state && targetIntegrity.state !== 'reached') {
+    const blocked = targetIntegrity.state === 'probable_interstitial'
+      ? 'WebQA could not confirm it reached the requested page. The renderer likely received a challenge or security interstitial instead, so page QA conclusions about the target site were withheld.'
+      : targetIntegrity.state === 'blocked'
+        ? 'WebQA could not reach the requested page because access was blocked. Page QA conclusions about the target site were withheld.'
+        : 'WebQA could not confidently confirm the requested page was reached. Treat page QA conclusions as incomplete until target integrity is verified.';
+    return blocked;
+  }
   if (!groups.length) {
     if (inconclusive) return `No confirmed material issues were found. Internal-link verification was incomplete for ${inconclusive} of ${checked || inconclusive} checked destination${(checked || inconclusive) === 1 ? '' : 's'}, so Frank did not count those URLs as broken links.`;
     if (unavailable.length) return `No confirmed material issues were found in the available coverage. ${unavailable.join(', ')} could not be checked, so treat this as a partial pass.`;
