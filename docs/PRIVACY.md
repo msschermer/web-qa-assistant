@@ -26,7 +26,7 @@ Frank prefers Chrome built-in AI, which runs the reasoning step on the user devi
 - query-string values
 - unrelated page content
 
-A bounded markup excerpt may be used only for the selected target and is attribute-sanitized first. The on-device Frank module excludes markup from its compact prompt and has no network/model-provider API calls.
+A bounded markup excerpt may be used only for the selected target and is attribute-sanitized first. The on-device Frank module excludes markup from its compact prompt and has no network/model-provider API calls. Its retained base session contains trusted system instructions only; selected page evidence is supplied to short-lived per-finding clones and is not carried between sites. Page-derived strings are treated as untrusted model data and never as authority for destructive or credential-handling actions.
 
 ## Connected services
 

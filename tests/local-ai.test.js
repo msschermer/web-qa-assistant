@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { buildEvidenceGraph } from '../packages/frank/evidence.js';
 import { deterministicFrankPlan } from '../packages/frank/plan.js';
-import { beginLocalFrankSession, localFrankWalkthrough, probeLocalAi, resolveLocalFrankSession, validateLocalFrankOutput } from '../apps/extension/local-ai.js';
+import { beginLocalFrankSession, createLocalFrankRuntime, localFrankWalkthrough, probeLocalAi, validateLocalFrankOutput } from '../apps/extension/local-ai.js';
 
 function contrastGraph(){
   const finding={id:'axe.color-contrast:status',ruleId:'axe.color-contrast',title:'Elements must meet minimum color contrast ratio thresholds',detail:'Element has insufficient color contrast of 3.3:1 (foreground #2d2d2d, background #00ff95, font size 10.5pt (14px), font weight normal). Expected contrast ratio of 4.5:1',category:'fix',severity:'high',confidence:'confirmed',selector:'.status',targetType:'visual',targetId:'target_status',signal:'a11y.contrast',sources:['axe','wcag-translator'],wcag:['1.4.3'],axe:{impact:'serious',failureSummary:'Fix color contrast',checks:{any:[{id:'color-contrast',message:'Element has insufficient color contrast',data:{contrastRatio:3.3,expectedContrastRatio:'4.5:1',fgColor:'#2d2d2d',bgColor:'#00ff95',fontSize:'10.5pt (14px)',fontWeight:'normal'}}],all:[],none:[]}}};
@@ -14,7 +14,7 @@ function goodLocalResponse(){return JSON.stringify({
   summary:'The RUNNING status text is below the required contrast threshold and can be corrected with a small color adjustment.',
   interpretation:'The RUNNING text is rendered at 3.3:1 contrast against its background, below the required 4.5:1 ratio.',
   impact:'At this text size, the low contrast can make the status harder to read for people with low vision or reduced contrast sensitivity.',
-  remediation:'Darken the RUNNING text or adjust the badge background until this foreground/background pair reaches at least 4.5:1 while preserving the existing status treatment.',
+  remediation:'Darken the RUNNING text or adjust the current background until this foreground/background pair reaches at least 4.5:1 while preserving the existing status treatment.',
   verification:'Recheck the computed foreground and background colors, confirm the ratio is at least 4.5:1, and rerun the contrast rule.'
 });}
 
@@ -122,14 +122,19 @@ test('on-device output may improve wording but cannot replace deterministic evid
 });
 
 
-test('a slow first-use model download does not block deterministic Frank indefinitely',async()=>{
-  let destroyed=false;
-  const pending=new Promise(resolve=>setTimeout(()=>resolve({ok:true,status:'available',session:{destroy(){destroyed=true;}}}),25));
-  const result=await resolveLocalFrankSession(pending,{waitMs:2});
-  assert.equal(result.ok,false);
-  assert.equal(result.code,'LOCAL_AI_PREPARING');
-  await new Promise(resolve=>setTimeout(resolve,35));
-  assert.equal(destroyed,true,'late session should be released after background preparation finishes');
+test('slow first-use preparation becomes a persistent ready base session instead of a forced fallback',async()=>{
+  let resolveCreate,clones=0,destroyed=false;
+  const session={clone:async()=>{clones++;return{prompt:async()=>goodLocalResponse(),destroy(){}}},destroy(){destroyed=true;}};
+  const languageModel={create(){return new Promise(resolve=>{resolveCreate=resolve;});}};
+  const runtime=createLocalFrankRuntime({languageModel});
+  const preparing=runtime.activateFromGesture();
+  assert.equal(runtime.snapshot().status,'warming');
+  resolveCreate(session);
+  const ready=await preparing;
+  assert.equal(ready.ok,true);assert.equal(runtime.snapshot().status,'ready');
+  const task=await runtime.cloneTask();
+  assert.ok(task);assert.equal(clones,1);assert.equal(destroyed,false,'base session must stay warm for later findings');
+  runtime.destroy();assert.equal(destroyed,true);
 });
 
 test('on-device guidance cannot introduce an unsupported WCAG criterion',()=>{

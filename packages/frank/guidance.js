@@ -62,6 +62,11 @@ function contrastRatio(value){
   if(!text)return'';
   return /:1$/.test(text)?text:`${text}:1`;
 }
+function hexRgb(value){const m=String(value||'').trim().match(/^#([0-9a-f]{6})$/i);if(!m)return null;return[0,2,4].map(i=>parseInt(m[1].slice(i,i+2),16))}
+function rgbHex(rgb){return'#'+rgb.map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('')}
+function luminance(rgb){const c=rgb.map(v=>{const n=v/255;return n<=.04045?n/12.92:Math.pow((n+.055)/1.055,2.4)});return .2126*c[0]+.7152*c[1]+.0722*c[2]}
+function ratioFor(a,b){const l1=luminance(a),l2=luminance(b),hi=Math.max(l1,l2),lo=Math.min(l1,l2);return(hi+.05)/(lo+.05)}
+function nearestPassingForeground(fgValue,bgValue,requiredValue){const fg=hexRgb(fgValue),bg=hexRgb(bgValue),required=parseFloat(String(requiredValue||'').replace(':1',''));if(!fg||!bg||!Number.isFinite(required)||required<=1||ratioFor(fg,bg)>=required)return'';const candidates=[];for(const target of [[0,0,0],[255,255,255]]){if(ratioFor(target,bg)<required)continue;let low=0,high=1;for(let i=0;i<24;i++){const mid=(low+high)/2,mix=fg.map((v,j)=>v+(target[j]-v)*mid);if(ratioFor(mix,bg)>=required)high=mid;else low=mid}let rgb=fg.map((v,j)=>Math.max(0,Math.min(255,Math.round(v+(target[j]-v)*high))));for(let i=0;i<256&&ratioFor(rgb,bg)<required;i++)rgb=rgb.map((v,j)=>v===target[j]?v:v+Math.sign(target[j]-v));if(ratioFor(rgb,bg)<required)continue;const distance=rgb.reduce((sum,v,j)=>sum+(v-fg[j])**2,0);candidates.push({hex:rgbHex(rgb),distance})}return candidates.sort((a,b)=>a.distance-b.distance)[0]?.hex||''}
 function axeAdvice(f){
   const id=String(f.ruleId||'');
   const summary=String(f.axe?.failureSummary||'').replace(/^Fix (?:any|all) of the following:\s*/i,'').trim();
@@ -69,11 +74,13 @@ function axeAdvice(f){
     const c=contrastFactsFromFinding(f)||{},text=String(f.targetText||'').trim(),label=text?`The affected text "${text.slice(0,80)}"`:'The affected text';
     const observed=c.contrastRatio!=null?contrastRatio(c.contrastRatio):'below the required threshold',required=c.expectedContrastRatio!=null?contrastRatio(c.expectedContrastRatio):'the applicable WCAG threshold';
     const colors=c.fgColor&&c.bgColor?` The computed foreground is ${c.fgColor} against ${c.bgColor}.`:'';
+    const passing=c.fgColor&&c.bgColor&&c.expectedContrastRatio!=null?nearestPassingForeground(c.fgColor,c.bgColor,c.expectedContrastRatio):'';
+    const concrete=passing?` A nearby passing foreground is ${passing} against the current background; use that as a starting point or choose the equivalent approved design token.`:'';
     return{
       interpretation:`${label} has an observed contrast ratio of ${observed}; this check requires ${required}.${colors}`,
       impact:'Insufficient text contrast can make content difficult to read for people with low vision and in low-contrast viewing conditions.',
-      recommendation:'Increase the contrast between this text and its background while preserving the component state and visual hierarchy.',
-      remediation:summary||'Darken the foreground, lighten/darken the background, or make the smallest design-token adjustment that brings this exact text/background pair to the required ratio. Recheck other states that reuse the same colors.',
+      recommendation:`Increase the contrast between this text and its background while preserving the component state and visual hierarchy.${concrete}`,
+      remediation:summary||`Make the smallest foreground or background token change that brings this exact pair to the required ratio.${concrete} Recheck other states that reuse the same colors.`,
       verify:'Rerun the accessibility scan on the same element and confirm the color-contrast rule no longer appears. Also check hover, focus, disabled, and other component states.'
     };
   }

@@ -21,7 +21,7 @@ test('deterministic Frank plan references only verified visual targets and inclu
   assert.equal(targetIdForFinding(finding),'target_email');
   assert.equal(validateFrankPlan(plan,graph),true);
   assert.equal(plan.mode,'deterministic');
-  assert(plan.steps.some(s=>s.type==='spotlight'));
+  assert.equal(plan.steps[0].type,'interpretation');
   assert(plan.steps.some(s=>s.type==='remediation'));
   assert(plan.steps.some(s=>s.type==='verification'));
 });
@@ -31,7 +31,8 @@ test('document findings never receive a fake spotlight',()=>{
   const graph=buildEvidenceGraph({finding,page:{url:'https://example.com',hostname:'example.com'},environment:{type:'production',confidence:.9,confidenceLabel:'high'},coverage:{browser:'complete'}});
   const plan=deterministicFrankPlan(graph);
   assert.equal(plan.steps.some(s=>s.type==='spotlight'),false);
-  assert.match(plan.steps[0].body,/no useful visible page element/i);
+  assert.equal(plan.steps[0].type,'interpretation');
+  assert.equal(plan.steps[0].targetId,'');
   assert(plan.steps.some(s=>s.type==='verification'));
 });
 
@@ -55,7 +56,8 @@ test('extension ships immersive Frank runtime without debugger permission',()=>{
   assert.match(content,/box-shadow:0 0 0 99999px/);
   assert.match(content,/Shadow/iu);
   assert.match(panel,/PREPARE_FRANK/);
-  assert.match(panel,/beginLocalFrankSession/);
+  assert.match(panel,/localFrankRuntime\.activateFromGesture/);
+  assert.match(panel,/localFrankRuntime\.cloneTask/);
   assert.match(build,/local-ai\.js/);
   assert.match(panel,/Temporary preview applied/);
   assert.match(build,/frank-evidence\.js/);

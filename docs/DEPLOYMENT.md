@@ -29,7 +29,7 @@ On the Linux host:
 ```bash
 git clone https://github.com/msschermer/web-qa-assistant.git
 cd web-qa-assistant
-git checkout v1.5.2
+git checkout v1.6.0
 cp .env.example .env
 ```
 
@@ -80,7 +80,7 @@ docker compose ps
 curl http://127.0.0.1:8787/api/health
 ```
 
-Expected API fields include version `1.5.2`, OpenAI configuration state and `publicAiEnabled`.
+Expected API fields include version `1.6.0`, OpenAI configuration state and `publicAiEnabled`.
 
 The renderer has a Docker healthcheck. The API waits for a healthy renderer before the normal container dependency is considered ready.
 
@@ -208,7 +208,7 @@ After a tested release tag is published:
 
 ```bash
 git fetch --tags
-git checkout v1.5.2
+git checkout v1.6.0
 docker compose -f docker-compose.yml -f docker-compose.portfolio.yml up -d --build
 curl http://127.0.0.1:8787/api/health
 ```
@@ -218,12 +218,12 @@ Drop the `-f` flags if you are not using the shared portfolio network.
 Confirm the upgrade landed:
 
 ```bash
-curl -s http://127.0.0.1:8787/api/health | grep 1.5.2
+curl -s http://127.0.0.1:8787/api/health | grep 1.6.0
 curl -s -H "x-web-qa-key: <team-access-token>" \
   http://127.0.0.1:8787/api/health/integrations
 ```
 
-Integration health in 1.5.2 reports `available`, `unauthorized`, `not-found`,
+Integration health in 1.6.0 reports `available`, `unauthorized`, `not-found`,
 `degraded` or `unavailable`. Earlier releases reported any response under HTTP 500
 as `available`, so a misconfigured integration URL returning 404 looked healthy.
 If an integration that previously read as available now reads as `not-found`, the
@@ -236,7 +236,7 @@ Install/reload the matching extension artifact from the same release tag.
 Server rollback:
 
 ```bash
-git checkout v1.5.2
+git checkout v1.6.0
 docker compose -f docker-compose.yml -f docker-compose.portfolio.yml up -d --build
 ```
 

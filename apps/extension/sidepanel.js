@@ -1,6 +1,6 @@
-import { beginLocalFrankSession, localFrankWalkthrough, probeLocalAi, resolveLocalFrankSession } from './local-ai.js';
+import { localFrankRuntime, localFrankWalkthrough, probeLocalAi } from './local-ai.js';
 let report = null, filter = 'all', tab = null, scanInFlight = false, frank = null,
-    showAllChecks = false, lastDiagnostic = null, siteSession = null, classFilter = '', cloudAiFallback = false, frankReturnFocus = null;
+    showAllChecks = false, lastDiagnostic = null, siteSession = null, classFilter = '', cloudAiFallback = false, frankReturnFocus = null, frankRequestSeq = 0, pendingFrankCancel = null;
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -44,15 +44,50 @@ function showFailure(response, fallback = 'The extension could not complete this
   $('#diagnostic-message').textContent = d.technicalMessage || 'No technical message was returned.';
   $('#diagnostic').hidden = false;
 }
-function actionState(card, message, kind = 'ok') {
+function actionState(card, message, kind = 'ok', { persistent = false, actionLabel = '', onAction = null } = {}) {
   const el = card.querySelector('.action-state');
-  el.textContent = message; el.dataset.kind = kind; el.hidden = false;
-  clearTimeout(el._hideTimer); el._hideTimer = setTimeout(() => { el.hidden = true; }, 5000);
+  el.replaceChildren(); el.dataset.kind = kind; el.hidden = false;
+  const text = document.createElement('span'); text.textContent = message; el.appendChild(text);
+  if (actionLabel && typeof onAction === 'function') {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'btn btn-text action-inline'; button.textContent = actionLabel; button.onclick = onAction; el.appendChild(button);
+  }
+  clearTimeout(el._hideTimer);
+  if (!persistent) el._hideTimer = setTimeout(() => { el.hidden = true; }, 5000);
 }
 function frankAction(message, kind = 'ok') {
   const el = $('#frank-action-state');
   el.textContent = message; el.dataset.kind = kind; el.hidden = false;
   clearTimeout(el._hideTimer); el._hideTimer = setTimeout(() => { el.hidden = true; }, 5000);
+}
+
+
+function frankReadinessLabel(state = {}) {
+  if (state.status === 'ready') return { text: 'Frank ready', tone: 'ok', title: 'Chrome on-device reasoning is ready.' };
+  if (state.status === 'downloading') return { text: state.progress != null ? `Frank preparing ${Math.round(state.progress * 100)}%` : 'Frank preparing', tone: 'info', title: state.message };
+  if (state.status === 'warming') return { text: 'Frank warming', tone: 'info', title: state.message };
+  if (state.status === 'downloadable') return { text: 'Frank setup on first use', tone: 'info', title: state.message };
+  if (state.status === 'unavailable') return { text: 'Verified guidance', tone: 'warn', title: state.message };
+  if (state.status === 'error') return { text: 'Frank needs retry', tone: 'warn', title: state.message };
+  return { text: 'Checking Frank', tone: 'info', title: state.message || 'Checking Chrome on-device AI availability.' };
+}
+function renderFrankReadiness(state = localFrankRuntime.snapshot()) {
+  const chip = $('#frank-readiness');
+  if (chip) {
+    const label = frankReadinessLabel(state);
+    chip.textContent = label.text; chip.dataset.tone = label.tone; chip.title = label.title || '';
+    chip.dataset.state = state.status || 'checking';
+  }
+  document.body.dataset.frankReadiness = state.status || 'checking';
+}
+localFrankRuntime.subscribe(renderFrankReadiness);
+addEventListener('pagehide', () => localFrankRuntime.destroy(), { once: true });
+
+function currentRequest(requestId, pageUrl, tabId) {
+  return requestId === frankRequestSeq && report?.page?.url === pageUrl && tab?.id === tabId;
+}
+async function currentTabStillMatches(pageUrl, tabId) {
+  const active = await send({ type: 'GET_ACTIVE' }, 5000);
+  return Boolean(active.ok && active.tab?.id === tabId && active.tab?.url === pageUrl);
 }
 
 const CLASS_TONE = { availability: 'critical', discoverability: 'warn', accessibility: 'info', performance: 'warn', implementation: 'info', coverage: 'info' };
@@ -303,7 +338,10 @@ function render() {
       actionState(card, r.ok && r.found ? 'Highlighted on page.' : r.error || 'The element is no longer present.', r.ok && r.found ? 'ok' : 'error');
       highlight.disabled = false;
     };
-    card.querySelector('.ask-frank').onclick = () => startFrank(f, card);
+    const askFrank = card.querySelector('.ask-frank');
+    askFrank.onclick = () => startFrank(f, card);
+    askFrank.addEventListener('pointerenter', () => { localFrankRuntime.prewarmIfAvailable().catch(() => {}); }, { once: true });
+    askFrank.addEventListener('focus', () => { localFrankRuntime.prewarmIfAvailable().catch(() => {}); }, { once: true });
     const recheckButton = card.querySelector('.recheck');
     recheckButton.hidden = f.confidence === 'inconclusive' || f.category === 'context';
     recheckButton.onclick = () => recheck(f, card);
@@ -339,33 +377,66 @@ function evidenceForStep(step) {
   return frank.graph.evidence.filter(e => ids.has(e.id));
 }
 function targetSelector(step) { return step?.targetId ? frank?.graph?.targets?.[step.targetId]?.selector || '' : ''; }
+function evidenceValue(value) { return typeof value === 'string' ? value : JSON.stringify(value); }
+function addFact(dl, label, value, { mono = true } = {}) {
+  if (value === undefined || value === null || value === '') return;
+  const dt = document.createElement('dt'), dd = document.createElement('dd');
+  dt.textContent = label; dd.textContent = String(value); if (!mono) dd.classList.add('human-value'); dl.append(dt, dd);
+}
+function evidenceRow(item, active = false) {
+  const article = document.createElement('article'); article.className = 'evidence-row'; article.dataset.active = String(active);
+  const top = document.createElement('div'), label = document.createElement('b'), source = document.createElement('span'), value = document.createElement('p');
+  label.textContent = item.label || item.kind || 'Evidence'; source.textContent = item.source || 'scanner'; value.textContent = evidenceValue(item.value);
+  top.append(label, source); article.append(top, value); return article;
+}
+function renderFrankEvidenceLedger() {
+  if (!frank) return;
+  const graph = frank.graph || {}, finding = graph.finding || {}, assessment = frank.plan?.assessment || {};
+  $('#frank-title').textContent = finding.title || frank.plan?.title || 'Finding';
+  $('#frank-finding-detail').textContent = finding.detail || '';
+  $('#frank-assessment-status').textContent = assessment.status === 'verified' ? 'Verified finding' : assessment.status === 'context' ? 'Context only' : 'Review needed';
+  $('#frank-assessment').dataset.status = assessment.status || 'review';
+  $('#frank-assessment-limitations').textContent = assessment.limitations || '';
+  $('#frank-assessment-limitations').hidden = !assessment.limitations;
+
+  const facts = $('#frank-facts'); facts.innerHTML = '';
+  addFact(facts, 'Rule', finding.ruleId);
+  addFact(facts, 'Impact area', finding.impactClass || finding.category, { mono: false });
+  addFact(facts, 'Confidence', finding.confidence, { mono: false });
+  addFact(facts, 'Environment', `${graph.environment?.type || 'unknown'}${graph.environment?.confidenceLabel ? ` · ${graph.environment.confidenceLabel}` : ''}`, { mono: false });
+  addFact(facts, 'Target', finding.targetType, { mono: false });
+  addFact(facts, 'Selector', finding.selector);
+  addFact(facts, 'Sources', (graph.sources || []).join(', '), { mono: false });
+  const attempts = (graph.evidence || []).find(e => e.kind === 'verification-attempts')?.value;
+  addFact(facts, 'Verification attempts', attempts);
+
+  const record = $('#frank-evidence-record'); record.innerHTML = '';
+  for (const item of graph.evidence || []) record.appendChild(evidenceRow(item, false));
+  $('#frank-all-evidence').hidden = !(graph.evidence || []).length;
+}
 
 function renderFrankStep(index) {
   if (!frank) return;
   const total = frank.plan.steps.length;
   frank.index = Math.max(0, Math.min(total - 1, Number(index) || 0));
   const step = frank.plan.steps[frank.index];
-  $('#frank-step-count').textContent = `${frank.index + 1} of ${total}`;
+  $('#frank-step-count').textContent = `${frank.index + 1} of ${total} · ${step.headline}`;
   $('#frank-progress-bar').style.width = `${((frank.index + 1) / total) * 100}%`;
   $('#frank-step-type').textContent = step.type;
-  $('#frank-step-headline').textContent = step.headline;
-  $('#frank-step-body').textContent = step.body;
-  const metrics = $('#frank-metrics'); metrics.innerHTML = '';
-  metrics.hidden = !(step.metrics || []).length;
-  for (const row of step.metrics || []) { const dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = row.label; dd.textContent = row.value; metrics.append(dt, dd); }
-  const code = $('#frank-code'); code.textContent = step.code || ''; code.hidden = !step.code;
-  const sources = $('#frank-sources'); sources.innerHTML = '';
-  for (const source of step.sourceLabels || []) { const span = document.createElement('span'); span.textContent = source; sources.appendChild(span); }
-  const evidence = $('#frank-evidence > div'); evidence.innerHTML = '';
-  for (const item of evidenceForStep(step)) {
-    const article = document.createElement('article'), b = document.createElement('b'), p = document.createElement('p');
-    b.textContent = `${item.source} · ${item.label}`;
-    p.textContent = typeof item.value === 'string' ? item.value : JSON.stringify(item.value);
-    article.append(b, p); evidence.appendChild(article);
+
+  const current = $('#frank-current-evidence'); current.innerHTML = '';
+  const used = evidenceForStep(step);
+  if (used.length) for (const item of used) current.appendChild(evidenceRow(item, true));
+  else {
+    const empty = document.createElement('p'); empty.className = 'evidence-empty';
+    empty.textContent = 'This step relies on the verified finding and does not add another measurement.'; current.appendChild(empty);
   }
-  $('#frank-evidence').hidden = !evidence.children.length;
-  $('#frank-back').disabled = frank.index === 0;
-  $('#frank-next').textContent = frank.index === total - 1 ? 'Done' : 'Next';
+
+  const activeIds = new Set(step.evidenceRefs || []);
+  for (const row of $('#frank-evidence-record').querySelectorAll('.evidence-row')) row.dataset.active = 'false';
+  const allEvidence = frank.graph?.evidence || [];
+  [...$('#frank-evidence-record').children].forEach((row, i) => { row.dataset.active = String(activeIds.has(allEvidence[i]?.id)); });
+
   $('#frank-preview').hidden = !(step.preview || {}).enabled;
   $('#frank-reset').hidden = true;
   $('#frank-copy-selector').hidden = !targetSelector(step);
@@ -376,7 +447,6 @@ function enterFrank() {
   document.body.dataset.mode = 'frank';
   $('#scanner-view').hidden = true; $('#frank-view').hidden = false;
   $('#host').textContent = report?.page?.hostname || 'Guided investigation';
-  setTimeout(() => $('#frank-title').focus(), 0);
 }
 function leaveFrankLocal() {
   const returnFocus = frankReturnFocus; frankReturnFocus = null;
@@ -389,50 +459,104 @@ function leaveFrankLocal() {
 
 async function startFrank(finding, card) {
   if (!report || !tab?.id) return actionState(card, 'Run a current scan before asking Frank.', 'error');
+  pendingFrankCancel?.();
   const button = card.querySelector('.ask-frank');
+  const requestId = ++frankRequestSeq, pageUrl = report.page?.url || tab.url, tabId = tab.id;
   frankReturnFocus = button;
-  button.disabled = true; button.textContent = 'Starting Frank';
-  actionState(card, 'Preparing on-device reasoning and gathering verified evidence.');
+  button.disabled = true; button.textContent = 'Preparing Frank';
 
-  // Start Chrome built-in AI directly from the click gesture. If the model has
-  // not been downloaded yet, Chrome may require this user activation.
-  const localSessionPromise = beginLocalFrankSession({
-    onDownloadProgress: ratio => actionState(card, `Preparing on-device AI · ${Math.round(ratio * 100)}%`, 'ok')
+  let cancelled = false, cancelResolve, verifiedResolve;
+  const cancelPromise = new Promise(resolve => { cancelResolve = resolve; });
+  const verifiedChoice = new Promise(resolve => { verifiedResolve = resolve; });
+  const cancelThisRequest = () => {
+    if (cancelled) return;
+    cancelled = true; cancelResolve({ type: 'cancelled' });
+    button.disabled = false; button.textContent = 'Ask Frank';
+    if (card.isConnected) actionState(card, 'Frank preparation was cancelled because the page or selected finding changed.', 'warn');
+  };
+  pendingFrankCancel = cancelThisRequest;
+
+  const showPreparing = state => {
+    if (cancelled || !currentRequest(requestId, pageUrl, tabId)) return;
+    const pct = state.progress != null ? ` · ${Math.round(state.progress * 100)}%` : '';
+    const message = state.status === 'downloading'
+      ? `Preparing Frank on this device${pct}. You can keep reviewing the scan; this finding will open automatically when Frank is ready.`
+      : 'Loading Frank on this device. You can keep reviewing the scan; this finding will open automatically when Frank is ready.';
+    actionState(card, message, 'ok', {
+      persistent: true,
+      actionLabel: 'Use verified guidance now',
+      onAction: () => verifiedResolve({ type: 'verified' })
+    });
+  };
+  const unsubscribe = localFrankRuntime.subscribe(state => {
+    if (['downloading', 'warming', 'downloadable'].includes(state.status)) showPreparing(state);
+    else if (state.status === 'ready' && !cancelled && currentRequest(requestId, pageUrl, tabId)) actionState(card, 'Frank is ready. Building an evidence-grounded explanation…', 'ok', { persistent: true });
   });
 
-  const prepared = await send({ type: 'PREPARE_FRANK', finding, report, tabId: tab.id }, 24000);
+  // This call is deliberately synchronous with the Ask Frank click so Chrome
+  // can use the user activation to trigger first-use model preparation.
+  const readinessPromise = localFrankRuntime.activateFromGesture();
+  showPreparing(localFrankRuntime.snapshot());
+
+  const preparedPromise = send({ type: 'PREPARE_FRANK', finding, report, tabId }, 24000);
+  const prepared = await Promise.race([preparedPromise, cancelPromise]);
+  if (prepared?.type === 'cancelled' || cancelled || !currentRequest(requestId, pageUrl, tabId)) {
+    unsubscribe(); if (pendingFrankCancel === cancelThisRequest) pendingFrankCancel = null; return;
+  }
   if (!prepared.ok || !prepared.plan || !prepared.graph) {
-    button.disabled = false; button.textContent = 'Ask Frank';
-    frankReturnFocus = null;
-    Promise.resolve(localSessionPromise).then(result => { try { result?.session?.destroy?.(); } catch {} }).catch(() => {});
+    unsubscribe(); button.disabled = false; button.textContent = 'Ask Frank'; frankReturnFocus = null;
+    if (pendingFrankCancel === cancelThisRequest) pendingFrankCancel = null;
     actionState(card, prepared.error || 'Frank could not prepare this finding.', 'error');
     if (prepared.diagnostic) showFailure(prepared, 'Frank could not prepare this finding.');
     return;
   }
 
   let plan = prepared.plan;
-  let reasoning = { status: 'fallback', mode: 'deterministic', provider: 'deterministic', code: 'LOCAL_AI_UNAVAILABLE', message: 'On-device reasoning was not available, so Frank kept the verified deterministic guidance.' };
-  const local = await resolveLocalFrankSession(localSessionPromise);
-  if (local.ok && local.session) {
+  let reasoning = { status: 'fallback', mode: 'deterministic', provider: 'deterministic', code: 'LOCAL_AI_UNAVAILABLE', message: 'Frank is using verified deterministic guidance.' };
+  let skipCloud = false;
+  const readiness = await Promise.race([
+    readinessPromise.then(result => ({ type: 'local', result })),
+    verifiedChoice,
+    cancelPromise
+  ]);
+  if (readiness?.type === 'cancelled' || cancelled || !currentRequest(requestId, pageUrl, tabId)) {
+    unsubscribe(); if (pendingFrankCancel === cancelThisRequest) pendingFrankCancel = null; return;
+  }
+  unsubscribe();
+
+  if (readiness?.type === 'verified') {
+    skipCloud = true;
+    reasoning = { status: 'fallback', mode: 'deterministic', provider: 'deterministic', code: 'USER_CHOSE_VERIFIED', message: 'You chose verified guidance while Chrome continues preparing Frank in the background.' };
+  } else if (readiness?.result?.ok && localFrankRuntime.snapshot().status === 'ready') {
+    let taskSession = null;
     try {
-      plan = await localFrankWalkthrough({ session: local.session, graph: prepared.graph, deterministicPlan: prepared.plan });
-      reasoning = { status: 'operational', mode: 'ai', provider: 'chrome-built-in', model: 'Chrome built-in model', location: 'device', message: 'Frank improved the verified guidance with on-device reasoning. Page evidence stayed on this device.' };
+      taskSession = await localFrankRuntime.cloneTask();
+      plan = await localFrankWalkthrough({ session: taskSession, graph: prepared.graph, deterministicPlan: prepared.plan });
+      reasoning = { status: 'operational', mode: 'ai', provider: 'chrome-built-in', model: 'Chrome built-in model', location: 'device', message: 'Frank improved the verified guidance with an isolated on-device reasoning session. Page evidence stayed on this device.' };
     } catch (error) {
       reasoning = { status: 'fallback', mode: 'deterministic', provider: 'chrome-built-in', code: error?.code || 'LOCAL_AI_FAILED', message: String(error?.message || "On-device reasoning did not pass Frank's evidence checks.").slice(0, 240) };
-    } finally { try { local.session.destroy?.(); } catch {} }
-  } else if (local?.message) {
-    reasoning = { status: 'fallback', mode: 'deterministic', provider: 'chrome-built-in', code: local.code || 'LOCAL_AI_UNAVAILABLE', message: local.message };
+    } finally { try { taskSession?.destroy?.(); } catch {} }
+  } else if (readiness?.result?.message) {
+    reasoning = { status: 'fallback', mode: 'deterministic', provider: 'chrome-built-in', code: readiness.result.code || 'LOCAL_AI_UNAVAILABLE', message: readiness.result.message };
   }
 
-  if (plan.mode !== 'ai' && cloudAiFallback) {
-    actionState(card, 'On-device reasoning unavailable. Trying the optional cloud fallback…', 'warn');
-    const cloud = await send({ type: 'CLOUD_FRANK_PLAN', graph: prepared.graph }, 22000);
+  if (plan.mode !== 'ai' && cloudAiFallback && !skipCloud) {
+    actionState(card, 'On-device reasoning unavailable. Trying the optional cloud fallback…', 'warn', { persistent: true });
+    const cloud = await Promise.race([send({ type: 'CLOUD_FRANK_PLAN', graph: prepared.graph }, 22000), cancelPromise]);
+    if (cloud?.type === 'cancelled' || cancelled || !currentRequest(requestId, pageUrl, tabId)) {
+      unsubscribe(); if (pendingFrankCancel === cancelThisRequest) pendingFrankCancel = null; return;
+    }
     if (cloud.ok && cloud.plan?.mode === 'ai') { plan = cloud.plan; reasoning = cloud.reasoning || { status: 'operational', mode: 'ai', provider: 'openai', location: 'cloud' }; }
     else if (cloud?.reasoning?.message) reasoning = { ...reasoning, message: `${reasoning.message} Cloud fallback: ${cloud.reasoning.message}`.slice(0, 240) };
   }
 
-  const started = await send({ type: 'FRANK_START_PLAN', plan, graph: prepared.graph, tabId: prepared.tabId || tab.id }, 9000);
-  button.disabled = false; button.textContent = 'Ask Frank';
+  if (!(await currentTabStillMatches(pageUrl, tabId))) {
+    unsubscribe(); cancelThisRequest(); actionState(card, 'The inspected page changed while Frank was preparing. Ask Frank on the current scan instead.', 'warn'); return;
+  }
+
+  const started = await send({ type: 'FRANK_START_PLAN', plan, graph: prepared.graph, tabId: prepared.tabId || tabId }, 9000);
+  unsubscribe(); button.disabled = false; button.textContent = 'Ask Frank';
+  if (pendingFrankCancel === cancelThisRequest) pendingFrankCancel = null;
   if (!started.ok) {
     frankReturnFocus = null;
     actionState(card, started.error || 'Frank could not start the walkthrough.', 'error');
@@ -440,20 +564,14 @@ async function startFrank(finding, card) {
     return;
   }
 
-  frank = { plan, graph: prepared.graph, tabId: prepared.tabId || tab.id, index: 0, finding, reasoning };
+  frank = { plan, graph: prepared.graph, tabId: prepared.tabId || tabId, index: 0, finding, reasoning };
   enterFrank();
-  $('#frank-title').textContent = frank.plan.title;
-  $('#frank-summary').textContent = frank.plan.summary;
+  renderFrankEvidenceLedger();
   const aiOperational = frank.plan.mode === 'ai' && frank.reasoning?.status === 'operational';
   const onDevice = aiOperational && frank.reasoning?.provider === 'chrome-built-in';
   $('#frank-mode').textContent = onDevice ? 'On-device reasoning' : aiOperational ? 'Cloud reasoning' : 'Verified guidance';
   $('#frank-mode').dataset.mode = aiOperational ? 'ai' : 'deterministic';
   $('#frank-mode').title = onDevice ? 'Frank used Chrome built-in AI on this device. The finding evidence was not sent to an AI provider.' : aiOperational ? 'Frank used the optional cloud AI fallback.' : (frank.reasoning?.message || 'Frank is using deterministic evidence-grounded guidance.');
-  const a = frank.plan.assessment || {};
-  $('#frank-assessment-status').textContent = a.status || 'review';
-  $('#frank-assessment-statement').textContent = a.statement || '';
-  $('#frank-assessment-limitations').textContent = a.limitations || '';
-  $('#frank-assessment-limitations').hidden = !a.limitations;
   renderFrankStep(0);
   if (onDevice) notice('Frank is reasoning on this device. No metered AI request was used.', 'ok');
   else if (aiOperational) notice('Frank is using the optional metered cloud fallback.', 'warn');
@@ -483,6 +601,7 @@ async function loadSession() {
 
 async function rescan() {
   if (scanInFlight) return;
+  pendingFrankCancel?.(); pendingFrankCancel = null; frankRequestSeq++;
   if (frank) await endFrank();
   scanInFlight = true; classFilter = '';
   const button = $('#scan'); button.disabled = true; button.textContent = 'Scanning';
@@ -647,8 +766,6 @@ $('#clear-session').onclick = async () => {
   if (r.ok) { siteSession = null; renderSession(); notice('Site session cleared.'); }
 };
 $('#frank-exit').onclick = endFrank;
-$('#frank-back').onclick = () => gotoFrank((frank?.index || 0) - 1);
-$('#frank-next').onclick = () => { if (!frank) return; if (frank.index >= frank.plan.steps.length - 1) endFrank(); else gotoFrank(frank.index + 1); };
 $('#frank-preview').onclick = async () => {
   if (!frank) return;
   const step = frank.plan.steps[frank.index];
@@ -678,4 +795,8 @@ chrome.runtime.onMessage.addListener(msg => {
   if (msg?.type === 'FRANK_CLOSED' && frank) { leaveFrankLocal(); notice('Frank session closed.'); }
 });
 
-loadSettings().finally(rescan);
+loadSettings().finally(async () => {
+  await localFrankRuntime.probe().catch(() => {});
+  localFrankRuntime.prewarmIfAvailable().catch(() => {});
+  rescan();
+});

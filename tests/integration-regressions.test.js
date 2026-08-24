@@ -235,7 +235,7 @@ test('public web scanner and extension cloud AI remain opt-in while the extensio
 
 test('extension manifest pins a stable unpacked identity for settings continuity',()=>{
   const manifest=JSON.parse(read('apps/extension/manifest.json'));
-  assert.equal(manifest.version,'1.5.2');
+  assert.equal(manifest.version,'1.6.0');
   assert.match(manifest.key,/^[A-Za-z0-9+/=]+$/);
   assert.ok(manifest.key.length>300);
 });

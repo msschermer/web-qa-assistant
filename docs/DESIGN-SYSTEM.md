@@ -41,7 +41,7 @@ Do not turn inability to verify into a defect.
 
 The predictable conceptual grammar is:
 
-`Found / Evidence -> Impact -> Fix -> Verify`
+`Interpret -> Impact -> Fix -> Verify`
 
 Comparison/trend steps are inserted only when supported. Recheck is available at the verification step when the product can test the selected condition again.
 
@@ -122,12 +122,27 @@ problem and three accessibility groups, the ledger says so before the reader scr
 Empty areas are omitted, never shown as zero. A zero would imply a check ran and
 passed, which is not always what happened.
 
-## Overlay
+## Frank focus mode — 1.6.0
 
-The page overlay is orientation only: brand mark, progress, one short line, Back and
-Next. Its job is to answer "which thing on the page is Frank pointing at". The side
-panel answers everything else.
+Frank focus mode deliberately separates **facts** from **reasoning**.
 
-The 1.4.0 overlay duplicated the full remediation card over the page, which meant the
-same text appeared twice on screen. `scripts/check.mjs` now fails the build if the
-overlay renders both a headline and a body again.
+### Sidebar: evidence ledger
+
+The side panel is the stable deterministic inspection record: finding status, confidence, environment, selector/target, measured values, tool provenance, verification attempts, current-step evidence, full bounded evidence, and utility actions. It answers: **what did the tools actually find?**
+
+### Center card: Frank
+
+The centered card owns Frank's narrative: interpretation, impact, remediation, and verification. It is allowed to carry a short heading plus several concise sentences because the rest of the page is already dimmed to create a dedicated focus surface. It answers: **what do these facts mean and what should I do?**
+
+The real target remains spotlighted. Placement tries right, left, below, and above the target so the card does not cover the element when a reasonable alternative exists. The deterministic walkthrough begins with interpretation rather than a redundant standalone “locate” step.
+
+Current-step evidence receives a stronger visual treatment in the sidebar so a user can trace Frank's statement back to the facts without duplicating the whole explanation there.
+
+### Frank identity
+
+1.6.0 strengthens Frank through hierarchy and interaction rather than decoration: the focus card has a restrained accent treatment, readiness has explicit chips/states, and evidence uses a more technical ledger treatment. The product remains calm and engineering-led rather than adopting playful assistant visuals.
+
+### Tailwind decision
+
+Tailwind was evaluated for this release and deliberately not adopted. The existing shared token layer and contained extension CSS are sufficient for the required redesign. Migrating frameworks would add build configuration and visual-regression risk without creating product personality by itself. Revisit only if future component growth makes the current CSS objectively difficult to maintain.
+

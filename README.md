@@ -24,26 +24,18 @@ observation
 
 The scanner may retain lower-priority observations, but Frank's default view is intentionally selective. Inconclusive evidence never becomes a defect. A timeout, blocked checker or unavailable integration is reported as a coverage limitation instead of an issue.
 
-## What 1.5.2 adds
+## What 1.6.0 adds
 
-- Chrome built-in AI as Frank's preferred on-device reasoning layer in supported desktop Chrome
-- zero-metered-provider-cost defaults for normal extension scans and Frank walkthroughs
-- structured local AI output with evidence-specific adversarial validation before it can replace deterministic wording
-- optional cloud fallback as a double opt-in rather than an implicit dependency
-
-- redesigned extension and web UI led by Frank's judgment rather than raw scanner counts
-- progressive-disclosure finding cards with human meaning first and technical evidence second
-- `confirmed`, `corroborated`, `inferred` and `inconclusive` confidence states
-- targeted **Recheck** flow for issue verification after a fix
-- site-session history for pages the user actually scans, without turning the extension into a crawler
-- visible resolved-issue lifecycle
-- **Copy issue** handoff for Slack, GitHub, Monday, Jira or other ticket workflows
-- one assistant gateway for connected services instead of direct extension access to every tool
-- AI Evidence Contract and gateway sanitization before page evidence leaves the extension
-- request IDs, diagnostics and integration-health checks
-- public web AI disabled by default even when OpenAI is configured
-- GitHub CI and tag-based release packaging
-- shared UI design tokens across extension and web surfaces
+- a dedicated Chrome built-in AI readiness manager that is independent from page scanning
+- visible `downloadable`, `downloading`, `warming`, `ready`, `unavailable`, and error states for Frank
+- first-use preparation that resumes the pending **Ask Frank** request automatically when Chrome becomes ready; **Rescan** is never an AI-recovery action
+- one warm system-only Prompt API base session with isolated cloned sessions per finding, preventing cross-site or cross-finding conversation carryover
+- an evidence-led focus mode: the sidebar is the deterministic evidence ledger while the centered Frank card contains interpretation, impact, remediation, and verification
+- a stronger Frank visual identity without adding a Tailwind migration or build dependency
+- more specific deterministic remediation, including evidence-derived passing contrast-color suggestions when they can be calculated safely
+- additional adversarial AI guards for unsupported page positions/components, business claims, invented measurements, semantic drift, and destructive/secret-handling instructions embedded in hostile page text
+- self-contained extension rebuilds that preserve the vendored axe runtime even when a release source package is used without `node_modules`
+- all 1.5.0–1.5.2 scanner, prioritization, performance, integration-health, privacy, managed-auth, and zero-metered-AI defaults remain in place
 
 ## Deterministic and connected systems
 
@@ -72,8 +64,8 @@ Normal extension scans and normal Frank walkthroughs do **not** call a metered m
 
 A Frank walkthrough uses a strict structured plan. Depending on the finding, steps may include:
 
-1. location or evidence
-2. corroborating evidence/comparison
+1. what the evidence means
+2. corroborating comparison/trend when supported
 3. why it matters here
 4. what to change
 5. how to verify
@@ -163,17 +155,17 @@ Detailed procedures:
 
 - `docs/INSTALLATION.md`
 - `docs/DEPLOYMENT.md`
-- `docs/QA-1.5.2.md`
+- `docs/QA-1.6.0.md`
 - `docs/RELEASE-CHECKLIST.md`
 
 ## Release workflow
 
 `main` is the known-good release branch. Development happens on feature/fix branches. GitHub Actions runs the extension build, static checks and tests on every PR. A `v*` tag validates version alignment and packages both the clean extension zip and full source zip for the GitHub Release.
 
-Current delivery candidate: **1.5.2**.
+Current delivery candidate: **1.6.0**.
 
 
 ## Documentation
 
-- `RELEASE_NOTES_1.5.2.md` - current release changes
-- `docs/FINAL-REVIEW-1.5.2.md` - final multi-role, adversarial, and product review gate
+- `RELEASE_NOTES_1.6.0.md` - current release changes
+- `docs/FINAL-REVIEW-1.6.0.md` - final multi-role, adversarial, and product review gate

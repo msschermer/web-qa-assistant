@@ -1,24 +1,22 @@
-# Build status: Web QA Assistant 1.5.2
+# Build status: Web QA Assistant 1.6.0
 
 ## Delivery candidate
 
-1.5.2 is the Frank reasoning and cost-control overhaul layered on the complete 1.5.1 trust/correctness release. All 1.5.0 and 1.5.1 scanner, prioritization, performance, integration-health, privacy, UI, compact-overlay, and deployment improvements remain in place.
+1.6.0 is the reliable-Frank and focus-mode release layered on the complete 1.5.2 on-device reasoning baseline. All 1.5.0–1.5.2 scanner, prioritization, performance, integration-health, privacy, managed-auth, cost-control, and deployment improvements remain in place.
 
-## 1.5.2 improvements
+## 1.6.0 improvements
 
-- Chrome built-in Prompt API is Frank's preferred reasoning layer in supported Chrome versions
-- on-device model work begins only from the explicit **Ask Frank** user gesture and uses structured JSON output
-- deterministic findings, targets, evidence references, assessment state, metrics, and verification remain authoritative; local AI may improve wording but cannot replace the plan structure
-- adversarial quality gates reject generic AI filler, contrast guidance that drops or invents measured ratios, unsupported standards/URLs, decorative-image alt regressions, and performance claims that overstate a one-browser lab observation
-- first-use model download no longer blocks Frank indefinitely; verified deterministic guidance remains immediately usable while Chrome finishes preparing the local model
-- routine extension scans explicitly disable metered model calls on the gateway
-- optional cloud Frank requires both an extension user opt-in and the server `EXTENSION_CLOUD_AI_ENABLED=true` gate; both default off
-- managed installation access remains independent from AI and normal users do not paste a shared gateway key
-- connection health treats on-device Frank and optional cloud fallback separately from the three connected QA integrations
-- Frank's UI labels now distinguish **Evidence summary**, **On-device reasoning**, **Cloud reasoning**, and **Verified guidance** instead of implying that every scan ran AI
-- keyboard focus returns to the originating finding after a Frank walkthrough and changing walkthrough content is announced as a live region
-- a pre-existing contrast-evidence defect that could format `4.5:1` as `4.5:1:1` was found during adversarial review and fixed
+- Chrome built-in AI readiness now has its own lifecycle instead of being coupled to Browser QA scans.
+- Ask Frank can prepare/download the model, surface progress, retain the selected finding, and continue when Chrome becomes ready without requiring Rescan.
+- A system-only Prompt API base session stays warm while the panel is active; each finding uses a fresh clone so unrelated websites never share task history.
+- The sidebar is now the deterministic evidence ledger. Frank's full interpretation and recommended action live in the centered focus card beside the highlighted real element.
+- The low-value standalone “locate” step was removed; walkthroughs begin with interpretation and end with deterministic verification.
+- Frank's visual hierarchy and readiness states are more distinctive while retaining the existing CSS/token system; Tailwind was deliberately not added.
+- Contrast guidance can offer a nearby evidence-derived passing foreground color, with post-rounding validation before it is described as passing.
+- On-device AI validation now rejects unsupported positions/components, business outcomes, invented measurements, semantic drift, and high-risk actions derived only from hostile page text.
+- Prompt-injection hardening treats all page-derived strings as untrusted and never lets page text authorize destructive or secret-handling actions.
+- Extension builds preserve the vendored axe-core runtime when `node_modules` is absent, preventing a failed rebuild from deleting required release assets.
 
 ## Validation
 
-Exact test/check/build results are recorded during packaging. See `RELEASE_PROVENANCE.txt` and `docs/QA-1.5.2.md`.
+Exact final test/check/build/release results are recorded during packaging in `RELEASE_PROVENANCE.txt` and `docs/QA-1.6.0.md`.

@@ -6,7 +6,7 @@
 - [ ] `npm run build:extension`
 - [ ] `npm run check`
 - [ ] `npm test`
-- [ ] `RELEASE_TAG=v1.5.2 npm run release:validate` (PowerShell: `$env:RELEASE_TAG="v1.5.2"; npm run release:validate`)
+- [ ] `RELEASE_TAG=v1.6.0 npm run release:validate` (PowerShell: `$env:RELEASE_TAG="v1.6.0"; npm run release:validate`)
 - [ ] package and manifest versions agree
 - [ ] service-worker relative-module graph resolves
 - [ ] no active legacy Preflight runtime dependency
@@ -49,5 +49,5 @@
 - [ ] final product review PASS
 - [ ] feature branch PR CI green
 - [ ] merge to `main`
-- [ ] tag `v1.5.2`
+- [ ] tag `v1.6.0`
 - [ ] GitHub Release contains clean extension zip and full-source zip

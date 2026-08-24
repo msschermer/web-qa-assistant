@@ -17,7 +17,7 @@ const port = Number(process.env.PORT || 3000);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frankCache = new Map();
 const FRANK_CACHE_MS = Number(process.env.FRANK_CACHE_MS || 30 * 60 * 1000);
-const RELEASE_VERSION = '1.5.2';
+const RELEASE_VERSION = '1.6.0';
 function publicAiEnabled(){return /^(1|true|yes)$/i.test(String(process.env.PUBLIC_AI_ENABLED||''))}
 function extensionCloudAiEnabled(){return /^(1|true|yes)$/i.test(String(process.env.EXTENSION_CLOUD_AI_ENABLED||''))}
 function publicExtensionAccessEnabled(){return /^(1|true|yes)$/i.test(String(process.env.PUBLIC_EXTENSION_ACCESS_ENABLED||''))}

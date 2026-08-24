@@ -76,6 +76,7 @@ test('the deterministic plan leads with interpretation and always ends verifiabl
   assert.ok(FRANK_STEP_TYPES.includes('interpretation'));
   const types = plan.steps.map(s => s.type);
   assert.ok(types.includes('interpretation'), 'Frank must say what the element is doing before recommending a change');
+  assert.equal(types[0], 'interpretation', 'Frank should begin with meaning, not a redundant locate step');
   assert.ok(types.indexOf('interpretation') < types.indexOf('remediation'));
   assert.equal(types.at(-1), 'verification');
   assert.ok(plan.steps.length <= 8);

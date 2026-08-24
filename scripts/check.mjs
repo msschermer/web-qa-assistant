@@ -294,7 +294,7 @@ if (!/contrast-ratio/.test(planSource) || !/contrast-required/.test(planSource) 
 
 
 
-// --- 1.5.2 on-device Frank / cost-control invariants --------------------------
+// --- 1.6.0 Frank lifecycle / focus-mode / cost-control invariants ----------------
 const panelSource = fs.readFileSync('apps/extension/sidepanel.js', 'utf8');
 const panelHtmlSource = fs.readFileSync('apps/extension/sidepanel.html', 'utf8');
 const localAiPath = 'apps/extension/local-ai.js';
@@ -320,10 +320,43 @@ if (!/responseConstraint/.test(localAiSource) || !/omitResponseConstraintInput:\
 }
 const frankUiStart = panelSource.indexOf('async function startFrank');
 const frankUiPrepare = panelSource.indexOf("type: 'PREPARE_FRANK'", frankUiStart);
-const frankUiLocalStart = panelSource.indexOf('beginLocalFrankSession', frankUiStart);
+const frankUiLocalStart = panelSource.indexOf('localFrankRuntime.activateFromGesture', frankUiStart);
 if (frankUiStart < 0 || frankUiLocalStart < frankUiStart || frankUiPrepare < 0 || frankUiLocalStart > frankUiPrepare) {
   bad++;
-  console.error('on-device Frank regression: model session must begin directly from the Ask Frank user gesture before awaited preparation');
+  console.error('on-device Frank regression: model activation must begin directly from the Ask Frank user gesture before awaited preparation');
+}
+if (!/class LocalFrankRuntime/.test(localAiSource) || !/cloneTask\s*\(/.test(localAiSource) || /resolveLocalFrankSession/.test(panelSource)) {
+  bad++;
+  console.error('on-device Frank regression: persistent readiness manager + cloned finding sessions are required');
+}
+if (!/Use verified guidance now/.test(panelSource) || !/Preparing Frank on this device/.test(panelSource)) {
+  bad++;
+  console.error('Frank readiness UX regression: preparing state must remain visible and allow deterministic guidance without rescanning');
+}
+const rescanStart160 = panelSource.indexOf('async function rescan');
+const rescanEnd160 = panelSource.indexOf('async function updateWatch', rescanStart160);
+const rescanSource160 = rescanStart160 >= 0 ? panelSource.slice(rescanStart160, rescanEnd160 >= 0 ? rescanEnd160 : undefined) : '';
+if (/prewarmIfAvailable|activateFromGesture|cloneTask|LanguageModel/.test(rescanSource160)) {
+  bad++;
+  console.error('Frank lifecycle regression: Rescan must not prepare or recover the on-device model');
+}
+if (!/LOCAL_AI_SEMANTIC_DRIFT/.test(localAiSource) || !/LOCAL_AI_UNSUPPORTED_HIGH_RISK_ACTION/.test(localAiSource)) {
+  bad++;
+  console.error('Frank adversarial regression: semantic-drift and high-risk action guards are required');
+}
+const highRiskGuardStart = localAiSource.indexOf('const verifiedGuidanceText');
+const highRiskGuardEnd = localAiSource.indexOf('if (deterministicPlan)', highRiskGuardStart);
+const highRiskGuardSource = highRiskGuardStart >= 0
+  ? localAiSource.slice(highRiskGuardStart, highRiskGuardEnd >= 0 ? highRiskGuardEnd : undefined)
+  : '';
+if (
+  highRiskGuardStart < 0 ||
+  !/LOCAL_AI_UNSUPPORTED_HIGH_RISK_ACTION/.test(highRiskGuardSource) ||
+  !/verifiedGuidanceText\.includes\(match\[0\]\.toLowerCase\(\)\)/.test(highRiskGuardSource) ||
+  /evidenceText\.includes/.test(highRiskGuardSource)
+) {
+  bad++;
+  console.error('Frank prompt-injection regression: high-risk actions must be authorized only by verified deterministic guidance, never untrusted page evidence');
 }
 if (!/type="module"\s+src="sidepanel\.js"/.test(panelHtmlSource)) {
   bad++;
@@ -360,16 +393,38 @@ if (!/local-ai\.js/.test(fs.readFileSync('scripts/build-extension.mjs','utf8')))
   bad++;
   console.error('build regression: local-ai.js is not copied into the extension distribution');
 }
+const extensionBuildSource = fs.readFileSync('scripts/build-extension.mjs','utf8');
+const axeCacheIndex = extensionBuildSource.indexOf('const axeBytes=');
+const distRemoveIndex = extensionBuildSource.indexOf('fs.rmSync(out');
+if (axeCacheIndex < 0 || distRemoveIndex <= axeCacheIndex || !/vendoredAxe/.test(extensionBuildSource) || !/writeFileSync\(path\.join\(out,'vendor\/axe\.min\.js'\),axeBytes\)/.test(extensionBuildSource)) {
+  bad++;
+  console.error('build regression: release-source rebuilds must preserve the vendored axe runtime before clearing dist');
+}
 if (/Standard guidance/.test(panelHtmlSource) || /This is the evidence behind the finding/.test(panelSource + localAiSource)) {
   bad++;
   console.error('Frank UX regression: generic/filler guidance labels have returned');
 }
 
-// The overlay must not duplicate the side panel's remediation surface.
+// 1.6 focus-mode contract: sidebar is evidence; the page card is Frank's reasoning.
 const contentSource = fs.readFileSync('apps/extension/content.js', 'utf8');
-if (/shadow\.querySelector\('h2'\)\.textContent = step\.headline/.test(contentSource) && /shadow\.querySelector\('p'\)\.textContent = step\.body/.test(contentSource)) {
+if (!/step\.headline/.test(contentSource) || !/step\.body/.test(contentSource) || !/aria-live/.test(contentSource)) {
   bad++;
-  console.error('UX regression: the page overlay is duplicating the side-panel remediation card');
+  console.error('Frank focus regression: the page overlay must render the reasoning headline/body with an announced live region');
+}
+if (!/id=\"frank-ledger-title\"/.test(panelHtmlSource) || !/Evidence ledger/.test(panelHtmlSource) || !/id=\"frank-facts\"/.test(panelHtmlSource)) {
+  bad++;
+  console.error('Frank focus regression: deterministic facts must remain in the sidebar evidence ledger');
+}
+if (/id=\"frank-step-body\"/.test(panelHtmlSource) || /id=\"frank-step-headline\"/.test(panelHtmlSource)) {
+  bad++;
+  console.error('Frank focus regression: generated narrative must not be duplicated in the evidence sidebar');
+}
+const deterministicPlanStart = planSource.indexOf('export function deterministicFrankPlan');
+const deterministicPlanEnd = planSource.indexOf('export function validateFrankPlan', deterministicPlanStart);
+const deterministicPlanBlock = deterministicPlanStart >= 0 ? planSource.slice(deterministicPlanStart, deterministicPlanEnd >= 0 ? deterministicPlanEnd : undefined) : '';
+if (!/steps\.push\(step\('read','interpretation'/.test(deterministicPlanBlock) || /This is the affected element/.test(deterministicPlanBlock)) {
+  bad++;
+  console.error('Frank focus regression: deterministic walkthroughs must begin with interpretation, not a standalone locate step');
 }
 
 const distManifestPath = 'dist/extension/manifest.json';

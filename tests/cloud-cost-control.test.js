@@ -27,8 +27,8 @@ test('cloud Frank is double opt-in: server gate plus extension user setting',()=
 test('Chrome built-in AI is the default Frank path and starts from the Ask Frank gesture',()=>{
   const start=panel.indexOf('async function startFrank');
   const prepare=panel.indexOf("type: 'PREPARE_FRANK'",start);
-  const local=panel.indexOf('beginLocalFrankSession',start);
-  assert.ok(local>start && local<prepare,'local session must begin before awaiting evidence preparation');
+  const local=panel.indexOf('activateFromGesture',start);
+  assert.ok(local>start && local<prepare,'on-device preparation must begin directly from the Ask Frank gesture');
   assert.match(panel,/provider: 'chrome-built-in'/);
   assert.match(panel,/No metered AI request was used/);
   assert.match(bg,/FRANK_START_PLAN/);

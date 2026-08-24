@@ -1,6 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 const root=process.cwd(),src=path.join(root,'apps/extension'),out=path.join(root,'dist/extension');
+const installedAxe=path.join(root,'node_modules/axe-core/axe.min.js'),vendoredAxe=path.join(out,'vendor/axe.min.js');
+const axeBytes=fs.existsSync(installedAxe)?fs.readFileSync(installedAxe):fs.existsSync(vendoredAxe)?fs.readFileSync(vendoredAxe):null;
+if(!axeBytes)throw new Error('axe-core runtime is unavailable. Run npm ci, or start from a release source package that includes dist/extension/vendor/axe.min.js.');
 fs.rmSync(out,{recursive:true,force:true});fs.mkdirSync(out,{recursive:true});
 for(const name of ['manifest.json','background.js','content.js','sidepanel.html','sidepanel.css','sidepanel.js','local-ai.js'])fs.copyFileSync(path.join(src,name),path.join(out,name));
 fs.copyFileSync(path.join(root,'packages/ui/tokens.css'),path.join(out,'ui-tokens.css'));
@@ -19,6 +22,6 @@ fs.copyFileSync(path.join(root,'packages/frank/evidence.js'),path.join(out,'fran
 fs.copyFileSync(path.join(root,'packages/frank/evidence.js'),path.join(out,'evidence.js'));
 fs.copyFileSync(path.join(root,'packages/frank/guidance.js'),path.join(out,'guidance.js'));
 fs.copyFileSync(path.join(root,'packages/frank/plan.js'),path.join(out,'frank-plan.js'));
-fs.mkdirSync(path.join(out,'vendor'),{recursive:true});fs.copyFileSync(path.join(root,'node_modules/axe-core/axe.min.js'),path.join(out,'vendor/axe.min.js'));
+fs.mkdirSync(path.join(out,'vendor'),{recursive:true});fs.writeFileSync(path.join(out,'vendor/axe.min.js'),axeBytes);
 fs.mkdirSync(path.join(out,'icons'),{recursive:true});for(const n of ['16.png','32.png','48.png','128.png'])fs.copyFileSync(path.join(src,'icons',n),path.join(out,'icons',n));
 console.log(`Built ${out}`);

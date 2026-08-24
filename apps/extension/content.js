@@ -127,25 +127,27 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     return `
       :host{all:initial}
       *{box-sizing:border-box}
-      .backdrop{position:fixed;inset:0;background:rgba(16,24,40,.62);z-index:2147483644;pointer-events:none;transition:opacity .18s ease}
-      .spotlight{position:fixed;z-index:2147483645;border:2px solid #fff;border-radius:6px;box-shadow:0 0 0 99999px rgba(16,24,40,.62),0 0 0 5px rgba(18,57,94,.35);pointer-events:none;transition:top .16s ease,left .16s ease,width .16s ease,height .16s ease}
-      .coach{position:fixed;z-index:2147483647;width:min(320px,calc(100vw - 28px));background:#fff;color:#101828;border-radius:12px;box-shadow:0 12px 32px rgba(16,24,40,.24),0 2px 6px rgba(16,24,40,.1);font-family:'IBM Plex Sans',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;pointer-events:auto;overflow:hidden}
-      .top{display:flex;align-items:center;gap:8px;padding:11px 13px 0}
-      .mark{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;background:#12395E;color:#fff;font:600 11px/1 inherit;flex:none}
-      .name{font:600 12px/1 inherit;color:#101828}
-      .progress{margin-left:auto;font:500 11px/1 inherit;color:#8A94A6;font-variant-numeric:tabular-nums}
-      .close{border:0;background:transparent;color:#8A94A6;font:400 18px/1 inherit;cursor:pointer;padding:2px 4px;margin-right:-4px;border-radius:4px}
-      .close:hover{background:#F1F4F8;color:#475467}
-      .body{padding:9px 13px 12px}
-      p{font:14px/1.45 inherit;margin:0;color:#101828}
-      .foot{display:flex;gap:7px;padding:0 13px 12px}
-      .nav{border:1px solid #D3DAE4;border-radius:6px;background:#fff;color:#101828;padding:6px 12px;font:500 12.5px/1.2 inherit;cursor:pointer}
-      .nav:hover:not(:disabled){background:#F7F9FB}
-      .nav:disabled{opacity:.45;cursor:default}
-      .next{margin-left:auto;background:#12395E;border-color:#12395E;color:#fff}
-      .next:hover:not(:disabled){background:#0C2A46}
-      .nav:focus-visible,.close:focus-visible{outline:2px solid #12395E;outline-offset:2px}
-      @media (prefers-reduced-motion:reduce){.spotlight,.backdrop{transition:none}}
+      .backdrop{position:fixed;inset:0;background:rgba(10,20,32,.68);z-index:2147483644;pointer-events:none;transition:opacity .18s ease}
+      .spotlight{position:fixed;z-index:2147483645;border:2px solid rgba(255,255,255,.96);border-radius:8px;box-shadow:0 0 0 99999px rgba(10,20,32,.68),0 0 0 5px rgba(31,100,125,.38),0 0 24px rgba(31,100,125,.22);pointer-events:none;transition:top .16s ease,left .16s ease,width .16s ease,height .16s ease}
+      .coach{position:fixed;z-index:2147483647;width:min(430px,calc(100vw - 28px));background:#fff;color:#101828;border:1px solid rgba(18,57,94,.16);border-radius:16px;box-shadow:0 18px 48px rgba(8,20,34,.3),0 3px 10px rgba(8,20,34,.12);font-family:'IBM Plex Sans',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;pointer-events:auto;overflow:hidden}
+      .accent{height:3px;background:linear-gradient(90deg,#12395E 0%,#1F647D 58%,#4E8D78 100%)}
+      .top{display:flex;align-items:center;gap:9px;padding:12px 15px 0}
+      .mark{display:grid;place-items:center;width:23px;height:23px;border-radius:7px;background:#12395E;color:#fff;font:700 12px/1 inherit;flex:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+      .identity{display:grid;gap:1px}.name{font:650 12.5px/1.1 inherit;color:#101828}.device{font:500 10.5px/1.2 inherit;color:#667085}
+      .progress{margin-left:auto;font:550 11px/1 inherit;color:#667085;font-variant-numeric:tabular-nums}
+      .close{border:0;background:transparent;color:#8A94A6;font:400 19px/1 inherit;cursor:pointer;padding:3px 5px;margin-right:-5px;border-radius:6px}
+      .close:hover{background:#F1F4F8;color:#344054}
+      .body{padding:14px 17px 15px}
+      .eyebrow{display:block;margin-bottom:5px;color:#1F647D;font:650 10.5px/1.2 inherit;letter-spacing:.09em;text-transform:uppercase}
+      h2{margin:0 0 7px;color:#101828;font:650 18px/1.28 inherit;letter-spacing:-.012em}
+      p{font:14.5px/1.52 inherit;margin:0;color:#344054}
+      .foot{display:flex;gap:8px;padding:0 17px 15px}
+      .nav{border:1px solid #D0D7E2;border-radius:8px;background:#fff;color:#101828;padding:7px 13px;font:550 12.5px/1.2 inherit;cursor:pointer}
+      .nav:hover:not(:disabled){background:#F7F9FB;border-color:#AEB8C7}.nav:disabled{opacity:.42;cursor:default}
+      .next{margin-left:auto;background:#12395E;border-color:#12395E;color:#fff}.next:hover:not(:disabled){background:#0C2A46;border-color:#0C2A46}
+      .nav:focus-visible,.close:focus-visible{outline:2px solid #1F647D;outline-offset:2px}
+      @media(max-width:520px){.coach{width:calc(100vw - 20px);border-radius:13px}.body{padding:12px 14px 14px}.foot{padding:0 14px 14px}h2{font-size:17px}}
+      @media(prefers-reduced-motion:reduce){.spotlight,.backdrop{transition:none}}
     `;
   }
 
@@ -154,13 +156,10 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     if (old) old.remove();
     const host = document.createElement('div');
     host.id = '__web_qa_frank_root';
-    host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none;';
+    host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:auto;';
     document.documentElement.appendChild(host);
     const shadow = host.attachShadow({ mode: 'open' });
-    // The overlay is orientation only. Narrative, evidence and remediation live
-    // in the side panel; duplicating them over the page was the main source of
-    // visual noise in acceptance testing.
-    shadow.innerHTML = `<style>${frankCss()}</style><div class="backdrop"></div><div class="spotlight" hidden></div><section class="coach" role="dialog" aria-modal="true" aria-label="Frank guided explanation" tabindex="-1"><div class="top"><span class="mark" aria-hidden="true">F</span><span class="name">Frank</span><span class="progress"></span><button type="button" class="close" aria-label="Exit Frank">\u00d7</button></div><div class="body"><p></p></div><div class="foot"><button type="button" class="nav back">Back</button><button type="button" class="nav next">Next</button></div></section>`;
+    shadow.innerHTML = `<style>${frankCss()}</style><div class="backdrop"></div><div class="spotlight" hidden></div><section class="coach" role="dialog" aria-modal="true" aria-labelledby="frank-coach-title" aria-describedby="frank-coach-body" tabindex="-1"><div class="accent"></div><div class="top"><span class="mark" aria-hidden="true">F</span><span class="identity"><span class="name">Frank</span><span class="device">Evidence-grounded guidance</span></span><span class="progress"></span><button type="button" class="close" aria-label="Exit Frank">\u00d7</button></div><div class="body" aria-live="polite" aria-atomic="true"><span class="eyebrow"></span><h2 id="frank-coach-title"></h2><p id="frank-coach-body"></p></div><div class="foot"><button type="button" class="nav back">Back</button><button type="button" class="nav next">Next</button></div></section>`;
     return { host, shadow };
   }
 
@@ -171,21 +170,26 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   }
 
   function positionCoach(coach, rect) {
-    const margin = 14;
-    const width = Math.min(360, innerWidth - margin * 2);
-    coach.style.width = `${width}px`;
-    const estimated = 225;
-    let left = innerWidth - width - margin;
-    let top = margin;
-    if (rect) {
-      const spaceBelow = innerHeight - rect.bottom;
-      top = spaceBelow > estimated + 22 ? Math.min(innerHeight - estimated - margin, rect.bottom + 18) : Math.max(margin, rect.top - estimated - 18);
-      if (rect.right + width + 22 < innerWidth) left = rect.right + 18;
-      else if (rect.left - width - 22 > 0) left = rect.left - width - 18;
-      else left = Math.max(margin, Math.min(innerWidth - width - margin, rect.left));
+    const margin = 14, gap = 18;
+    const width = Math.min(430, innerWidth - margin * 2);
+    coach.style.width = `${Math.max(280, width)}px`;
+    coach.style.left = `${margin}px`; coach.style.top = `${margin}px`;
+    const card = coach.getBoundingClientRect(), height = Math.min(card.height || 260, innerHeight - margin * 2);
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    const positions = rect ? [
+      { left: rect.right + gap, top: rect.top + rect.height / 2 - height / 2 },
+      { left: rect.left - width - gap, top: rect.top + rect.height / 2 - height / 2 },
+      { left: rect.left + rect.width / 2 - width / 2, top: rect.bottom + gap },
+      { left: rect.left + rect.width / 2 - width / 2, top: rect.top - height - gap }
+    ] : [{ left: innerWidth - width - margin, top: margin }];
+    const overlaps = p => rect && !(p.left + width < rect.left - 8 || p.left > rect.right + 8 || p.top + height < rect.top - 8 || p.top > rect.bottom + 8);
+    let chosen = positions.find(p => p.left >= margin && p.top >= margin && p.left + width <= innerWidth - margin && p.top + height <= innerHeight - margin && !overlaps(p));
+    if (!chosen) {
+      chosen = positions.map(p => ({ left: clamp(p.left, margin, innerWidth - width - margin), top: clamp(p.top, margin, innerHeight - height - margin) })).find(p => !overlaps(p));
     }
-    coach.style.left = `${Math.max(margin, left)}px`;
-    coach.style.top = `${Math.max(margin, top)}px`;
+    chosen ||= { left: innerWidth - width - margin, top: margin };
+    coach.style.left = `${Math.round(chosen.left)}px`;
+    coach.style.top = `${Math.round(chosen.top)}px`;
   }
 
   function updateSpotlight() {
@@ -197,45 +201,27 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const backdrop = shadow.querySelector('.backdrop');
     const coach = shadow.querySelector('.coach');
     if (!el) {
-      spotlight.hidden = true;
-      backdrop.hidden = false;
-      positionCoach(coach, null);
+      spotlight.hidden = true; backdrop.hidden = false;
+      requestAnimationFrame(() => positionCoach(coach, null));
       return;
     }
     const rect = el.getBoundingClientRect();
     if (rect.width < 1 || rect.height < 1) {
-      spotlight.hidden = true;
-      backdrop.hidden = false;
-      positionCoach(coach, null);
+      spotlight.hidden = true; backdrop.hidden = false;
+      requestAnimationFrame(() => positionCoach(coach, null));
       return;
     }
-    backdrop.hidden = true;
-    spotlight.hidden = false;
-    const pad = 6;
-    spotlight.style.left = `${Math.max(2, rect.left - pad)}px`;
-    spotlight.style.top = `${Math.max(2, rect.top - pad)}px`;
-    spotlight.style.width = `${Math.max(8, Math.min(innerWidth - Math.max(2, rect.left - pad) - 2, rect.width + pad * 2))}px`;
-    spotlight.style.height = `${Math.max(8, Math.min(innerHeight - Math.max(2, rect.top - pad) - 2, rect.height + pad * 2))}px`;
-    positionCoach(coach, rect);
+    backdrop.hidden = true; spotlight.hidden = false;
+    const pad = 6, left = Math.max(2, rect.left - pad), top = Math.max(2, rect.top - pad);
+    spotlight.style.left = `${left}px`; spotlight.style.top = `${top}px`;
+    spotlight.style.width = `${Math.max(8, Math.min(innerWidth - left - 2, rect.width + pad * 2))}px`;
+    spotlight.style.height = `${Math.max(8, Math.min(innerHeight - top - 2, rect.height + pad * 2))}px`;
+    requestAnimationFrame(() => positionCoach(coach, rect));
   }
 
-  // One short line telling the reader what they are looking at. The side panel
-  // carries the explanation; repeating it here is what made the old overlay noisy.
-  const ORIENTATION = {
-    spotlight: 'This is the affected element.',
-    interpretation: 'This is what the element is doing on the page.',
-    evidence: 'This step uses verified page evidence.',
-    comparison: 'These observation points disagree.',
-    trend: 'This comes from monitored history.',
-    impact: 'This is why it matters here.',
-    remediation: 'This is the element to change.',
-    verification: 'Check this element after the change.',
-    summary: 'Summary of the finding.'
-  };
-  function orientationLine(step) {
-    const headline = String(step?.headline || '').trim();
-    if (headline && headline.length <= 72) return headline;
-    return ORIENTATION[step?.type] || 'Frank is pointing at this element.';
+  function stepLabel(step) {
+    const labels = { spotlight: 'Locate', evidence: 'Evidence', interpretation: 'Interpretation', comparison: 'Comparison', trend: 'History', impact: 'Impact', remediation: 'Remediation', verification: 'Verification', summary: 'Summary' };
+    return labels[step?.type] || 'Guidance';
   }
 
   function renderFrank(index, notify = false) {
@@ -244,10 +230,11 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const nextIndex = Math.max(0, Math.min(steps.length - 1, Number(index) || 0));
     if (nextIndex !== frankSession.index) resetPreview();
     frankSession.index = nextIndex;
-    const step = steps[frankSession.index];
-    const { shadow } = frankSession;
-    shadow.querySelector('p').textContent = orientationLine(step);
-    shadow.querySelector('.progress').textContent = `${frankSession.index + 1} of ${steps.length}`;
+    const step = steps[frankSession.index], { shadow } = frankSession;
+    shadow.querySelector('.eyebrow').textContent = stepLabel(step);
+    shadow.querySelector('h2').textContent = step.headline || 'Frank guidance';
+    shadow.querySelector('p').textContent = step.body || '';
+    shadow.querySelector('.progress').textContent = `${frankSession.index + 1} / ${steps.length}`;
     shadow.querySelector('.back').disabled = frankSession.index === 0;
     shadow.querySelector('.next').textContent = frankSession.index === steps.length - 1 ? 'Done' : 'Next';
     const el = frankTarget(step);
@@ -305,7 +292,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     addEventListener('resize', updateSpotlight, true);
     document.addEventListener('keydown', keyHandler, true);
     renderFrank(0, true);
-    setTimeout(() => shadow.querySelector('.close')?.focus(), 0);
+    setTimeout(() => shadow.querySelector('.coach')?.focus(), 0);
     return { started: true, stepCount: plan.steps.length };
   }
 

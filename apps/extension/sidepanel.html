@@ -48,7 +48,7 @@
         <div class="brief-top">
           <span class="frank-mark" aria-hidden="true">F</span>
           <span class="frank-name">Frank</span>
-          <span id="reasoning-mode" class="chip chip-quiet">Evidence summary</span>
+          <span id="reasoning-mode" class="chip chip-quiet">Evidence summary</span><span id="frank-readiness" class="chip" data-state="checking">Checking Frank</span>
         </div>
         <h2 id="judgment-title">Analysing this page</h2>
         <p id="brief"></p>
@@ -87,32 +87,41 @@
     </section>
   </div>
 
-  <section id="frank-view" hidden aria-labelledby="frank-title">
-    <div class="frank-head">
-      <div class="brief-top"><span class="frank-mark" aria-hidden="true">F</span><span class="frank-name">Frank</span><span id="frank-mode" class="chip chip-quiet"></span></div>
+  <section id="frank-view" hidden aria-labelledby="frank-ledger-title">
+    <div class="frank-ledger-head">
+      <div><span class="eyebrow">Evidence ledger</span><h2 id="frank-ledger-title" tabindex="-1">Finding evidence</h2></div>
       <button id="frank-exit" class="btn btn-quiet">Exit</button>
     </div>
-    <h2 id="frank-title" tabindex="-1"></h2>
-    <p id="frank-summary" class="frank-summary"></p>
-    <div id="frank-assessment" class="assessment"><b id="frank-assessment-status"></b><span id="frank-assessment-statement"></span><small id="frank-assessment-limitations"></small></div>
-    <nav class="frank-progress" aria-label="Frank walkthrough"><span id="frank-step-count"></span><div><span id="frank-progress-bar"></span></div></nav>
-    <article class="frank-step" aria-live="polite" aria-atomic="true">
-      <span id="frank-step-type" class="eyebrow"></span>
-      <h3 id="frank-step-headline"></h3>
-      <p id="frank-step-body"></p>
-      <dl id="frank-metrics" class="metrics" hidden></dl>
-      <pre id="frank-code" class="code" hidden></pre>
-      <div id="frank-sources" class="source-chips"></div>
-      <details id="frank-evidence" class="evidence"><summary>Evidence used</summary><div></div></details>
-    </article>
+    <div class="frank-ledger-status">
+      <span id="frank-mode" class="chip chip-quiet"></span>
+      <span id="frank-step-count" class="ledger-step-count"></span>
+    </div>
+    <h3 id="frank-title" class="ledger-finding-title"></h3>
+    <p id="frank-finding-detail" class="ledger-finding-detail"></p>
+    <div id="frank-assessment" class="ledger-verification"><b id="frank-assessment-status"></b><small id="frank-assessment-limitations"></small></div>
+    <nav class="frank-progress" aria-label="Frank walkthrough progress"><span class="sr-only">Walkthrough progress</span><div><span id="frank-progress-bar"></span></div></nav>
+
+    <section class="evidence-block" aria-labelledby="frank-facts-heading">
+      <div class="evidence-block-head"><span id="frank-facts-heading">Finding facts</span></div>
+      <dl id="frank-facts" class="evidence-facts"></dl>
+    </section>
+
+    <section class="evidence-block current-evidence" aria-labelledby="frank-current-evidence-heading">
+      <div class="evidence-block-head"><span id="frank-current-evidence-heading">Evidence for this step</span><span id="frank-step-type" class="evidence-step-type"></span></div>
+      <div id="frank-current-evidence" class="evidence-list"></div>
+    </section>
+
+    <details id="frank-all-evidence" class="evidence-block evidence-all">
+      <summary>Full evidence record</summary>
+      <div id="frank-evidence-record" class="evidence-list"></div>
+    </details>
+
     <div id="frank-action-state" class="action-state" hidden role="status" aria-live="polite"></div>
-    <div class="frank-controls">
-      <button id="frank-back" class="btn btn-quiet">Back</button>
-      <button id="frank-preview" class="btn btn-quiet" hidden>Show me</button>
+    <div class="frank-utilities" aria-label="Finding utilities">
+      <button id="frank-preview" class="btn btn-quiet" hidden>Preview change</button>
       <button id="frank-reset" class="btn btn-quiet" hidden>Reset preview</button>
       <button id="frank-copy-selector" class="btn btn-quiet" hidden>Copy selector</button>
       <button id="frank-recheck" class="btn btn-quiet" hidden>Recheck issue</button>
-      <button id="frank-next" class="btn btn-primary">Next</button>
     </div>
   </section>
 </main>

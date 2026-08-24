@@ -4,7 +4,7 @@
 
 Deterministic systems decide whether a QA finding exists. Frank may improve explanation and sequencing, but no model is allowed to create, upgrade, downgrade, or replace the underlying finding.
 
-1.5.2 has two AI paths with different data boundaries.
+1.6.0 has two AI paths with different data boundaries.
 
 ## On-device Frank
 
@@ -20,7 +20,7 @@ The local model may return only these text fields:
 - remediation
 - verification
 
-The extension keeps deterministic plan structure, evidence references, target IDs, metrics, assessment state, and verification actions. Local AI output is rejected if it is generic or contradicts protected evidence rules such as contrast ratios, decorative-image purpose, or lab-vs-field performance claims.
+The extension keeps deterministic plan structure, evidence references, target IDs, metrics, assessment state, and verification actions. A system-only Prompt API base session may stay warm, but every finding uses a fresh clone which is destroyed after use; page evidence is never sent to the retained base session. Local AI output is rejected if it is generic, drifts materially from verified deterministic guidance, invents positions/components/business outcomes/measurements, or contradicts protected evidence rules such as contrast ratios, decorative-image purpose, or lab-vs-field performance claims. Page-derived strings are always untrusted input and cannot authorize destructive or secret-handling actions.
 
 ## Cloud fallback boundaries
 

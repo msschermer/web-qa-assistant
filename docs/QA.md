@@ -13,4 +13,4 @@ Is it material?
 Can Frank recommend a safe action and verify the result?
 ```
 
-Use `docs/QA-1.5.2.md` for the release acceptance matrix.
+Use `docs/QA-1.6.0.md` for the release acceptance matrix.

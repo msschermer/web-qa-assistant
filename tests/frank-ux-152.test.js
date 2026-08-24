@@ -4,6 +4,7 @@ import fs from 'node:fs';
 
 const panel=fs.readFileSync('apps/extension/sidepanel.js','utf8');
 const html=fs.readFileSync('apps/extension/sidepanel.html','utf8');
+const content=fs.readFileSync('apps/extension/content.js','utf8');
 
 test('scan overview does not imply that AI ran before Ask Frank',()=>{
   assert.match(html,/id="reasoning-mode"[^>]*>Evidence summary</);
@@ -20,7 +21,10 @@ test('Frank states distinguish on-device, optional cloud, and deterministic guid
 test('Frank walkthrough restores keyboard focus and announces changing step content',()=>{
   assert.match(panel,/frankReturnFocus\s*=\s*button/);
   assert.match(panel,/returnFocus\?\.isConnected && returnFocus\.focus\(\)/);
-  assert.match(html,/class="frank-step" aria-live="polite" aria-atomic="true"/);
+  assert.match(content,/class=\"body\" aria-live=\"polite\" aria-atomic=\"true\"/);
+  assert.match(html,/id="frank-ledger-title" tabindex="-1"/);
+  assert.doesNotMatch(panel,/frank-ledger-title'\)\.focus/);
+  assert.match(content,/querySelector\('\.coach'\)\?\.focus/);
 });
 
 test('cloud fallback is visibly optional and metered',()=>{
