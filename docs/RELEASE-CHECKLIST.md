@@ -24,18 +24,18 @@
 - [ ] incomplete coverage is separated from findings
 - [ ] Copy issue produces a usable handoff
 - [ ] resolved lifecycle and Site session behave correctly
-- [ ] Connected reasoning and Standard guidance states are clear
+- [ ] Connected reasoning and Fallback guidance states are clear and the fallback reason is visible
 - [ ] keyboard/focus/Escape behavior passes on the Frank UI
 
 ## Integration / deployment gate
 
 - [ ] `assistant.msschermer.us/api/health` healthy
-- [ ] protected `/api/health/integrations` checked with team access key
+- [ ] `/api/health/integrations` checked with managed installation access and developer-key override
 - [ ] custom/default gateway Test connection passes in extension
 - [ ] Meta State behavior checked on a relevant published-state case
 - [ ] Performance Monitor behavior checked on a monitored site
 - [ ] WCAG Translator routing checked on an axe finding
-- [ ] OpenAI available and unavailable flows both tested
+- [ ] Frank AI operational, timeout/provider failure, invalid-plan and unavailable flows tested
 - [ ] `PUBLIC_AI_ENABLED=false` unless public AI usage was intentionally approved
 - [ ] renderer and egress proxy not publicly exposed
 

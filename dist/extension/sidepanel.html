@@ -77,11 +77,11 @@
 
       <details id="connection-settings" class="panel"><summary><span>Connection settings</span></summary><div class="panel-body settings-grid">
         <label>Assistant gateway<input id="gateway-url" type="url" placeholder="https://assistant.msschermer.us"></label>
-        <label>Access key<input id="gateway-key" type="password" autocomplete="off" placeholder="Required for protected team gateways"></label>
+        <label>Developer access key <span class="summary-note">optional</span><input id="gateway-key" type="password" autocomplete="off" placeholder="Leave blank for managed installation access"></label>
         <div class="settings-actions"><button id="save-gateway" class="btn btn-quiet">Save connection</button><button id="test-gateway" class="btn btn-quiet">Test connection</button></div>
         <p id="gateway-status" class="gateway-status" role="status" aria-live="polite"></p>
         <div id="gateway-integrations" class="integration-list"></div>
-        <p class="fine-print">Page inspection stays in the browser. Connected context receives a sanitised, bounded report; connected AI receives a narrower evidence contract. Whole DOM, cookies and form values are excluded.</p>
+        <p class="fine-print">Normal installs use managed installation access when the gateway enables it; no shared secret is bundled in the extension. A developer access key can override that for private gateways. Page inspection stays in the browser. Connected context receives a sanitised, bounded report; connected AI receives a narrower evidence contract. Whole DOM, cookies and form values are excluded.</p>
       </div></details>
     </section>
   </div>

@@ -9,74 +9,51 @@ Two artifacts ship in this handoff:
 
 ## Chrome extension
 
-1. Unzip `web-qa-assistant-1.5.1-extension.zip`. It expands to a folder containing
-   `manifest.json` at the top level.
+1. Unzip `web-qa-assistant-1.5.1-extension.zip`.
 2. Open `chrome://extensions`.
-3. Turn on **Developer mode** (top right).
-4. Click **Load unpacked** and select the unzipped folder.
+3. Turn on **Developer mode**.
+4. Click **Load unpacked** and select the unzipped folder containing `manifest.json`.
 5. Confirm the card reads **Web QA Assistant 1.5.1** with no error badge.
 
-If you previously loaded 1.5.0, remove it first. Two builds of the same extension
-will both claim the toolbar action and the side panel.
+If you previously loaded another unpacked build, disable/remove it before testing so two builds do not compete for the toolbar action and side panel.
 
-### Connect the gateway
+## Connection behavior
 
-Open any normal HTTP or HTTPS page, click the toolbar icon, then expand
-**Connection settings**:
+For a gateway with managed installation access enabled, a normal user does **not** need to paste an access key. The extension creates an installation identifier, requests a signed expiring token, stores it in `chrome.storage.local`, and refreshes it automatically.
 
-- **Assistant gateway** — leave blank to use `https://assistant.msschermer.us`, or
-  enter it explicitly
-- **Access key** — your `ASSISTANT_ACCESS_TOKEN` value, if the gateway is protected
-- **Save connection**, then **Test connection**
+Connection settings remain available for development and private deployments:
 
-Test connection now reports reachability and authorisation separately:
+- **Assistant gateway** — leave blank to use `https://assistant.msschermer.us`, or enter a custom gateway.
+- **Developer access key (optional)** — overrides managed installation access when a private gateway requires `ASSISTANT_ACCESS_TOKEN`.
+- **Test connection** — verifies reachability, managed/shared authorization, the three integrations, and whether Frank AI is actually operational.
 
-| Result | Meaning |
-| --- | --- |
-| `Gateway reachable, v1.5.1, …` | Working. Per-integration rows appear below. |
-| `reachable, but the access key was rejected` | Gateway is up; the key value is wrong. |
-| `reachable, but it is protected and no access key is saved` | Gateway is up; save the key. |
-| `Gateway did not respond` | Network, DNS or container problem. |
+A healthy connection should report gateway **v1.5.1**, **Frank AI operational**, and successful integration capability probes. "AI configured" by itself is not treated as proof that Frank can complete a model request.
 
-Per-integration rows show `available`, `unauthorized`, `not-found`, `degraded` or
-`unavailable`. Hover a row for the detail string.
+## Managed server access
 
-`not-found` means the host answered but the health endpoint is not at that path —
-check the configured URL. Earlier builds could blur reachability and health. In 1.5.1, a `not-found` result is intentionally distinct from a healthy integration.
+Managed access is opt-in. On the gateway set:
 
-### Permissions
-
-The extension requests only `activeTab`, `scripting`, `sidePanel` and `storage`.
-Host access to a site is requested per-origin, and only when you turn on **Watch this
-site**. Gateway origins are requested when you save a custom gateway URL.
-
-There is no page-capture permission. Screenshot capture was evaluated and rejected;
-`npm run check` fails the build if a capture API is reintroduced.
-
-## Server
-
-See `docs/DEPLOYMENT.md`. Short version for the existing droplet:
-
-```bash
-git fetch --tags
-git checkout v1.5.1
-docker compose -f docker-compose.yml -f docker-compose.portfolio.yml up -d --build
-curl -s http://127.0.0.1:8787/api/health | grep 1.5.1
+```text
+PUBLIC_EXTENSION_ACCESS_ENABLED=true
+INSTALL_TOKEN_SECRET=<long-random-signing-secret>
+INSTALL_TOKEN_TTL_MS=2592000000
+INSTALL_AI_DAILY_LIMIT=200
 ```
+
+`ASSISTANT_ACCESS_TOKEN` may remain configured as a developer/team override. Never bundle either server secret in the extension.
+
+Managed installation tokens provide per-install expiration/accounting and quota enforcement. They are intended for controlled public distribution, not as an unextractable browser secret. For a product requiring user identity/entitlements, add account sign-in/OAuth rather than attempting to hide a permanent secret in the extension.
 
 ## First run
 
-1. Open a site you are authorized to test in Chrome
-2. Click the toolbar icon
-3. The panel scans locally, then enriches through the gateway
+1. Open a site you are authorized to test.
+2. Click the toolbar icon.
+3. Let the local scan finish, then connected enrichment completes.
+4. Open **Connection settings → Test connection** if you want to verify gateway status explicitly.
+5. Use **Ask Frank** on a material finding.
 
-You should see the Frank brief, then the impact ledger showing counts per area, then
-grouped findings. If everything in the ledger is accessibility, that is the page, not
-the product — check a page with a known broken link to confirm composition is working.
+A successful AI walkthrough is labelled **Connected reasoning**. If the model request fails or is unavailable, Frank is labelled **Fallback guidance** and the UI gives the reason instead of silently presenting deterministic text as AI output.
 
-Use **Ask Frank** on any finding. The walkthrough opens with an interpretation step
-saying what the element is doing before it recommends anything.
+## Frank acceptance
 
-## 1.5.1 verification notes
-
-The release preserves every 1.5.0 product improvement while tightening correctness: the real image-purpose evidence path now carries adjacent text into Frank, LCP uses a buffered browser observer, measurable transfer is labelled as a lower bound when coverage is incomplete, performance advice is metric-specific, and outbound Frank evidence uses an explicit allowlist with nested URL sanitization.
+For a contrast finding, the walkthrough should explain the affected text/component and, when Axe supplies the data, show the observed and required contrast ratios and relevant colors. The old generic "evidence behind the finding" walkthrough step is intentionally removed; detailed provenance remains under **Evidence used**.

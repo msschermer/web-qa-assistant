@@ -85,6 +85,32 @@ function safeSemantics(value = {}) {
     imagePurpose: value.imagePurpose ? safeImagePurpose(value.imagePurpose) : null
   };
 }
+
+function safeAxe(value = {}) {
+  if (!value || typeof value !== 'object') return null;
+  const safeChecks = bucket => (value.checks?.[bucket] || []).slice(0, 6).map(check => ({
+    id: sanitizeText(check.id, 100),
+    impact: sanitizeText(check.impact, 40),
+    message: sanitizeText(check.message, 360),
+    data: sanitizeStructured(check.data)
+  }));
+  return {
+    impact: sanitizeText(value.impact, 40),
+    failureSummary: sanitizeText(value.failureSummary, 700),
+    message: sanitizeText(value.message, 360),
+    incomplete: Boolean(value.incomplete),
+    checks: { any: safeChecks('any'), all: safeChecks('all'), none: safeChecks('none') }
+  };
+}
+function safeLink(value = {}) {
+  if (!value || typeof value !== 'object') return null;
+  return {
+    url: sanitizeUrl(value.url || ''), status: Number(value.status || 0), state: sanitizeText(value.state, 60),
+    verificationState: sanitizeText(value.verificationState, 60), occurrences: Number(value.occurrences || 0),
+    prominence: sanitizeText(value.prominence, 80), location: sanitizeText(value.location, 100), text: sanitizeText(value.text, 180)
+  };
+}
+
 function safePerformance(value = {}) {
   if (!value || typeof value !== 'object') return null;
   return {
@@ -143,7 +169,8 @@ export function aiEvidenceEnvelope(graph = {}) {
       selector: sanitizeSelector(f.selector), targetId: sanitizeText(f.targetId, 180), targetType: sanitizeText(f.targetType, 40),
       sources: (f.sources || []).slice(0, 12).map(x => sanitizeText(x, 80)), wcag: (f.wcag || []).slice(0, 12).map(x => sanitizeText(x, 40)),
       verification: f.verification ? { state: sanitizeText(f.verification.state, 60), method: sanitizeText(f.verification.method, 160), attempts: Number(f.verification.attempts || 0) } : null,
-      semantics: safeSemantics(f.semantics), performanceObservation: safePerformance(f.performanceObservation)
+      semantics: safeSemantics(f.semantics), performanceObservation: safePerformance(f.performanceObservation),
+      axe: safeAxe(f.axe), link: safeLink(f.link), wcagExplanation: sanitizeText(f.wcagExplanation, 700)
     },
     page: { url: sanitizeUrl(graph.page?.url), hostname: sanitizeText(graph.page?.hostname, 255), title: sanitizeText(graph.page?.title, 240) },
     environment: sanitizeStructured(graph.environment || null),
@@ -172,11 +199,9 @@ function gatewayFinding(f = {}) {
     policyReason: sanitizeText(f.policyReason, 260), selector: sanitizeSelector(f.selector), targetId: sanitizeText(f.targetId, 180),
     targetType: f.targetType, evidence: safeEvidenceValue({ kind: 'evidence', value: f.evidence }), sources: [...(f.sources || [])].slice(0, 12),
     wcag: [...(f.wcag || [])].slice(0, 12), verification: safeVerification(f.verification),
-    link: f.link ? {
-      url: sanitizeUrl(f.link.url), status: Number(f.link.status || 0), state: sanitizeText(f.link.state, 60),
-      verificationState: sanitizeText(f.link.verificationState, 60), occurrences: Number(f.link.occurrences || 0),
-      prominence: sanitizeText(f.link.prominence, 80), location: sanitizeText(f.link.location, 100), text: sanitizeText(f.link.text, 180)
-    } : undefined
+    link: f.link ? safeLink(f.link) : undefined,
+    axe: f.axe ? safeAxe(f.axe) : undefined,
+    wcagExplanation: sanitizeText(f.wcagExplanation, 700)
   };
 }
 

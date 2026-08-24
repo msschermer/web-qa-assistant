@@ -16,6 +16,11 @@
 - synthetic known-answer acceptance page added; test-fixture identity gates strengthened
 - release metadata/version/provenance consistency is enforced automatically
 - integration health validates real capability endpoints instead of guessed `/health` routes
+- Frank AI failures are explicit; connected reasoning and deterministic fallback can no longer be confused
+- connection health actively distinguishes AI configuration from an operational model request
+- generic evidence filler was removed from Frank; rule-specific interpretation is now the walkthrough focus
+- contrast findings preserve observed/required ratio and color evidence when supplied by Axe
+- managed installation access can remove shared-key setup for normal installs without embedding a permanent secret
 
 ## Validation
 

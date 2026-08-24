@@ -51,14 +51,27 @@ function imageAdvice(f){
     verify:'Rerun the accessibility scan and confirm the rule no longer fails for this element.'
   };
 }
+function contrastFactsFromFinding(f){
+  for(const bucket of ['any','all','none'])for(const check of f.axe?.checks?.[bucket]||[]){
+    const d=check?.data;if(d&&typeof d==='object'&&(d.contrastRatio!=null||d.expectedContrastRatio!=null||d.fgColor||d.bgColor))return d;
+  }
+  return null;
+}
 function axeAdvice(f){
   const id=String(f.ruleId||'');
   const summary=String(f.axe?.failureSummary||'').replace(/^Fix (?:any|all) of the following:\s*/i,'').trim();
-  if(/color-contrast/.test(id))return{
-    impact:'Insufficient text contrast can make content difficult to read for people with low vision and in low-contrast viewing conditions.',
-    remediation:summary||'Adjust the foreground or background color on the affected component until the measured contrast meets the applicable WCAG threshold. Keep the visual state and interaction meaning intact.',
-    verify:'Rerun the accessibility scan on the same element and confirm the color-contrast rule no longer appears. Also check hover, focus, disabled, and other component states.'
-  };
+  if(/color-contrast/.test(id)){
+    const c=contrastFactsFromFinding(f)||{},text=String(f.targetText||'').trim(),label=text?`The affected text "${text.slice(0,80)}"`:'The affected text';
+    const observed=c.contrastRatio!=null?`${c.contrastRatio}:1`:'below the required threshold',required=c.expectedContrastRatio!=null?`${c.expectedContrastRatio}:1`:'the applicable WCAG threshold';
+    const colors=c.fgColor&&c.bgColor?` The computed foreground is ${c.fgColor} against ${c.bgColor}.`:'';
+    return{
+      interpretation:`${label} has an observed contrast ratio of ${observed}; this check requires ${required}.${colors}`,
+      impact:'Insufficient text contrast can make content difficult to read for people with low vision and in low-contrast viewing conditions.',
+      recommendation:'Increase the contrast between this text and its background while preserving the component state and visual hierarchy.',
+      remediation:summary||'Darken the foreground, lighten/darken the background, or make the smallest design-token adjustment that brings this exact text/background pair to the required ratio. Recheck other states that reuse the same colors.',
+      verify:'Rerun the accessibility scan on the same element and confirm the color-contrast rule no longer appears. Also check hover, focus, disabled, and other component states.'
+    };
+  }
   if(/label|button-name|link-name|aria.*name|input.*name/.test(id))return{
     impact:'An interactive control without a reliable accessible name can be ambiguous or unusable to screen-reader and voice-control users.',
     remediation:summary||'Give the affected control a programmatically determinable accessible name using visible label text where possible, or an appropriate aria-label/aria-labelledby relationship when visible text is not available.',

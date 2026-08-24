@@ -58,6 +58,8 @@ Connected context is routed through the assistant gateway:
 
 The extension does not need direct host permissions to those specialized services.
 
+For normal distribution, the gateway can enable **managed installation access**. The extension then receives an expiring per-install signed token automatically, so users do not paste a shared gateway key. No reusable gateway secret is bundled in the extension. Managed public access is intentionally opt-in and rate/quota limited; private deployments can continue to require a developer access key.
+
 ## Frank
 
 A Frank walkthrough uses a strict structured plan. Depending on the finding, steps may include:
@@ -73,7 +75,7 @@ Visual findings use a deterministic target registry. Document-level, historical 
 The UI explicitly distinguishes:
 
 - **Connected reasoning**: OpenAI is available and used only after the QA engine establishes the finding.
-- **Standard guidance**: deterministic Frank guidance using the same verified evidence, with no cloud AI dependency.
+- **Fallback guidance**: deterministic Frank guidance using the same verified evidence when connected reasoning is disabled or fails. The UI states the fallback reason instead of implying AI ran successfully.
 
 ## Environment intelligence
 

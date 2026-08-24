@@ -5,11 +5,12 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { allContext, integrationHealth, TOOL_REGISTRY } from '../../packages/connectors/connectors.js';
 import { correlate, deterministicBrief } from '../../packages/findings/correlate.js';
-import { priorityBrief, frankWalkthrough } from '../../packages/ai/ai.js';
+import { priorityBrief, frankWalkthrough, probeAiHealth, aiFailureInfo } from '../../packages/ai/ai.js';
 import { buildEvidenceGraph, evidenceHash } from '../../packages/frank/evidence.js';
 import { deterministicFrankPlan, validateFrankPlan } from '../../packages/frank/plan.js';
 import { classifyEnvironment } from '../../packages/environment/classify.js';
 import { applyFindingPolicy } from '../../packages/findings/policy.js';
+import { issueInstallationToken, verifyInstallationToken } from '../../packages/auth/install-access.js';
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -18,6 +19,11 @@ const frankCache = new Map();
 const FRANK_CACHE_MS = Number(process.env.FRANK_CACHE_MS || 30 * 60 * 1000);
 const RELEASE_VERSION = '1.5.1';
 function publicAiEnabled(){return /^(1|true|yes)$/i.test(String(process.env.PUBLIC_AI_ENABLED||''))}
+function publicExtensionAccessEnabled(){return /^(1|true|yes)$/i.test(String(process.env.PUBLIC_EXTENSION_ACCESS_ENABLED||''))}
+function installationSecret(){return String(process.env.INSTALL_TOKEN_SECRET||process.env.ASSISTANT_ACCESS_TOKEN||'')}
+function revokedInstallationIds(){return String(process.env.REVOKED_INSTALLATION_IDS||'').split(',').map(x=>x.trim()).filter(Boolean)}
+function sharedTokenMatches(actual,expected){const a=Buffer.from(String(actual||'')),b=Buffer.from(String(expected||''));return Boolean(expected)&&a.length===b.length&&crypto.timingSafeEqual(a,b)}
+function installationAuth(actual){return verifyInstallationToken(actual,{secret:installationSecret(),revokedInstallationIds:revokedInstallationIds()})}
 
 app.disable('x-powered-by');
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
@@ -40,22 +46,41 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '700kb' }));
 
 const buckets = new Map();
+const managedDailyBuckets = new Map();
 app.use('/api', (req, res, next) => {
-  const key = req.ip || 'unknown', now = Date.now(), b = buckets.get(key) || { n: 0, at: now };
+  const credential = String(req.headers['x-web-qa-key'] || '');
+  const identity = credential ? `token:${crypto.createHash('sha256').update(credential).digest('hex').slice(0, 18)}` : `ip:${req.ip || 'unknown'}`;
+  const now = Date.now(), b = buckets.get(identity) || { n: 0, at: now };
   if (now - b.at > 60000) { b.n = 0; b.at = now; }
-  b.n++; buckets.set(key, b);
-  const limit = req.path.startsWith('/frank/') ? 40 : 90;
+  b.n++; buckets.set(identity, b);
+  const limit = req.path === '/install/register' ? 8 : req.path.startsWith('/frank/') ? 40 : 90;
   if (b.n > limit) return res.status(429).json({ ok: false, error: 'Rate limit exceeded', requestId: req.webQaRequestId });
   next();
 });
 
+function consumeManagedAiQuota(req, res) {
+  if (req.webQaAuth?.type !== 'installation') return true;
+  const limit = Math.max(1, Number(process.env.INSTALL_AI_DAILY_LIMIT || 200));
+  const day = new Date().toISOString().slice(0, 10), key = `${day}:${req.webQaAuth.installationId}`;
+  const used = Number(managedDailyBuckets.get(key) || 0);
+  if (used >= limit) { res.status(429).json({ ok: false, code: 'INSTALL_DAILY_LIMIT', error: 'This installation reached its connected reasoning allowance for today.', requestId: req.webQaRequestId }); return false; }
+  managedDailyBuckets.set(key, used + 1);
+  if (managedDailyBuckets.size > 5000) for (const k of managedDailyBuckets.keys()) if (!k.startsWith(day + ':')) managedDailyBuckets.delete(k);
+  return true;
+}
+
 function requireExtensionKey(req, res, next) {
   const expected = String(process.env.ASSISTANT_ACCESS_TOKEN || '');
-  if (!expected) return next();
+  const managedEnabled = publicExtensionAccessEnabled();
+  if (!expected && !managedEnabled) return next();
   const actual = String(req.headers['x-web-qa-key'] || '');
-  const a = Buffer.from(actual), b = Buffer.from(expected);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(401).json({ ok: false, error: 'Assistant access key required.', requestId: req.webQaRequestId });
-  next();
+  if (!actual) return res.status(401).json({ ok: false, code: 'ACCESS_REQUIRED', error: 'Assistant access is required.', requestId: req.webQaRequestId });
+  if (sharedTokenMatches(actual, expected)) { req.webQaAuth = { type: 'shared' }; return next(); }
+  if (managedEnabled) {
+    const managed = installationAuth(actual);
+    if (managed.ok) { req.webQaAuth = { type: 'installation', installationId: managed.installationId }; return next(); }
+  }
+  return res.status(401).json({ ok: false, code: 'ACCESS_REJECTED', error: 'Assistant access was not accepted.', requestId: req.webQaRequestId });
 }
 
 function validReport(body) { return body && body.page && /^https?:\/\//.test(body.page.url || '') && Array.isArray(body.findings); }
@@ -101,6 +126,7 @@ async function enrich(local, requestId = '', { allowAi = true } = {}) {
       },
       priorityBrief: brief.text,
       priorityMode: brief.mode,
+      priorityReason: brief.reason || null,
       connectedMode: 'gateway'
     }
   };
@@ -119,10 +145,18 @@ async function rendererPost(pathname, payload, timeoutMs = Number(process.env.SC
   } finally { clearTimeout(timer); }
 }
 
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'web-qa-assistant', version: RELEASE_VERSION, frank: true, aiConfigured: Boolean(process.env.OPENAI_API_KEY), model: process.env.OPENAI_MODEL || 'gpt-5.6-terra', publicAiEnabled: publicAiEnabled(), requestId: req.webQaRequestId }));
+app.get('/api/health', (req, res) => res.json({ ok: true, service: 'web-qa-assistant', version: RELEASE_VERSION, frank: true, aiConfigured: Boolean(process.env.OPENAI_API_KEY), model: process.env.OPENAI_MODEL || 'gpt-5.6-terra', publicAiEnabled: publicAiEnabled(), managedExtensionAccess: publicExtensionAccessEnabled(), requestId: req.webQaRequestId }));
+app.post('/api/install/register', async (req, res) => {
+  if (!publicExtensionAccessEnabled()) return res.status(403).json({ ok: false, code: 'MANAGED_ACCESS_DISABLED', error: 'Managed installation access is not enabled on this gateway.', requestId: req.webQaRequestId });
+  const installationId = String(req.body?.installationId || '');
+  try {
+    const issued = issueInstallationToken({ installationId, secret: installationSecret(), ttlMs: Number(process.env.INSTALL_TOKEN_TTL_MS || 30 * 24 * 60 * 60 * 1000) });
+    res.json({ ok: true, requestId: req.webQaRequestId, access: 'managed-installation', token: issued.token, expiresAt: issued.expiresAt });
+  } catch (error) { res.status(400).json({ ok: false, code: 'INSTALL_REGISTRATION_FAILED', error: error.message, requestId: req.webQaRequestId }); }
+});
 app.get('/api/health/integrations', requireExtensionKey, async (req, res) => {
-  const health = await integrationHealth({ requestId: req.webQaRequestId });
-  res.json({ ok: true, requestId: req.webQaRequestId, integrations: health, openai: { status: process.env.OPENAI_API_KEY ? 'configured' : 'not configured' }, renderer: { status: 'configured', url: process.env.RENDERER_URL || 'http://localhost:8790' }, tools: TOOL_REGISTRY });
+  const [health, openai] = await Promise.all([integrationHealth({ requestId: req.webQaRequestId }), probeAiHealth({ force: String(req.query?.force || '') === '1' })]);
+  res.json({ ok: true, requestId: req.webQaRequestId, integrations: health, openai, renderer: { status: 'configured', url: process.env.RENDERER_URL || 'http://localhost:8790' }, tools: TOOL_REGISTRY, access: req.webQaAuth?.type || 'open' });
 });
 app.get('/api/config', (req, res) => res.json({ extensionStoreUrl: process.env.EXTENSION_STORE_URL || '', sourceUrl: 'https://github.com/msschermer/web-qa-assistant', frank: true, version: RELEASE_VERSION }));
 
@@ -130,27 +164,35 @@ app.get('/api/config', (req, res) => res.json({ extensionStoreUrl: process.env.E
 app.post('/api/context', requireExtensionKey, async (req, res) => {
   if (!validReport(req.body)) return res.status(400).json({ ok: false, error: 'Invalid local report', requestId: req.webQaRequestId });
   if (privateLike(req.body.page?.hostname)) return res.status(400).json({ ok: false, error: 'Private page evidence must stay local.', requestId: req.webQaRequestId });
+  if (!consumeManagedAiQuota(req, res)) return;
   try { res.json(await enrich(req.body, req.webQaRequestId)); } catch (e) { res.status(502).json({ ok: false, error: e.message, requestId: req.webQaRequestId }); }
 });
 app.post('/api/brief', requireExtensionKey, async (req, res) => {
   const findings = Array.isArray(req.body?.findings) ? req.body.findings : null;
   if (!findings) return res.status(400).json({ ok: false, error: 'Findings required', requestId: req.webQaRequestId });
+  if (!consumeManagedAiQuota(req, res)) return;
   try { res.json({ ok: true, requestId: req.webQaRequestId, brief: await priorityBrief(findings, req.body?.coverage || {}, req.body?.environment || {}, req.body?.linkAudit || null) }); } catch (e) { res.status(502).json({ ok: false, error: e.message, requestId: req.webQaRequestId }); }
 });
 app.post('/api/frank/plan', requireExtensionKey, async (req, res) => {
   const graph = req.body?.graph;
   if (!validGraph(graph)) return res.status(400).json({ ok: false, error: 'A valid Frank evidence graph is required.', requestId: req.webQaRequestId });
   if (privateLike(graph.page?.hostname)) return res.status(400).json({ ok: false, error: 'Private page evidence must stay local.', requestId: req.webQaRequestId });
+  if (!consumeManagedAiQuota(req, res)) return;
   const key = `${evidenceHash(graph)}:${process.env.OPENAI_MODEL || 'gpt-5.6-terra'}:frank-v3`;
   const cached = frankCache.get(key);
-  if (cached && Date.now() - cached.at < FRANK_CACHE_MS) return res.json({ ok: true, requestId: req.webQaRequestId, plan: cached.plan, cached: true });
+  if (cached && Date.now() - cached.at < FRANK_CACHE_MS) return res.json({ ok: true, requestId: req.webQaRequestId, plan: cached.plan, reasoning: cached.reasoning, cached: true });
   try {
     const plan = await frankWalkthrough(graph);
     if (!validateFrankPlan(plan, graph)) throw new Error('Frank generated an invalid walkthrough plan.');
-    frankCache.set(key, { at: Date.now(), plan });
+    const reasoning = { status: 'operational', mode: 'ai', model: process.env.OPENAI_MODEL || 'gpt-5.6-terra' };
+    frankCache.set(key, { at: Date.now(), plan, reasoning });
     if (frankCache.size > 250) [...frankCache.entries()].sort((a, b) => a[1].at - b[1].at).slice(0, 50).forEach(([k]) => frankCache.delete(k));
-    res.json({ ok: true, requestId: req.webQaRequestId, plan, cached: false });
-  } catch (e) { res.status(502).json({ ok: false, error: e.message, requestId: req.webQaRequestId }); }
+    res.json({ ok: true, requestId: req.webQaRequestId, plan, reasoning, cached: false });
+  } catch (error) {
+    const plan = deterministicFrankPlan(graph);
+    const failure = aiFailureInfo(error);
+    res.json({ ok: true, requestId: req.webQaRequestId, plan, fallback: true, reasoning: { ...failure, mode: 'deterministic' }, cached: false });
+  }
 });
 
 // Public web-scanner routes. The server retains the API key; page evidence is still sanitized before OpenAI use.
@@ -160,9 +202,13 @@ app.post('/api/frank/start', async (req, res) => {
   if (privateLike(report.page?.hostname)) return res.status(400).json({ ok: false, error: 'Private page evidence must stay local.', requestId: req.webQaRequestId });
   try {
     const graph = buildEvidenceGraph({ finding, page: report.page, coverage: report.coverage || {}, context: report.context || {}, targetContext: targetContext || null, environment: report.environment || report.page?.environment });
-    const plan = publicAiEnabled() ? await frankWalkthrough(graph) : deterministicFrankPlan(graph);
+    let plan = deterministicFrankPlan(graph), reasoning = { status: 'disabled', mode: 'deterministic', message: 'Public connected reasoning is disabled.' };
+    if (publicAiEnabled()) {
+      try { plan = await frankWalkthrough(graph); reasoning = { status: 'operational', mode: 'ai', model: process.env.OPENAI_MODEL || 'gpt-5.6-terra' }; }
+      catch (error) { reasoning = { ...aiFailureInfo(error), mode: 'deterministic' }; }
+    }
     if (!validateFrankPlan(plan, graph)) throw new Error('Frank generated an invalid walkthrough plan.');
-    res.json({ ok: true, requestId: req.webQaRequestId, graph, plan });
+    res.json({ ok: true, requestId: req.webQaRequestId, graph, plan, reasoning });
   } catch (e) { res.status(502).json({ ok: false, error: e.message, requestId: req.webQaRequestId }); }
 });
 app.post('/api/frank/snapshot', async (req, res) => {

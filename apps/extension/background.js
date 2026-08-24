@@ -31,7 +31,7 @@ chrome.runtime.onInstalled.addListener(()=>chrome.sidePanel.setPanelBehavior({op
 chrome.runtime.onStartup.addListener(()=>chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:false}).catch(()=>{}));
 chrome.action.onClicked.addListener(tab=>{if(!tab?.windowId)return;chrome.sidePanel.open({windowId:tab.windowId}).catch(()=>{});chrome.runtime.sendMessage({type:'ACTION_INVOKED',tabId:tab.id}).catch(()=>{})});
 
-async function settings(){return chrome.storage.local.get({apiBase:'',apiKey:'',watchedOrigins:[],scanState:{},siteSessions:{},ignoredRulesByOrigin:{},environmentOverridesByOrigin:{}})}
+async function settings(){return chrome.storage.local.get({apiBase:'',apiKey:'',installationId:'',installToken:'',installTokenExpiresAt:0,watchedOrigins:[],scanState:{},siteSessions:{},ignoredRulesByOrigin:{},environmentOverridesByOrigin:{}})}
 async function ensureInjected(tabId){try{await chrome.tabs.sendMessage(tabId,{type:'PING'});return}catch{}await chrome.scripting.executeScript({target:{tabId},files:['vendor/axe.min.js','image-purpose.js','browser-rules.js','content.js']})}
 async function activeTab(){return(await chrome.tabs.query({active:true,currentWindow:true}))[0]}
 function pageKey(url){const u=new URL(url);return u.origin+u.pathname}
@@ -74,39 +74,73 @@ async function addLinkAudit(report,tabId){
   try{const result=await chrome.tabs.sendMessage(tabId,{type:'AUDIT_LINKS'}),linkFindings=Array.isArray(result?.findings)?result.findings:[],incompleteChecks=Array.isArray(result?.incompleteChecks)?result.incompleteChecks:[],status=result?.status==='unavailable'?'unavailable':incompleteChecks.length?'partial':'complete';return{...report,findings:[...(report.findings||[]),...linkFindings],linkAudit:{checked:Number(result?.checked||0),verifiedHealthy:Number(result?.verifiedHealthy||0),confirmedIssues:Number(result?.confirmedIssues||linkFindings.length),inconclusive:Number(result?.inconclusive||incompleteChecks.length),incompleteChecks,limit:Number(result?.limit||0),reachedLimit:Boolean(result?.reachedLimit),degraded:Boolean(result?.degraded),cached:Number(result?.cached||0)},coverage:{...report.coverage,links:status}}}catch{return{...report,linkAudit:{checked:0,verifiedHealthy:0,confirmedIssues:0,inconclusive:0,incompleteChecks:[]},coverage:{...report.coverage,links:'unavailable'}}}
 }
 
-async function fetchJson(url,options={},timeoutMs=GATEWAY_TIMEOUT_MS){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{const response=await fetch(url,{...options,signal:controller.signal}),text=await response.text();if(!text.trim())throw new Error(`empty response (HTTP ${response.status})`);let data;try{data=JSON.parse(text)}catch{throw new Error(`invalid JSON response (HTTP ${response.status})`)}if(!response.ok)throw Object.assign(new Error(data?.error||`HTTP ${response.status}`),{status:response.status});return data}finally{clearTimeout(timer)}}
+async function fetchJson(url,options={},timeoutMs=GATEWAY_TIMEOUT_MS){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{const response=await fetch(url,{...options,signal:controller.signal}),text=await response.text();if(!text.trim())throw new Error(`empty response (HTTP ${response.status})`);let data;try{data=JSON.parse(text)}catch{throw new Error(`invalid JSON response (HTTP ${response.status})`)}if(!response.ok)throw Object.assign(new Error(data?.error||`HTTP ${response.status}`),{status:response.status,code:data?.code||''});return data}finally{clearTimeout(timer)}}
 async function gatewayCandidates(){const s=await settings();if(s.apiBase)return[s.apiBase.replace(/\/$/,'')];return[...new Set([...LOCAL_APIS,LIVE_API].map(v=>v.replace(/\/$/,'')))]}
+async function ensureInstallationId(){const s=await settings();if(s.installationId)return s.installationId;const id=(globalThis.crypto?.randomUUID?.()||`wqa_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g,'_');await chrome.storage.local.set({installationId:id});return id}
+async function registerManagedAccess(root){
+  const installationId=await ensureInstallationId(),rid=requestId('REGISTER');
+  const data=await fetchJson(root+'/api/install/register',{method:'POST',headers:{'content-type':'application/json','x-web-qa-request-id':rid},body:JSON.stringify({installationId,extensionVersion:RELEASE_VERSION})},8000);
+  if(!data?.token)throw Object.assign(new Error('Gateway did not return a managed installation token.'),{code:'MANAGED_ACCESS_INVALID'});
+  await chrome.storage.local.set({installToken:data.token,installTokenExpiresAt:Number(data.expiresAt||0)});
+  return data.token;
+}
+async function gatewayCredential(root,{refresh=false}={}){
+  const s=await settings();if(s.apiKey)return{token:s.apiKey,type:'shared'};
+  const currentValid=s.installToken&&!refresh&&Number(s.installTokenExpiresAt||0)>Date.now()+60000;if(currentValid)return{token:s.installToken,type:'managed'};
+  if(refresh||s.installToken)await chrome.storage.local.set({installToken:'',installTokenExpiresAt:0});
+  try{return{token:await registerManagedAccess(root),type:'managed'}}catch{return{token:'',type:'none'}}
+}
 async function gatewayPost(path,payload,timeoutMs=GATEWAY_TIMEOUT_MS,operation='GATEWAY'){
-  const s=await settings(),errors=[],rid=requestId(operation);
-  for(const root of await gatewayCandidates())try{const data=await fetchJson(root+path,{method:'POST',headers:{'content-type':'application/json','x-web-qa-request-id':rid,...(s.apiKey?{'x-web-qa-key':s.apiKey}:{})},body:JSON.stringify(payload)},timeoutMs);return{...data,gateway:root,requestId:data.requestId||rid}}catch(error){errors.push(`${root}: ${error?.name==='AbortError'?'timeout':error.message}`);if([401,403].includes(Number(error?.status||0))){error.gateway=root;throw error}}
+  const errors=[],rid=requestId(operation);
+  for(const root of await gatewayCandidates()){
+    let credential=await gatewayCredential(root);
+    for(let attempt=0;attempt<2;attempt++)try{
+      const data=await fetchJson(root+path,{method:'POST',headers:{'content-type':'application/json','x-web-qa-request-id':rid,...(credential.token?{'x-web-qa-key':credential.token}:{})},body:JSON.stringify(payload)},timeoutMs);
+      return{...data,gateway:root,requestId:data.requestId||rid,accessMode:credential.type};
+    }catch(error){
+      const status=Number(error?.status||0);
+      if(status===401&&credential.type==='managed'&&attempt===0){credential=await gatewayCredential(root,{refresh:true});if(credential.token)continue}
+      errors.push(`${root}: ${error?.name==='AbortError'?'timeout':error.message}`);
+      if([401,403].includes(status)){error.gateway=root;throw error}
+      break;
+    }
+  }
   throw new Error(errors.join(' | ')||'No assistant gateway is available.');
 }
 // Reachability and authorisation are different failures with different fixes, so
 // they are reported separately. /api/health is public by design; only
 // /api/health/integrations proves the access key is accepted.
 async function testGateway(overrides={}){
-  const stored=await settings(),apiBase=overrides.apiBase!==undefined?String(overrides.apiBase||'').trim():stored.apiBase,apiKey=overrides.apiKey!==undefined?String(overrides.apiKey||'').trim():stored.apiKey,root=(apiBase||LIVE_API).replace(/\/$/,''),rid=requestId('HEALTH');
-  const headers={'x-web-qa-request-id':rid,...(apiKey?{'x-web-qa-key':apiKey}:{})};
+  const stored=await settings(),apiBase=overrides.apiBase!==undefined?String(overrides.apiBase||'').trim():stored.apiBase,manualKey=overrides.apiKey!==undefined?String(overrides.apiKey||'').trim():stored.apiKey,root=(apiBase||LIVE_API).replace(/\/$/,''),rid=requestId('HEALTH');
+  let credential={token:manualKey,type:manualKey?'shared':'none'};
+  if(!manualKey)credential=await gatewayCredential(root);
+  const headers={'x-web-qa-request-id':rid,...(credential.token?{'x-web-qa-key':credential.token}:{})};
   let health=null,reachable=false,reachError='';
   try{health=await fetchJson(root+'/api/health',{headers},7000);reachable=true}
   catch(error){reachError=String(error?.message||error)}
   if(!reachable)return{gateway:root,reachable:false,auth:'unknown',health:null,integrations:null,summary:`Gateway did not respond: ${reachError}`,requestId:rid};
-  let integrations=null,auth='open',authError='';
-  try{integrations=await fetchJson(root+'/api/health/integrations',{headers},9000);auth=apiKey?'accepted':'open'}
+  let integrations=null,auth=credential.type==='managed'?'managed':credential.type==='shared'?'accepted':'open',authError='';
+  try{integrations=await fetchJson(root+'/api/health/integrations?force=1',{headers},10000)}
   catch(error){
     const status=Number(error?.status||0);
-    if(status===401)auth=apiKey?'rejected':'required';
+    if(status===401&&credential.type==='managed'){
+      credential=await gatewayCredential(root,{refresh:true});
+      if(credential.token)try{integrations=await fetchJson(root+'/api/health/integrations?force=1',{headers:{'x-web-qa-request-id':rid,'x-web-qa-key':credential.token}},10000);auth='managed'}catch(retry){authError=String(retry?.message||retry);auth='rejected'}
+      else auth='required';
+    }else if(status===401)auth=manualKey?'rejected':'required';
     else{auth='unknown';authError=String(error?.message||error)}
   }
-  const rows=Object.values(integrations?.integrations||{});
-  const available=rows.filter(x=>x?.status==='available').length;
-  const problems=rows.filter(x=>x&&x.status!=='available').map(x=>`${x.label}: ${x.status}`);
-  const summary=auth==='rejected'?'Gateway is reachable, but the access key was rejected. Check the key value.'
-    :auth==='required'?'Gateway is reachable, but it is protected and no access key is saved.'
+  const rows=Object.values(integrations?.integrations||{}),available=rows.filter(x=>x?.status==='available').length,problems=rows.filter(x=>x&&x.status!=='available').map(x=>`${x.label}: ${x.status}`);
+  const ai=integrations?.openai||null;if(ai&&!ai.operational)problems.push(`Frank AI: ${ai.status||'unavailable'}`);
+  const aiLabel=ai?.operational?'Frank AI operational':health?.aiConfigured?'Frank AI configured but not operational':'Frank AI not configured';
+  const accessLabel=auth==='managed'?'managed installation access':auth==='accepted'?'developer access key':'open access';
+  const summary=auth==='rejected'?'Gateway is reachable, but assistant access was rejected.'
+    :auth==='required'?'Gateway is reachable, but assistant access could not be established automatically. A developer access key may be required.'
     :auth==='unknown'&&authError?`Gateway is reachable. Integration health could not be read: ${authError}`
-    :`Gateway reachable, v${health?.version||'unknown'}, ${health?.aiConfigured?'AI configured':'standard guidance'}${rows.length?`, ${available}/${rows.length} integrations available`:''}.`;
+    :`Gateway reachable, v${health?.version||'unknown'}, ${aiLabel}, ${accessLabel}${rows.length?`, ${available}/${rows.length} integrations available`:''}.`;
   return{gateway:root,reachable:true,auth,health,integrations,available,integrationCount:rows.length,problems,summary,requestId:health?.requestId||rid};
 }
+
 function localOnlyCoverage(report){return{...report.coverage,published:'local-only',performance:'local-only',wcag:'local-only',ai:'local-only'}}
 async function enrich(report,tabId=null){
   report=await addLinkAudit(report,tabId);report=await contextualize(report);
@@ -115,7 +149,7 @@ async function enrich(report,tabId=null){
     const result=await gatewayPost('/api/context',gatewayContextEnvelope(report),22000,'CONTEXT');
     if(result?.report){const merged=mergeGatewayReport(report,result.report),contextual=await contextualize(merged,result.report.context?.services?.performance);return{...contextual,aiGateway:result.gateway,requestId:result.requestId,connectedMode:'gateway'}}
   }catch(error){
-    const s=await settings(),status=Number(error?.status||0),connectedMode=status===401?(s.apiKey?'auth-rejected':'auth-required'):status===403?'auth-rejected':'unavailable';
+    const s=await settings(),status=Number(error?.status||0),connectedMode=status===401?((s.apiKey||s.installToken)?'auth-rejected':'auth-required'):status===403?'auth-rejected':'unavailable';
     const coverage={...report.coverage,published:'unavailable',performance:'unavailable',wcag:'unavailable',ai:'deterministic'};
     const connectedError=connectedMode==='auth-required'?'The assistant gateway requires an access key.':connectedMode==='auth-rejected'?'The saved assistant access key was rejected.':String(error?.message||error);
     return{...report,coverage,priorityBrief:deterministicBrief(report.findings,{coverage,linkAudit:report.linkAudit}),priorityMode:'deterministic',connectedMode,connectedError,context:{performance:null,services:{}}};
@@ -127,9 +161,15 @@ async function askFrank({finding,report,tabId}){
   if(!finding||!report?.page)throw new Error('Frank needs a current finding and scan report.');const inspectedTabId=tabId||(await activeTab())?.id;if(!inspectedTabId)throw new Error('The inspected browser tab is no longer available.');try{await chrome.tabs.sendMessage(inspectedTabId,{type:'PING'})}catch{await ensureInjected(inspectedTabId)}
   let sourceReport=report;if(!isPrivateHost(report.page.hostname||'')&&(!report.context?.services||Object.keys(report.context.services).length===0)){try{sourceReport=await enrich(report,inspectedTabId)}catch{}}
   const target=finding.targetType==='visual'?await targetContext(inspectedTabId,finding.targetId,finding.selector,finding.ruleId):null,latestFinding=sourceReport.findings?.find(x=>x.id===finding.id)||finding;
-  const graph=buildEvidenceGraph({finding:latestFinding,page:sourceReport.page,coverage:sourceReport.coverage,context:sourceReport.context||{},targetContext:target,environment:sourceReport.environment||sourceReport.page?.environment});let plan=deterministicFrankPlan(graph),gateway='';
-  if(!isPrivateHost(sourceReport.page.hostname||''))try{const result=await gatewayPost('/api/frank/plan',{graph:gatewayFrankGraph(graph)},FRANK_TIMEOUT_MS,'FRANK');if(result?.plan&&validateFrankPlan(result.plan,graph)){plan=result.plan;gateway=result.gateway||''}}catch{}
-  const start=await chrome.tabs.sendMessage(inspectedTabId,{type:'FRANK_START',plan,targets:graph.targets});if(!start?.started)throw new Error('Frank could not start on the inspected page.');return{plan,graph,tabId:inspectedTabId,gateway,aiMode:plan.mode};
+  const graph=buildEvidenceGraph({finding:latestFinding,page:sourceReport.page,coverage:sourceReport.coverage,context:sourceReport.context||{},targetContext:target,environment:sourceReport.environment||sourceReport.page?.environment});let plan=deterministicFrankPlan(graph),gateway='',reasoning={status:'local-fallback',mode:'deterministic',code:'LOCAL_ONLY',message:'Connected reasoning was not attempted for this page.'};
+  if(!isPrivateHost(sourceReport.page.hostname||'')){
+    try{
+      const result=await gatewayPost('/api/frank/plan',{graph:gatewayFrankGraph(graph)},FRANK_TIMEOUT_MS,'FRANK');
+      if(result?.plan&&validateFrankPlan(result.plan,graph)){plan=result.plan;gateway=result.gateway||'';reasoning=result.reasoning||{status:plan.mode==='ai'?'operational':'fallback',mode:plan.mode,message:plan.mode==='ai'?'Connected reasoning completed.':'The gateway returned fallback guidance.'}}
+      else reasoning={status:'fallback',mode:'deterministic',code:'INVALID_GATEWAY_PLAN',message:'The gateway returned a walkthrough that did not pass local validation.'};
+    }catch(error){reasoning={status:'fallback',mode:'deterministic',code:error?.code||'GATEWAY_FRANK_FAILED',message:String(error?.message||'Connected reasoning could not be reached.').slice(0,240)}}
+  }
+  const start=await chrome.tabs.sendMessage(inspectedTabId,{type:'FRANK_START',plan,targets:graph.targets});if(!start?.started)throw new Error('Frank could not start on the inspected page.');return{plan,graph,tabId:inspectedTabId,gateway,aiMode:plan.mode,reasoning};
 }
 async function recheckFinding({finding,tabId}){
   if(!finding||!tabId)throw new Error('A current finding and inspected tab are required.');
@@ -158,7 +198,7 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{(async()=>{
   if(msg.type==='FRANK_PREVIEW')return frankMessage(msg.tabId,{type:'FRANK_PREVIEW',targetId:msg.targetId,preview:msg.preview});
   if(msg.type==='FRANK_RESET_PREVIEW')return frankMessage(msg.tabId,{type:'FRANK_RESET_PREVIEW'});
   if(msg.type==='HIGHLIGHT'){const tabId=msg.tabId||(await activeTab())?.id;if(!tabId)throw new Error('No inspected browser tab was found.');try{await chrome.tabs.sendMessage(tabId,{type:'PING'})}catch{try{await ensureInjected(tabId)}catch{throw new Error('Page access expired. Click the toolbar icon on this page and try Highlight again.')}}return chrome.tabs.sendMessage(tabId,{type:'HIGHLIGHT',targetId:msg.targetId,selector:msg.selector})}
-  if(msg.type==='GET_ACTIVE')return{tab:await activeTab(),settings:await settings()};
+  if(msg.type==='GET_ACTIVE'){const s=await settings();return{tab:await activeTab(),settings:{apiBase:s.apiBase,apiKey:s.apiKey,managedAccess:Boolean(s.installToken),managedAccessExpiresAt:Number(s.installTokenExpiresAt||0)}}}
   if(msg.type==='GET_SITE_SESSION'){const s=await settings(),url=msg.pageUrl||(await activeTab())?.url;if(!url)return{session:null};return{session:s.siteSessions[new URL(url).origin]||null}}
   if(msg.type==='CLEAR_SITE_SESSION'){const s=await settings(),url=msg.pageUrl||(await activeTab())?.url;if(url){delete s.siteSessions[new URL(url).origin];await chrome.storage.local.set({siteSessions:s.siteSessions})}return{cleared:true}}
   if(msg.type==='SAVE_GATEWAY_SETTINGS'){const apiBase=String(msg.apiBase||'').trim().replace(/\/$/,''),apiKey=String(msg.apiKey||'').trim();if(apiBase&&!/^https?:\/\//i.test(apiBase))throw new Error('Gateway URL must use HTTP or HTTPS.');await chrome.storage.local.set({apiBase,apiKey});return{saved:true}}

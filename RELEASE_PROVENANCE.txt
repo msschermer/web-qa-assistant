@@ -1,6 +1,8 @@
 Web QA Assistant 1.5.1
-Release focus: trust-and-correctness stabilization over the complete 1.5.0 feature set.
-Automated validation: npm test 113/113 PASS; npm run check PASS (42 JavaScript files); npm run build:extension PASS; RELEASE_TAG=v1.5.1 npm run release:validate PASS.
-Dependency note: a fresh npm ci did not complete within the execution environment window; package-lock.json remains the source dependency lock.
-Security boundary: outbound Frank evidence uses an explicit finding allowlist and URL/query sanitization, including nested performance resource data and generic evidence strings.
-Fixture policy: release tests and acceptance fixtures use synthetic Example identities and reserved example domains only.
+Release focus: trust-and-correctness stabilization over the complete 1.5.0 feature set, plus Frank reasoning reliability and managed installation access.
+Automated validation: npm test 122/122 PASS; npm run check PASS (47 JavaScript files); npm run build:extension PASS; RELEASE_TAG=v1.5.1 npm run release:validate PASS.
+Dependency note: a fresh npm ci did not complete within the execution environment window; package-lock.json remains the source dependency lock and the extension build uses the locked vendored axe-core artifact.
+Security boundary: the OpenAI API key remains server-side. Normal extension installs can use revocable, expiring per-install gateway credentials when managed access is enabled; the shared assistant token remains an optional developer/team override and is never bundled in the extension.
+AI reliability: "AI configured" is separate from operational model health. Frank only reports connected reasoning after a valid evidence-contracted AI walkthrough; provider, timeout, or validation failures are surfaced as explicit deterministic fallback reasons.
+Evidence quality: color-contrast guidance carries available observed/required ratios and colors, and generic evidence-filler walkthrough steps are excluded.
+Fixture policy: release tests and acceptance fixtures use neutral synthetic labels and reserved example domains only; real external test-site identities and copied site content are prohibited.

@@ -14,6 +14,14 @@ function metaPage(meta){return meta?.snapshot?.pageMeta||meta?.report?.snapshot?
 function metaFetch(meta){return meta?.snapshot?.fetch||meta?.report?.snapshot?.fetch||null}
 function metaRelevant(signal){return [SIGNALS.NOINDEX,SIGNALS.ROBOTS,SIGNALS.CANONICAL,SIGNALS.REDIRECT,SIGNALS.TITLE,SIGNALS.DESCRIPTION,SIGNALS.SCHEMA].includes(signal)}
 function performanceRelevant(signal){return signal===SIGNALS.PERFORMANCE_MOBILE||signal===SIGNALS.PERFORMANCE_DESKTOP}
+function axeChecks(axe){return ['any','all','none'].flatMap(bucket=>(axe?.checks?.[bucket]||[]))}
+function contrastFacts(axe){
+  for(const check of axeChecks(axe)){
+    const d=check?.data;if(!d||typeof d!=='object')continue;
+    if(d.contrastRatio!=null||d.expectedContrastRatio!=null||d.fgColor||d.bgColor)return d;
+  }
+  return null;
+}
 export function targetIdForFinding(finding){return finding?.targetType==='visual'&&finding?.targetId?finding.targetId:''}
 
 export function buildEvidenceGraph({finding,page={},coverage={},context={},targetContext=null,environment=null}){
@@ -78,6 +86,15 @@ export function buildEvidenceGraph({finding,page={},coverage={},context={},targe
     push(evidence,{source:'axe',kind:'impact',label:'axe impact',value:finding.axe.impact||finding.severity,scope:'current-page',targetId});
     push(evidence,{source:'axe',kind:'failure-summary',label:'axe diagnostic',value:finding.axe.failureSummary,scope:'current-page',targetId});
     for(const bucket of ['any','all','none'])for(const check of finding.axe.checks?.[bucket]||[])push(evidence,{source:'axe',kind:`check.${bucket}`,label:check.id||`${bucket} check`,value:check.data!=null?{message:check.message||'',data:check.data}:(check.message||''),scope:'current-page',targetId});
+    const contrast=contrastFacts(finding.axe);
+    if(contrast){
+      push(evidence,{source:'axe',kind:'contrast-ratio',label:'Observed contrast ratio',value:contrast.contrastRatio!=null?`${contrast.contrastRatio}:1`:'',scope:'current-page',targetId});
+      push(evidence,{source:'axe',kind:'contrast-required',label:'Required contrast ratio',value:contrast.expectedContrastRatio!=null?`${contrast.expectedContrastRatio}:1`:'',scope:'standard',targetId});
+      push(evidence,{source:'axe',kind:'foreground-color',label:'Foreground color',value:contrast.fgColor,scope:'computed-style',targetId});
+      push(evidence,{source:'axe',kind:'background-color',label:'Background color',value:contrast.bgColor,scope:'computed-style',targetId});
+      push(evidence,{source:'axe',kind:'font-size',label:'Text size',value:contrast.fontSize,scope:'computed-style',targetId});
+      push(evidence,{source:'axe',kind:'font-weight',label:'Font weight',value:contrast.fontWeight,scope:'computed-style',targetId});
+    }
   }
   const meta=serviceData(context,'metaState')||serviceData(context,'meta'),mp=metaPage(meta),mf=metaFetch(meta);
   if(metaRelevant(signal)&&mp){
@@ -94,6 +111,6 @@ export function buildEvidenceGraph({finding,page={},coverage={},context={},targe
   }
   const sources=[...new Set(evidence.map(e=>e.source))],targets={};
   if(targetId&&targetContext?.found)targets[targetId]={selector:finding.selector,context:targetContext};
-  return{version:3,findingId:finding.id||finding.fingerprint||finding.ruleId,finding:{id:finding.id,ruleId:finding.ruleId,title:finding.title,detail:finding.detail,category:finding.category,severity:finding.severity,confidence:finding.confidence||'confirmed',verification:finding.verification||null,selector:finding.selector||'',targetId,targetType:finding.targetType==='visual'&&!targetId?'page':(finding.targetType||'page'),signal,frankPriority:finding.frankPriority||'',policyReason:finding.policyReason||'',impactClass:finding.impactClass||'',semantics:semantics||null,performanceObservation:browserPerf||null,sources:[...(finding.sources||[])],wcag:[...(finding.wcag||[])]},page:{url:page.url||'',hostname:page.hostname||'',title:page.title||''},environment:environment||page.environment||{type:'unknown',confidence:0},coverage:{...coverage},targets,evidence,sources};
+  return{version:3,findingId:finding.id||finding.fingerprint||finding.ruleId,finding:{id:finding.id,ruleId:finding.ruleId,title:finding.title,detail:finding.detail,category:finding.category,severity:finding.severity,confidence:finding.confidence||'confirmed',verification:finding.verification||null,selector:finding.selector||'',targetId,targetType:finding.targetType==='visual'&&!targetId?'page':(finding.targetType||'page'),signal,frankPriority:finding.frankPriority||'',policyReason:finding.policyReason||'',impactClass:finding.impactClass||'',semantics:semantics||null,performanceObservation:browserPerf||null,axe:finding.axe||null,link:finding.link||null,wcagExplanation:finding.wcagExplanation||'',sources:[...(finding.sources||[])],wcag:[...(finding.wcag||[])]},page:{url:page.url||'',hostname:page.hostname||'',title:page.title||''},environment:environment||page.environment||{type:'unknown',confidence:0},coverage:{...coverage},targets,evidence,sources};
 }
 export function evidenceHash(graph){return hash(JSON.stringify({finding:graph.finding,evidence:graph.evidence,coverage:graph.coverage,environment:graph.environment}))}

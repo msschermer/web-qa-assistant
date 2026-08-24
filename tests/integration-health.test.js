@@ -45,8 +45,9 @@ test('test connection separates reachability from authorisation', () => {
   assert.match(background, /reachable:false,auth:'unknown'/);
   assert.match(background, /'rejected':'required'/);
   assert.match(background, /status===401/);
-  assert.match(background, /access key was rejected/);
-  assert.match(background, /protected and no access key is saved/);
+  assert.match(background, /assistant access was rejected/);
+  assert.match(background, /managed installation access/);
+  assert.match(background, /developer access key may be required/);
 });
 
 test('the panel surfaces per-integration status rather than a single count', () => {
@@ -62,7 +63,7 @@ test('a rejected key is shown as a warning, not as a healthy connection', () => 
 
 
 test('scan enrichment distinguishes missing and rejected gateway keys from an outage', () => {
-  assert.match(background, /connectedMode=status===401\?\(s\.apiKey\?'auth-rejected':'auth-required'\)/);
+  assert.match(background, /connectedMode=status===401\?\(\(s\.apiKey\|\|s\.installToken\)\?'auth-rejected':'auth-required'\)/);
   assert.match(panel, /report\.connectedMode === 'auth-required'/);
   assert.match(panel, /report\.connectedMode === 'auth-rejected'/);
   assert.match(panel, /assistant gateway could not be reached/);
@@ -74,7 +75,11 @@ test('connection test checks the values currently visible in the form', () => {
   assert.match(panel, /Saving first is not required/);
 });
 
-test('saving connection settings immediately validates them', () => {
+test('saving connection settings immediately validates them and resolves the verifying notice', () => {
   assert.match(panel, /Connection settings saved\. Verifying them now/);
-  assert.match(panel, /await runGatewayTest\(\)/);
+  assert.match(panel, /const verification = await runGatewayTest\(\)/);
+  assert.match(panel, /connectionVerificationNotice\(verification\)/);
+  assert.match(panel, /Connection settings saved and verified\./);
+  assert.match(panel, /access key was rejected/);
+  assert.match(panel, /integration\$\{problems === 1/);
 });

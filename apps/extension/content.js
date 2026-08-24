@@ -224,7 +224,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   const ORIENTATION = {
     spotlight: 'This is the affected element.',
     interpretation: 'This is what the element is doing on the page.',
-    evidence: 'This is the evidence behind the finding.',
+    evidence: 'This step uses verified page evidence.',
     comparison: 'These observation points disagree.',
     trend: 'This comes from monitored history.',
     impact: 'This is why it matters here.',

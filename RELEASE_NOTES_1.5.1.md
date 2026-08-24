@@ -28,3 +28,12 @@ See `docs/QA-1.5.1.md` for acceptance.
 - HTTP 404 remains a hard `not-found` state. `available` now requires a successful capability response.
 - Optional `*_HEALTH_PATH` environment overrides are available for deployments that later expose dedicated health endpoints.
 - Connection acceptance now requires the gateway itself to report v1.5.1 before this release is considered fully deployed.
+
+## Frank reliability and managed-access refresh
+
+- Frank no longer silently converts a failed connected-AI request into an apparently normal walkthrough. The gateway returns an explicit reasoning state and failure code, and the extension labels fallback guidance visibly.
+- Connection health now distinguishes **AI configured** from **Frank AI operational** using a cached, bounded Responses API probe.
+- The deterministic fallback no longer inserts the generic "evidence behind the finding" walkthrough step. Evidence remains available in the expandable evidence panel while the walkthrough focuses on interpretation, impact, remediation, and verification.
+- Axe contrast evidence now preserves observed/required ratios and relevant computed color data when the scanner supplies them. Frank can explain the affected text and the smallest relevant correction rather than repeating rule provenance.
+- Normal installs can use opt-in managed installation access. The extension generates an installation ID, obtains a signed expiring token from the gateway, and refreshes it automatically. No shared gateway secret is embedded in the extension.
+- Managed installation access is disabled by default on the server and carries per-install request limits. A developer access key remains available as an override for private gateways.

@@ -29,7 +29,7 @@ The extension and web app share `packages/ui/tokens.css` and the portfolio visua
 Use:
 
 - `Connected reasoning` when OpenAI generated the structured walkthrough/brief
-- `Standard guidance` for deterministic Frank
+- `Fallback guidance` for deterministic Frank when connected reasoning is unavailable or intentionally disabled
 - `Confirmed`, `Corroborated`, `Inferred` for evidence strength
 - `Incomplete coverage` for checker uncertainty
 

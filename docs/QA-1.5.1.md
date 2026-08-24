@@ -23,6 +23,11 @@ Use `fixtures/known-answer/index.html` through an HTTP server.
 - [ ] gateway health reports **v1.5.1** before connected QA is accepted
 - [ ] Meta State, Performance Monitor, and WCAG Translator capability probes return `available` only on successful real API contracts
 - [ ] integration 401/404/5xx states remain distinct from reachability
+- [ ] Test connection reports **Frank AI operational**, not merely configured
+- [ ] a forced model failure produces visible **Fallback guidance** with a reason
+- [ ] contrast walkthrough contains observed/required ratio when Axe supplies those values
+- [ ] walkthrough does not contain the removed generic evidence-provenance step
+- [ ] managed access registers/refreshes automatically when enabled; developer key remains optional
 
 ## Privacy / contamination
 

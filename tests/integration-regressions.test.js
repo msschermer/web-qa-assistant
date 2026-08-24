@@ -224,7 +224,8 @@ test('public web scanner keeps AI opt-in while team extension can use connected 
   const api=read('services/api/server.js');
   const env=read('.env.example');
   assert.match(api,/function publicAiEnabled/);
-  assert.match(api,/publicAiEnabled\(\) \? await frankWalkthrough\(graph\) : deterministicFrankPlan\(graph\)/);
+  assert.match(api,/if \(publicAiEnabled\(\)\) \{/);
+  assert.match(api,/reasoning = \{ status: 'operational', mode: 'ai'/);
   assert.match(api,/allowAi: publicAiEnabled\(\)/);
   assert.match(env,/PUBLIC_AI_ENABLED=false/);
 });

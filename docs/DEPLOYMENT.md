@@ -37,7 +37,8 @@ Generate independent random values:
 
 ```bash
 openssl rand -hex 32   # RENDERER_TOKEN
-openssl rand -hex 32   # ASSISTANT_ACCESS_TOKEN
+openssl rand -hex 32   # ASSISTANT_ACCESS_TOKEN (developer/team override)
+openssl rand -hex 32   # INSTALL_TOKEN_SECRET (managed installation signing)
 ```
 
 Edit `.env`.
@@ -47,6 +48,10 @@ Recommended team configuration:
 ```dotenv
 RENDERER_TOKEN=<random-renderer-token>
 ASSISTANT_ACCESS_TOKEN=<random-team-access-token>
+PUBLIC_EXTENSION_ACCESS_ENABLED=true
+INSTALL_TOKEN_SECRET=<random-install-signing-secret>
+INSTALL_TOKEN_TTL_MS=2592000000
+INSTALL_AI_DAILY_LIMIT=200
 OPENAI_API_KEY=<server-side-openai-key>
 OPENAI_MODEL=gpt-5.6-terra
 PUBLIC_AI_ENABLED=false
@@ -57,7 +62,7 @@ PERFORMANCE_MONITOR_URL=https://psi.msschermer.us
 WCAG_TRANSLATOR_URL=https://wcag-translator.msschermer.us
 ```
 
-`ASSISTANT_ACCESS_TOKEN` protects extension-only connected routes. Treat it as an authorized-client access token, not as a secret from the authorized user who has the extension.
+`ASSISTANT_ACCESS_TOKEN` remains a developer/team override. With `PUBLIC_EXTENSION_ACCESS_ENABLED=true`, normal installs can register for an expiring signed installation token and do not need the shared value. `INSTALL_TOKEN_SECRET` stays server-side and signs those tokens. Managed access is public distribution access with per-install limits; it is not a hidden browser secret.
 
 `PUBLIC_AI_ENABLED=false` is recommended. The public web scanner will use deterministic Frank even when OpenAI is configured; team extension requests can still use connected reasoning through the protected gateway.
 
@@ -153,18 +158,17 @@ curl \
   https://assistant.msschermer.us/api/health/integrations
 ```
 
-The response reports gateway-side availability for Meta State, Performance Monitor, WCAG Translator and OpenAI configuration without exposing credentials.
+The response reports gateway-side availability for Meta State, Performance Monitor and WCAG Translator, plus a cached live check showing whether Frank AI is operational rather than merely configured, without exposing credentials.
 
 A connector marked unavailable does not automatically mean a client site has a problem. It is a service/coverage condition.
 
 ## 5. Configure the extension
 
-Load the release extension, then under **Connection settings**:
+Load the release extension. With managed installation access enabled, no access key entry is required; the extension registers and refreshes its installation token automatically. Under **Connection settings** you can still:
 
-- Gateway: leave blank to use `https://assistant.msschermer.us`, or enter it explicitly
-- Access key: the `ASSISTANT_ACCESS_TOKEN` value
-- Save connection
-- Test connection
+- leave Gateway blank to use `https://assistant.msschermer.us`, or enter a custom gateway
+- enter the optional **Developer access key** (`ASSISTANT_ACCESS_TOKEN`) to override managed access for a private gateway
+- run **Test connection** to verify authorization, Frank AI operational status and connector capability health
 
 For an unpacked extension, find the extension ID at `chrome://extensions` and use `chrome-extension://<id>` in `ALLOWED_ORIGINS` if you are enforcing exact CORS origins.
 
@@ -175,7 +179,7 @@ For an unpacked extension, find the extension ID at `chrome://extensions` and us
 - Never place `OPENAI_API_KEY` in extension source or Chrome storage.
 - Keep `PUBLIC_AI_ENABLED=false` unless public AI usage is intentionally enabled and cost/abuse controls are accepted.
 - Do not log raw page bodies, form values, cookies or unsanitized evidence graphs.
-- Rotate `ASSISTANT_ACCESS_TOKEN` if team access changes.
+- Rotate `ASSISTANT_ACCESS_TOKEN` if team access changes, and rotate `INSTALL_TOKEN_SECRET` when all managed installation tokens should be invalidated.
 - Keep specialized integration credentials/URLs server-side.
 
 ## 7. Observability

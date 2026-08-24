@@ -36,9 +36,9 @@ Meta State, Performance Monitor and WCAG Translator are called server-side throu
 
 The public scanner accepts HTTP/HTTPS URLs only. Its browser is isolated from the application network and uses the dedicated egress proxy, which rejects private/local destinations. Renderer and proxy services are not exposed publicly in the recommended deployment.
 
-## Access keys
+## Gateway access
 
-`ASSISTANT_ACCESS_TOKEN` can protect team extension routes. The token is an access control for an authorized client, not a secret from the person using that client. Do not reuse a high-value credential. Rotate it if the extension package or team access changes.
+`ASSISTANT_ACCESS_TOKEN` can protect private/team extension routes and remains an optional developer override. It is never bundled into the extension. When managed installation access is enabled, the browser creates an installation identifier and receives a signed, expiring token from the gateway. The signing secret remains server-side. Managed installation tokens support expiration, per-install accounting and quotas, but they should not be treated as proof of a human identity; account/OAuth authentication is the appropriate next step when user entitlements are required.
 
 ## Logging
 

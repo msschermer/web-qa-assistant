@@ -248,6 +248,50 @@ const evidenceContractSource=fs.readFileSync('packages/ai/evidence-contract.js',
 if (/finding:\s*\{\s*\.\.\.graph\.finding/.test(evidenceContractSource) || !/findingFieldsAllowlisted:\s*true/.test(evidenceContractSource)) { bad++; console.error('privacy regression: AI finding payload must use an explicit field allowlist'); }
 if (!/performance\.browser\.ttfb/.test(guidanceSource) || !/performance\.browser\.weight/.test(guidanceSource) || !/performance\.browser\.lcp/.test(guidanceSource)) { bad++; console.error('guidance regression: browser performance findings need metric-specific advice'); }
 
+// Frank reliability: a model failure must be surfaced by the API rather than
+// silently converted into a plan that looks connected. The deterministic plan
+// remains an explicit fallback owned by the API/UI boundary.
+const aiSource = fs.readFileSync('packages/ai/ai.js', 'utf8');
+const frankStart = aiSource.indexOf('export async function frankWalkthrough');
+const frankEnd = aiSource.indexOf('export { aiEvidenceEnvelope }', frankStart);
+const frankWalkthroughSource = aiSource.slice(frankStart, frankEnd);
+if (frankStart < 0 || /catch\s*\{/.test(frankWalkthroughSource) || /deterministicFrankPlan/.test(frankWalkthroughSource)) {
+  bad++;
+  console.error('Frank reliability regression: frankWalkthrough must throw model/contract failures instead of silently returning deterministic guidance');
+}
+if (!/export async function probeAiHealth/.test(aiSource)) {
+  bad++;
+  console.error('Frank reliability regression: operational model health probe is missing');
+}
+const apiSource = fs.readFileSync('services/api/server.js', 'utf8');
+if (!/app\.post\(['"]\/api\/install\/register['"]/.test(apiSource) || !/PUBLIC_EXTENSION_ACCESS_ENABLED/.test(apiSource)) {
+  bad++;
+  console.error('managed-access regression: installation registration must remain explicit and server-gated');
+}
+if (!/probeAiHealth\(\{ force:/.test(apiSource)) {
+  bad++;
+  console.error('Frank reliability regression: integration health must validate model operation, not merely API-key presence');
+}
+if (/ASSISTANT_ACCESS_TOKEN/.test(backgroundSource)) {
+  bad++;
+  console.error('managed-access regression: never bundle the shared assistant access token into extension runtime source');
+}
+if (!/\/api\/install\/register/.test(backgroundSource) || !/Frank AI operational/.test(backgroundSource)) {
+  bad++;
+  console.error('managed-access regression: extension must support managed registration and report operational Frank AI health');
+}
+const planSource = fs.readFileSync('packages/frank/plan.js', 'utf8');
+for (const file of ['packages/frank/plan.js', 'apps/extension/content.js']) {
+  if (fs.readFileSync(file, 'utf8').includes('This is the evidence behind the finding')) {
+    bad++;
+    console.error(`Frank UX regression: generic evidence filler text returned in ${file}`);
+  }
+}
+if (!/contrast-ratio/.test(planSource) || !/contrast-required/.test(planSource) || !/foreground-color/.test(planSource) || !/background-color/.test(planSource)) {
+  bad++;
+  console.error('Frank guidance regression: contrast walkthrough must retain observed ratio, requirement, and color evidence');
+}
+
 // The overlay must not duplicate the side panel's remediation surface.
 const contentSource = fs.readFileSync('apps/extension/content.js', 'utf8');
 if (/shadow\.querySelector\('h2'\)\.textContent = step\.headline/.test(contentSource) && /shadow\.querySelector\('p'\)\.textContent = step\.body/.test(contentSource)) {

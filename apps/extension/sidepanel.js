@@ -18,6 +18,16 @@ function send(msg, timeoutMs = 25000) {
 }
 
 function notice(message = '', kind = '') { const el = $('#notice'); el.textContent = message; el.dataset.kind = kind; }
+function connectionVerificationNotice(result) {
+  if (!result) return notice('Connection settings saved, but verification could not complete.', 'warn');
+  if (!result.ok) return notice(`Connection settings saved, but verification failed${result.error ? `: ${result.error}` : '.'}`, 'warn');
+  if (!result.reachable) return notice('Connection settings saved, but the gateway could not be reached.', 'warn');
+  if (result.auth === 'required') return notice('Connection settings saved, but an access key is required.', 'warn');
+  if (result.auth === 'rejected') return notice('Connection settings saved, but the access key was rejected.', 'warn');
+  const problems = Array.isArray(result.problems) ? result.problems.length : 0;
+  if (problems) return notice(`Connection settings saved. Gateway verified; ${problems} integration${problems === 1 ? '' : 's'} need attention.`, 'warn');
+  notice('Connection settings saved and verified.', 'ok');
+}
 function clearDiagnostic() {
   lastDiagnostic = null; const box = $('#diagnostic'); if (!box) return;
   box.hidden = true; box.open = false;
@@ -222,7 +232,7 @@ function renderOverviewOnly() {
     : `${groups} grouped from ${findings} findings`;
   $('#coverage-state').textContent = incompleteCoverage() ? `${incompleteCoverage()} coverage gap${incompleteCoverage() === 1 ? '' : 's'}` : 'Primary coverage available';
   const mode = report.priorityMode === 'ai' ? 'ai' : 'deterministic';
-  $('#reasoning-mode').textContent = mode === 'ai' ? 'Connected reasoning' : 'Standard guidance';
+  $('#reasoning-mode').textContent = mode === 'ai' ? 'Connected reasoning' : (report.priorityReason ? 'Fallback guidance' : 'Standard guidance');
   $('#reasoning-mode').dataset.mode = mode;
 }
 
@@ -386,19 +396,22 @@ async function startFrank(finding, card) {
     if (r.diagnostic) showFailure(r, 'Frank could not build a walkthrough.');
     return;
   }
-  frank = { plan: r.plan, graph: r.graph, tabId: r.tabId || tab.id, index: 0, finding };
+  frank = { plan: r.plan, graph: r.graph, tabId: r.tabId || tab.id, index: 0, finding, reasoning: r.reasoning || null };
   enterFrank();
   $('#frank-title').textContent = frank.plan.title;
   $('#frank-summary').textContent = frank.plan.summary;
-  $('#frank-mode').textContent = frank.plan.mode === 'ai' ? 'Connected reasoning' : 'Standard guidance';
-  $('#frank-mode').dataset.mode = frank.plan.mode;
+  const aiOperational = frank.plan.mode === 'ai' && frank.reasoning?.status === 'operational';
+  $('#frank-mode').textContent = aiOperational ? 'Connected reasoning' : 'Fallback guidance';
+  $('#frank-mode').dataset.mode = aiOperational ? 'ai' : 'deterministic';
+  $('#frank-mode').title = aiOperational ? 'Frank completed a connected AI walkthrough grounded in the current evidence.' : (frank.reasoning?.message || 'Frank is using deterministic fallback guidance.');
   const a = frank.plan.assessment || {};
   $('#frank-assessment-status').textContent = a.status || 'review';
   $('#frank-assessment-statement').textContent = a.statement || '';
   $('#frank-assessment-limitations').textContent = a.limitations || '';
   $('#frank-assessment-limitations').hidden = !a.limitations;
   renderFrankStep(0);
-  notice('Frank is guiding the current finding.', 'ok');
+  if (aiOperational) notice('Frank is guiding the current finding with connected reasoning.', 'ok');
+  else notice(`Frank is using fallback guidance${frank.reasoning?.message ? `: ${frank.reasoning.message}` : '.'}`, 'warn');
 }
 
 async function gotoFrank(index) {
@@ -530,10 +543,18 @@ async function runGatewayTest() {
   button.disabled = true; status.textContent = 'Checking gateway and integration health…'; status.dataset.kind = ''; list.innerHTML = '';
   try {
     // Test exactly what is visible in the form. Saving first is not required.
-    const r = await send({ type: 'TEST_GATEWAY', apiBase, apiKey }, 14000);
+    const r = await send({ type: 'TEST_GATEWAY', apiBase, apiKey }, 13000);
     if (!r.ok) { status.textContent = r.error || 'Gateway check failed.'; status.dataset.kind = 'error'; return r; }
     status.textContent = r.summary;
     status.dataset.kind = !r.reachable ? 'error' : (r.auth === 'rejected' || r.auth === 'required' || (r.problems || []).length) ? 'warn' : 'ok';
+    const ai = r.integrations?.openai;
+    if (ai) {
+      const el = document.createElement('div');
+      el.className = 'integration-row'; el.dataset.status = ai.operational ? 'available' : 'degraded';
+      el.innerHTML = `<b>Frank AI</b><span>${esc(ai.operational ? 'operational' : (ai.status || 'unavailable'))}${ai.latencyMs ? ` · ${esc(ai.latencyMs)}ms` : ''}</span>`;
+      if (ai.message) el.title = ai.message;
+      list.appendChild(el);
+    }
     for (const row of Object.values(r.integrations?.integrations || {})) {
       const el = document.createElement('div');
       el.className = 'integration-row'; el.dataset.status = row.status;
@@ -559,7 +580,8 @@ $('#save-gateway').onclick = async () => {
     return;
   }
   notice('Connection settings saved. Verifying them now…', 'ok');
-  await runGatewayTest();
+  const verification = await runGatewayTest();
+  connectionVerificationNotice(verification);
 };
 $('#test-gateway').onclick = runGatewayTest;
 $('#clear-session').onclick = async () => {
