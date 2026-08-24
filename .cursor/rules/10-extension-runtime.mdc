@@ -1,0 +1,21 @@
+---
+description: Runtime rules for the Chrome extension, Frank, evidence, targeting, and Report Bug
+alwaysApply: false
+globs:
+  - "apps/extension/**"
+  - "packages/frank/**"
+  - "packages/rules/**"
+  - "packages/ai/**"
+  - "packages/findings/**"
+  - "tests/**"
+---
+When changing extension runtime behavior:
+
+- Keep scans deterministic and useful without AI.
+- Keep Chrome built-in AI separate from the scan lifecycle; Rescan must never be an AI recovery action.
+- Keep Frank task sessions isolated by finding/site.
+- Keep local-AI output bounded by verified evidence and deterministic remediation families.
+- Prefer no spotlight over a confidently wrong spotlight.
+- Treat open Shadow DOM, rerenders, stale targets, hidden targets and ambiguity as explicit runtime states.
+- Report Bug must stay privacy bounded by default: no cookies, form values, credentials, full DOM, unrestricted page content, selectors or URL query contents.
+- Measurement sources and reference/enrichment sources are not interchangeable.

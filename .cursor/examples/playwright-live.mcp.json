@@ -1,0 +1,8 @@
+{
+  "playwright-live": {
+    "type": "stdio",
+    "command": "npx",
+    "args": ["-y", "@playwright/mcp@latest", "--extension"],
+    "envFile": "${workspaceFolder}/.cursor/webqa.env"
+  }
+}

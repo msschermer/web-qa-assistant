@@ -169,6 +169,8 @@ npm run build:extension
 
 Then load `dist/extension` from `chrome://extensions` using **Load unpacked**.
 
+For Cursor IDE development workflow, see [docs/CURSOR-QUICKSTART.md](docs/CURSOR-QUICKSTART.md).
+
 ## Production
 
 Production deployment is designed around `assistant.msschermer.us` as the controlled gateway. The renderer and egress proxy remain internal; only the API is bound to host loopback for the reverse proxy.

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "webqa": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}/tools/cursor-webqa/mcp-server.mjs"],
+      "envFile": "${workspaceFolder}/.cursor/webqa.env"
+    }
+  }
+}

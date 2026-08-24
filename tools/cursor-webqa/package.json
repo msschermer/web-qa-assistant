@@ -1,0 +1,9 @@
+{
+  "name": "webqa-cursor-mcp",
+  "private": true,
+  "type": "module",
+  "description": "Local Cursor MCP bridge for Web QA Assistant development and acceptance testing.",
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0"
+  }
+}
