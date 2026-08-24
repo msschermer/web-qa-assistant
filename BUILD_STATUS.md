@@ -1,22 +1,44 @@
-# Build status: Web QA Assistant 1.6.0
+# Build status: Web QA Assistant 1.7.1
 
 ## Delivery candidate
 
-1.6.0 is the reliable-Frank and focus-mode release layered on the complete 1.5.2 on-device reasoning baseline. All 1.5.0–1.5.2 scanner, prioritization, performance, integration-health, privacy, managed-auth, cost-control, and deployment improvements remain in place.
+1.7.0 is the cross-discipline product release. It keeps the 1.6 readiness/session/evidence architecture and adds a consumer presentation layer, dedicated Security QA area, privacy-bounded Report bug workflow, broader Frank validation, and a redesigned SaaS-style workspace.
 
-## 1.6.0 improvements
+## Release objectives
 
-- Chrome built-in AI readiness now has its own lifecycle instead of being coupled to Browser QA scans.
-- Ask Frank can prepare/download the model, surface progress, retain the selected finding, and continue when Chrome becomes ready without requiring Rescan.
-- A system-only Prompt API base session stays warm while the panel is active; each finding uses a fresh clone so unrelated websites never share task history.
-- The sidebar is now the deterministic evidence ledger. Frank's full interpretation and recommended action live in the centered focus card beside the highlighted real element.
-- The low-value standalone “locate” step was removed; walkthroughs begin with interpretation and end with deterministic verification.
-- Frank's visual hierarchy and readiness states are more distinctive while retaining the existing CSS/token system; Tailwind was deliberately not added.
-- Contrast guidance can offer a nearby evidence-derived passing foreground color, with post-rounding validation before it is described as passing.
-- On-device AI validation now rejects unsupported positions/components, business outcomes, invented measurements, semantic drift, and high-risk actions derived only from hostile page text.
-- Prompt-injection hardening treats all page-derived strings as untrusted and never lets page text authorize destructive or secret-handling actions.
-- Extension builds preserve the vendored axe-core runtime when `node_modules` is absent, preventing a failed rebuild from deleting required release assets.
+- Present a page-level QA assessment before scanner details.
+- Give Navigation, Discoverability, Performance, Accessibility, Security, Web quality, and Coverage clear first-class roles.
+- Translate scanner evidence into useful product language while retaining auditable technical evidence.
+- Keep Frank focused on interpretation and action rather than scanner restatement.
+- Generate privacy-safe Report bug artifacts that make real-Chrome runtime behavior reviewable without direct browser access.
+- Prevent the noisiest scanner from owning the priority queue.
+- Preserve on-device AI, deterministic fallback, managed gateway access, and zero-metered-AI defaults.
 
 ## Validation
 
-Exact final test/check/build/release results are recorded during packaging in `RELEASE_PROVENANCE.txt` and `docs/QA-1.6.0.md`.
+Exact final test/check/build/release results are recorded during packaging in `RELEASE_PROVENANCE.txt` and `docs/QA-1.7.0.md`.
+
+## 1.7.1 target resolution
+
+Merged from the alternate 1.6.1 branch and revised in review.
+
+- Resolution is a staged chain: live reference, selector with fingerprint
+  disambiguation, relaxed ancestor paths, structural fingerprint. Open shadow
+  roots are searched on the miss path.
+- Several matches with no way to tell them apart resolve to nothing. The old
+  first-match floor was removed: a confident wrong highlight is worse than none.
+- Nothing is written to the inspected page. The persistent marker attribute
+  proposed in the alternate branch was dropped as unnecessary.
+- Steps retry a failed resolution at 300ms, 800ms and 1600ms, cancelled on step
+  change, and offer a manual retry.
+- Unresolved, hidden and document-level targets are distinguished and explained
+  in the focus card rather than failing silently.
+- resolvedTargetState reports which stage resolved a target, for Report bug.
+
+### Known gaps
+
+- A shadow-root element that is replaced after the scan is still unresolvable:
+  the fingerprint stage searches only the main document and the relaxed path
+  splitter does not parse axe's `>>>` format.
+- Shadow-root discovery is uncached and runs per resolution attempt.
+- Iframe content remains untargetable; the content script runs in the top frame.

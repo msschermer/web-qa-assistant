@@ -158,7 +158,7 @@ test('on-device contrast guidance cannot invent a stricter ratio',()=>{
 test('on-device guidance cannot introduce a URL',()=>{
   const graph=contrastGraph();
   const candidate=JSON.parse(goodLocalResponse());
-  candidate.verification='Confirm the observed 3.3:1 ratio now meets the required 4.5:1 ratio, then review https://example.com for details.';
+  candidate.verification='Confirm the observed 3.3:1 ratio now meets the required 4.5:1 ratio, then review https://example.net/details for details.';
   const result=validateLocalFrankOutput(candidate,graph);
   assert.equal(result.ok,false);
   assert.equal(result.code,'LOCAL_AI_INVENTED_URL');

@@ -7,8 +7,9 @@ export const IMPACT_CLASSES = Object.freeze({
   discoverability: { id: 'discoverability', label: 'Discoverability', order: 2, description: 'Crawlers cannot index or consolidate the page correctly' },
   accessibility: { id: 'accessibility', label: 'Accessibility', order: 3, description: 'Assistive technology, keyboard or low-vision users hit a barrier' },
   performance: { id: 'performance', label: 'Performance', order: 4, description: 'The page is measurably slower than expected' },
-  implementation: { id: 'implementation', label: 'Implementation', order: 5, description: 'Markup or configuration is wrong even if user impact is indirect' },
-  coverage: { id: 'coverage', label: 'Coverage', order: 6, description: 'Something could not be verified' }
+  security: { id: 'security', label: 'Security', order: 5, description: 'Browser-facing implementation creates avoidable security or privacy risk' },
+  implementation: { id: 'implementation', label: 'Web quality', order: 6, description: 'Markup or configuration is wrong even if user impact is indirect' },
+  coverage: { id: 'coverage', label: 'Coverage', order: 7, description: 'Something could not be verified' }
 });
 
 export const IMPACT_CLASS_IDS = Object.keys(IMPACT_CLASSES);
@@ -30,7 +31,7 @@ const SIGNAL_CLASS = {
   [SIGNALS.A11Y_OTHER]: 'accessibility',
   [SIGNALS.PERFORMANCE_MOBILE]: 'performance',
   [SIGNALS.PERFORMANCE_DESKTOP]: 'performance',
-  [SIGNALS.SECURITY]: 'availability',
+  [SIGNALS.SECURITY]: 'security',
   [SIGNALS.PAGE_STRUCTURE]: 'implementation',
   [SIGNALS.SOCIAL]: 'implementation',
   [SIGNALS.OTHER]: 'implementation'

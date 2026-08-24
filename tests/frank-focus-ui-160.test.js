@@ -15,7 +15,9 @@ test('sidebar is the deterministic evidence ledger, not a duplicate Frank narrat
   assert.match(panelHtml, /Full evidence record/);
   assert.doesNotMatch(panelHtml, /id="frank-step-headline"|id="frank-step-body"/);
   assert.match(panelJs, /renderFrankEvidenceLedger/);
-  assert.match(panelJs, /Verification attempts/);
+  assert.match(panelJs, /Observed by/);
+  assert.match(panelJs, /Reference context/);
+  assert.match(panelJs, /attempts > 1/);
   assert.match(panelJs, /Sources/);
 });
 

@@ -1,4 +1,10 @@
-import { localFrankRuntime, localFrankWalkthrough, probeLocalAi } from './local-ai.js';
+import { localFrankRuntime, localFrankWalkthrough, probeLocalAi, setLocalAiTraceSink, localAiDiagnostics } from './local-ai.js';
+import { presentFinding, presentArea, QA_AREA_ORDER } from './presentation.js';
+import { RuntimeTrace, buildBugReport, bugReportPrivacySummary } from './bug-report.js';
+const RELEASE_VERSION = '1.7.0';
+const runtimeTrace = new RuntimeTrace();
+setLocalAiTraceSink((type,data)=>runtimeTrace.record(`local-ai:${type}`,data));
+
 let report = null, filter = 'all', tab = null, scanInFlight = false, frank = null,
     showAllChecks = false, lastDiagnostic = null, siteSession = null, classFilter = '', cloudAiFallback = false, frankReturnFocus = null, frankRequestSeq = 0, pendingFrankCancel = null;
 
@@ -71,6 +77,7 @@ function frankReadinessLabel(state = {}) {
   return { text: 'Checking Frank', tone: 'info', title: state.message || 'Checking Chrome on-device AI availability.' };
 }
 function renderFrankReadiness(state = localFrankRuntime.snapshot()) {
+  runtimeTrace.record('frank-readiness', { status: state.status, progress: state.progress, code: state.code });
   const chip = $('#frank-readiness');
   if (chip) {
     const label = frankReadinessLabel(state);
@@ -90,8 +97,8 @@ async function currentTabStillMatches(pageUrl, tabId) {
   return Boolean(active.ok && active.tab?.id === tabId && active.tab?.url === pageUrl);
 }
 
-const CLASS_TONE = { availability: 'critical', discoverability: 'warn', accessibility: 'info', performance: 'warn', implementation: 'info', coverage: 'info' };
-const LEDGER_ORDER = ['availability', 'discoverability', 'accessibility', 'performance', 'implementation'];
+const CLASS_TONE = { availability: 'critical', discoverability: 'warn', accessibility: 'info', performance: 'warn', security: 'critical', implementation: 'info', coverage: 'muted' };
+const LEDGER_ORDER = QA_AREA_ORDER;
 
 function findingById(id) { return (report?.findings || []).find(f => f.id === id) || null; }
 function materialFindings() { return (report?.findings || []).filter(f => f.lifecycle !== 'ignored' && f.frankVisible !== false && f.category !== 'context' && f.confidence !== 'inconclusive'); }
@@ -105,7 +112,7 @@ function judgment() {
   if (blockers) return { state: 'blocker', title: `${groups} issue${groups === 1 ? '' : 's'} need attention` };
   if (groups) return { state: 'attention', title: `${groups} issue${groups === 1 ? '' : 's'} worth addressing` };
   if (incompleteCoverage()) return { state: 'incomplete', title: 'No confirmed problems found' };
-  return { state: 'healthy', title: 'Nothing material found' };
+  return { state: 'healthy', title: 'No priority issues found' };
 }
 
 // Grouped view. When Show all checks is on we fall back to the ungrouped list so
@@ -126,17 +133,15 @@ function visibleGroups() {
 function renderLedger() {
   const box = $('#ledger'); box.innerHTML = '';
   const counts = report?.attention?.classCounts || {};
-  const labels = report?.attention?.classLabels || {};
+  const leadClass = (report?.attention?.groups || [])[0]?.impactClass || '';
   const present = LEDGER_ORDER.filter(id => counts[id]);
   if (!present.length) return;
-  const leadClass = (report?.attention?.groups || [])[0]?.impactClass || '';
   for (const id of present) {
+    const item = presentArea(id, counts[id], { lead: id === leadClass, active: classFilter === id });
     const cell = document.createElement('button');
-    cell.type = 'button';
-    cell.className = 'ledger-cell';
-    cell.dataset.lead = String(id === leadClass);
-    cell.setAttribute('aria-pressed', String(classFilter === id));
-    cell.innerHTML = `<b>${esc(counts[id])}</b><span>${esc(labels[id] || id)}</span>`;
+    cell.type = 'button'; cell.className = 'ledger-cell'; cell.dataset.lead = String(item.lead); cell.dataset.tone = item.tone;
+    cell.setAttribute('aria-pressed', String(item.active)); cell.title = item.description;
+    cell.innerHTML = `<span class="ledger-dot" aria-hidden="true"></span><span class="ledger-copy"><b>${esc(item.label)}</b><small>${esc(item.description)}</small></span><span class="ledger-count">${esc(item.count)}</span>`;
     cell.onclick = () => { classFilter = classFilter === id ? '' : id; render(); };
     box.appendChild(cell);
   }
@@ -264,11 +269,11 @@ function renderOverviewOnly() {
   const groups = report.attention?.materialGroupCount || 0;
   const findings = report.attention?.materialFindingCount || 0;
   $('#material-count').textContent = groups === findings
-    ? `${groups} material finding${groups === 1 ? '' : 's'}`
-    : `${groups} grouped from ${findings} findings`;
+    ? `${groups} prioritized issue${groups === 1 ? '' : 's'}`
+    : `${groups} prioritized issue${groups === 1 ? '' : 's'} · ${findings} checks grouped`;
   $('#coverage-state').textContent = incompleteCoverage() ? `${incompleteCoverage()} coverage gap${incompleteCoverage() === 1 ? '' : 's'}` : 'Primary coverage available';
   const mode = report.priorityMode === 'ai' ? 'ai' : 'deterministic';
-  $('#reasoning-mode').textContent = mode === 'ai' ? 'Cloud-enhanced summary' : 'Evidence summary';
+  $('#reasoning-mode').textContent = mode === 'ai' ? 'Cloud-enhanced assessment' : 'Evidence-backed assessment';
   $('#reasoning-mode').dataset.mode = mode;
 }
 
@@ -292,26 +297,34 @@ function render() {
   renderSession();
 
   const wrap = $('#findings'); wrap.innerHTML = '';
-  const labels = report.attention?.classLabels || {};
   for (const g of visibleGroups()) {
     const f = g.lead;
+    const presentation = presentFinding({ ...f, impactClass: g.impactClass }, env);
     const node = $('#card').content.cloneNode(true), card = node.querySelector('.finding');
     card.dataset.tone = f.frankPriority === 'blocker' || f.severity === 'critical' ? 'critical' : f.category === 'fix' ? 'warn' : 'info';
 
     const classChip = card.querySelector('.chip-class');
-    classChip.textContent = labels[g.impactClass] || g.impactClass;
-    classChip.dataset.tone = CLASS_TONE[g.impactClass] || 'info';
+    classChip.textContent = presentation.areaLabel;
+    classChip.dataset.tone = CLASS_TONE[g.impactClass] || presentation.tone || 'info';
+    classChip.title = presentation.areaDescription;
+
+    const priorityChip = card.querySelector('.chip-priority');
+    priorityChip.textContent = presentation.priorityLabel;
+    priorityChip.dataset.tone = /first|high/i.test(presentation.priorityLabel) ? 'critical' : 'muted';
 
     const confidenceChip = card.querySelector('.chip-confidence');
-    confidenceChip.textContent = f.confidence && f.confidence !== 'inconclusive' ? f.confidence : '';
+    confidenceChip.textContent = presentation.confidenceLabel;
     confidenceChip.dataset.tone = /confirmed|corroborated/.test(f.confidence || '') ? 'ok' : 'warn';
 
     const instanceChip = card.querySelector('.chip-instances');
     instanceChip.hidden = g.instanceCount < 2;
     instanceChip.textContent = `${g.instanceCount} instances`;
 
-    card.querySelector('h2').textContent = g.title;
-    card.querySelector('.detail').textContent = f.detail;
+    card.querySelector('h3').textContent = g.size > 1 ? `${presentation.title} (${g.instanceCount} instances)` : presentation.title;
+    card.querySelector('.detail').textContent = presentation.summary;
+    const next = card.querySelector('.finding-next');
+    const nextCopy = next.querySelector('p');
+    nextCopy.textContent = presentation.nextAction; next.hidden = !presentation.nextAction;
     card.querySelector('.finding-context').textContent = findingContext(f);
     card.querySelector('.rule-id').textContent = f.ruleId || '';
     card.querySelector('.technical-sources').textContent = (f.sources || []).join(', ');
@@ -354,7 +367,7 @@ function render() {
       if (!r.ok) return actionState(card, r.error || 'Could not ignore this rule.', 'error');
       report.findings = report.findings.map(x => x.ruleId === f.ruleId ? { ...x, lifecycle: 'ignored' } : x);
       render();
-      notice(`Ignored ${f.title} on this site.`);
+      notice(`Ignored ${presentation.title} on this site.`);
     };
     wrap.appendChild(node);
   }
@@ -365,7 +378,7 @@ function render() {
     empty.innerHTML = classFilter ? '<b>Nothing in this area.</b>Select the area again to clear the filter.'
       : showAllChecks ? '<b>No findings in this filter.</b>The current scan did not return matching observations.'
       : incompleteCoverage() ? '<b>No confirmed issues in the current evidence.</b>Some checks were incomplete. That uncertainty is recorded in Scan coverage rather than turned into defects.'
-      : '<b>Nothing material needs your attention.</b>Use Show all checks to inspect lower-priority observations.';
+      : '<b>No priority issues need attention.</b>Use Show all checks to inspect lower-priority observations.';
     wrap.appendChild(empty);
   }
 }
@@ -378,6 +391,10 @@ function evidenceForStep(step) {
 }
 function targetSelector(step) { return step?.targetId ? frank?.graph?.targets?.[step.targetId]?.selector || '' : ''; }
 function evidenceValue(value) { return typeof value === 'string' ? value : JSON.stringify(value); }
+function humanSource(value) {
+  const key=String(value||'').toLowerCase();
+  return ({'axe':'Axe','browser':'Browser','wcag-translator':'WCAG Translator','meta-state':'Meta State','performance-monitor':'Performance Monitor','browser-performance':'Browser performance'})[key] || String(value||'scanner').replace(/[-_]+/g,' ');
+}
 function addFact(dl, label, value, { mono = true } = {}) {
   if (value === undefined || value === null || value === '') return;
   const dt = document.createElement('dt'), dd = document.createElement('dd');
@@ -386,7 +403,7 @@ function addFact(dl, label, value, { mono = true } = {}) {
 function evidenceRow(item, active = false) {
   const article = document.createElement('article'); article.className = 'evidence-row'; article.dataset.active = String(active);
   const top = document.createElement('div'), label = document.createElement('b'), source = document.createElement('span'), value = document.createElement('p');
-  label.textContent = item.label || item.kind || 'Evidence'; source.textContent = item.source || 'scanner'; value.textContent = evidenceValue(item.value);
+  label.textContent = item.label || item.kind || 'Evidence'; source.textContent = humanSource(item.source); value.textContent = evidenceValue(item.value);
   top.append(label, source); article.append(top, value); return article;
 }
 function renderFrankEvidenceLedger() {
@@ -403,12 +420,20 @@ function renderFrankEvidenceLedger() {
   addFact(facts, 'Rule', finding.ruleId);
   addFact(facts, 'Impact area', finding.impactClass || finding.category, { mono: false });
   addFact(facts, 'Confidence', finding.confidence, { mono: false });
-  addFact(facts, 'Environment', `${graph.environment?.type || 'unknown'}${graph.environment?.confidenceLabel ? ` · ${graph.environment.confidenceLabel}` : ''}`, { mono: false });
+  addFact(facts, 'Environment', graph.environment?.type || 'unknown', { mono: false });
+  if (graph.environment?.confidenceLabel) addFact(facts, 'Environment confidence', graph.environment.confidenceLabel, { mono: false });
   addFact(facts, 'Target', finding.targetType, { mono: false });
   addFact(facts, 'Selector', finding.selector);
-  addFact(facts, 'Sources', (graph.sources || []).join(', '), { mono: false });
-  const attempts = (graph.evidence || []).find(e => e.kind === 'verification-attempts')?.value;
-  addFact(facts, 'Verification attempts', attempts);
+  const allEvidence = graph.evidence || [];
+  const observedSources = [...new Set(allEvidence.filter(e => e.scope !== 'standard' && e.source !== 'wcag-translator').map(e => e.source))];
+  const referenceSources = [...new Set(allEvidence.filter(e => e.scope === 'standard' || e.source === 'wcag-translator').map(e => e.source))];
+  addFact(facts, 'Observed by', observedSources.map(humanSource).join(', '), { mono: false });
+  addFact(facts, 'Reference context', referenceSources.map(humanSource).join(', '), { mono: false });
+  const method = allEvidence.find(e => e.kind === 'verification-method')?.value;
+  const verificationLabel = /axe automated violation/i.test(String(method||'')) ? 'Automated · Axe' : method;
+  addFact(facts, 'Verification', verificationLabel, { mono: false });
+  const attempts = Number(allEvidence.find(e => e.kind === 'verification-attempts')?.value || 0);
+  if (attempts > 1) addFact(facts, 'Verification attempts', attempts);
 
   const record = $('#frank-evidence-record'); record.innerHTML = '';
   for (const item of graph.evidence || []) record.appendChild(evidenceRow(item, false));
@@ -447,6 +472,7 @@ function enterFrank() {
   document.body.dataset.mode = 'frank';
   $('#scanner-view').hidden = true; $('#frank-view').hidden = false;
   $('#host').textContent = report?.page?.hostname || 'Guided investigation';
+  requestAnimationFrame(() => { try { window.scrollTo({ top: 0, behavior: 'auto' }); $('#frank-ledger-title')?.focus?.({ preventScroll: true }); } catch {} });
 }
 function leaveFrankLocal() {
   const returnFocus = frankReturnFocus; frankReturnFocus = null;
@@ -462,6 +488,7 @@ async function startFrank(finding, card) {
   pendingFrankCancel?.();
   const button = card.querySelector('.ask-frank');
   const requestId = ++frankRequestSeq, pageUrl = report.page?.url || tab.url, tabId = tab.id;
+  runtimeTrace.record('frank-request', { ruleId: finding.ruleId, impactClass: finding.impactClass, confidence: finding.confidence });
   frankReturnFocus = button;
   button.disabled = true; button.textContent = 'Preparing Frank';
 
@@ -533,8 +560,10 @@ async function startFrank(finding, card) {
       taskSession = await localFrankRuntime.cloneTask();
       plan = await localFrankWalkthrough({ session: taskSession, graph: prepared.graph, deterministicPlan: prepared.plan });
       reasoning = { status: 'operational', mode: 'ai', provider: 'chrome-built-in', model: 'Chrome built-in model', location: 'device', message: 'Frank improved the verified guidance with an isolated on-device reasoning session. Page evidence stayed on this device.' };
+      runtimeTrace.record('frank-reasoning', { status: reasoning.status, provider: reasoning.provider, mode: reasoning.mode });
     } catch (error) {
       reasoning = { status: 'fallback', mode: 'deterministic', provider: 'chrome-built-in', code: error?.code || 'LOCAL_AI_FAILED', message: String(error?.message || "On-device reasoning did not pass Frank's evidence checks.").slice(0, 240) };
+      runtimeTrace.record('frank-reasoning', { status: reasoning.status, provider: reasoning.provider, mode: reasoning.mode, code: reasoning.code });
     } finally { try { taskSession?.destroy?.(); } catch {} }
   } else if (readiness?.result?.message) {
     reasoning = { status: 'fallback', mode: 'deterministic', provider: 'chrome-built-in', code: readiness.result.code || 'LOCAL_AI_UNAVAILABLE', message: readiness.result.message };
@@ -554,7 +583,7 @@ async function startFrank(finding, card) {
     unsubscribe(); cancelThisRequest(); actionState(card, 'The inspected page changed while Frank was preparing. Ask Frank on the current scan instead.', 'warn'); return;
   }
 
-  const started = await send({ type: 'FRANK_START_PLAN', plan, graph: prepared.graph, tabId: prepared.tabId || tabId }, 9000);
+  const started = await send({ type: 'FRANK_START_PLAN', plan, graph: prepared.graph, reasoning, tabId: prepared.tabId || tabId }, 9000);
   unsubscribe(); button.disabled = false; button.textContent = 'Ask Frank';
   if (pendingFrankCancel === cancelThisRequest) pendingFrankCancel = null;
   if (!started.ok) {
@@ -565,6 +594,7 @@ async function startFrank(finding, card) {
   }
 
   frank = { plan, graph: prepared.graph, tabId: prepared.tabId || tabId, index: 0, finding, reasoning };
+  runtimeTrace.record('frank-started', { mode: plan.mode, provider: reasoning.provider, status: reasoning.status, code: reasoning.code || '', stepCount: plan.steps?.length || 0 });
   enterFrank();
   renderFrankEvidenceLedger();
   const aiOperational = frank.plan.mode === 'ai' && frank.reasoning?.status === 'operational';
@@ -601,6 +631,7 @@ async function loadSession() {
 
 async function rescan() {
   if (scanInFlight) return;
+  runtimeTrace.record('scan-start', { hasTab: Boolean(tab?.id), mode: tab?.id ? 'current-tab' : 'active-tab' });
   pendingFrankCancel?.(); pendingFrankCancel = null; frankRequestSeq++;
   if (frank) await endFrank();
   scanInFlight = true; classFilter = '';
@@ -618,6 +649,7 @@ async function rescan() {
     const enriched = await send({ type: 'ENRICH', report, tabId: tab?.id }, 32000);
     if (enriched.ok) {
       report = enriched.report;
+      runtimeTrace.record('scan-complete', { findingCount: Number(report.findings?.length||0), materialGroupCount: Number(report.attention?.materialGroupCount||0), representedClasses: report.attention?.representedClasses||[], connectedMode: report.connectedMode||'unknown' });
       const changed = [report.lifecycle?.newCount ? `${report.lifecycle.newCount} new` : '', report.lifecycle?.resolvedCount ? `${report.lifecycle.resolvedCount} resolved` : ''].filter(Boolean).join(' · ') || 'No changes';
       $('#new-count').textContent = changed;
       render();
@@ -631,7 +663,7 @@ async function rescan() {
         notice('Browser QA completed locally. The saved assistant access key was rejected. Verify the key under Connection settings to restore connected services.', 'warn');
       } else if (report.connectedMode === 'unavailable') notice('Browser QA completed. The assistant gateway could not be reached. Browser QA remains available with local evidence and verified guidance.', 'warn');
       else notice(unavailable.length ? `Scan complete with limited coverage: ${unavailable.join(', ')}.` : `Scan complete at ${scanned}.`, unavailable.length ? 'warn' : 'ok');
-    } else showFailure(enriched, 'Local scan completed, but connected context could not finish.');
+    } else { runtimeTrace.record('scan-enrichment-failed', { code: enriched?.diagnostic?.id || '', error: enriched?.error || '' }); showFailure(enriched, 'Local scan completed, but connected context could not finish.'); }
     await updateWatch();
   } finally { scanInFlight = false; button.disabled = false; button.textContent = 'Rescan'; }
 }
@@ -641,7 +673,10 @@ async function updateWatch() {
   if (!pageUrl) return;
   let u; try { u = new URL(pageUrl); } catch { return; }
   const data = await chrome.storage.local.get({ watchedOrigins: [] });
-  $('#watch').textContent = data.watchedOrigins.includes(u.origin) ? 'Watching site' : 'Watch this site';
+  const watching = data.watchedOrigins.includes(u.origin);
+  const watch = $('#watch'); const label = watch?.querySelector('b'); const detail = watch?.querySelector('small');
+  if (label) label.textContent = watching ? 'Watching site' : 'Watch this site';
+  if (detail) detail.textContent = watching ? 'Local site session is active' : 'Keep a local site session';
 }
 async function loadSettings() {
   const r = await send({ type: 'GET_ACTIVE' }, 5000);
@@ -661,6 +696,27 @@ $('#copy-diagnostic').onclick = async () => {
   try { await navigator.clipboard.writeText(text); notice('Diagnostics copied.', 'ok'); }
   catch { notice('Clipboard access was not available.', 'error'); }
 };
+
+function currentBugArtifact() {
+  const includeContext = $('#bug-include-context')?.checked === true;
+  return buildBugReport({
+    version: RELEASE_VERSION,
+    trace: runtimeTrace.snapshot(),
+    readiness: localFrankRuntime.snapshot(),
+    report,
+    frank,
+    localAi: localAiDiagnostics({ includeOutput: includeContext }),
+    userNote: $('#bug-note')?.value || '',
+    includeContext,
+    userAgent: navigator.userAgent
+  });
+}
+function refreshBugPrivacyCopy(){ const includeContext = $('#bug-include-context')?.checked === true; $('#bug-privacy-summary').textContent = bugReportPrivacySummary(includeContext); }
+$('#report-bug').onclick = () => { runtimeTrace.record('report-bug-opened'); $('#bug-include-context').checked = false; $('#bug-note').value = ''; refreshBugPrivacyCopy(); $('#bug-dialog').showModal(); };
+$('#bug-include-context').onchange = refreshBugPrivacyCopy;
+$('#bug-copy').onclick = async () => { try { const artifact=currentBugArtifact(); await navigator.clipboard.writeText(JSON.stringify(artifact,null,2)); runtimeTrace.record('report-bug-copied',{includeContext:$('#bug-include-context').checked===true}); notice('Bug report copied. Nothing was sent automatically.','ok'); } catch { notice('Clipboard access was not available.','error'); } };
+$('#bug-download').onclick = () => { const artifact=currentBugArtifact(),blob=new Blob([JSON.stringify(artifact,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`web-qa-assistant-bug-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);runtimeTrace.record('report-bug-downloaded',{includeContext:$('#bug-include-context').checked===true});notice('Bug report downloaded. Review it before sharing with support.','ok'); };
+
 $('#scan').onclick = rescan;
 $('#show-all').onclick = () => { showAllChecks = !showAllChecks; filter = 'all'; classFilter = ''; render(); };
 $('#copy-md').onclick = async () => { if (!report) return; try { await navigator.clipboard.writeText(markdown()); notice('Report copied.', 'ok'); } catch { notice('Clipboard access was not available.', 'error'); } };
@@ -702,6 +758,7 @@ async function ensureGatewayPermission(raw) {
   return chrome.permissions.request({ origins: [pattern] });
 }
 async function runGatewayTest() {
+  runtimeTrace.record('gateway-test-start');
   const apiBase = $('#gateway-url').value.trim(), apiKey = $('#gateway-key').value;
   const button = $('#test-gateway'), status = $('#gateway-status'), list = $('#gateway-integrations');
   if (apiBase && !(await ensureGatewayPermission(apiBase))) {
@@ -737,6 +794,7 @@ async function runGatewayTest() {
       if (row.detail) el.title = row.detail;
       list.appendChild(el);
     }
+    runtimeTrace.record('gateway-test-complete', { reachable: Boolean(r.reachable), auth: r.auth || '', problems: Number(r.problems?.length||0) });
     return r;
   } finally { button.disabled = false; }
 }

@@ -7,7 +7,7 @@ const html=fs.readFileSync('apps/extension/sidepanel.html','utf8');
 const content=fs.readFileSync('apps/extension/content.js','utf8');
 
 test('scan overview does not imply that AI ran before Ask Frank',()=>{
-  assert.match(html,/id="reasoning-mode"[^>]*>Evidence summary</);
+  assert.match(html,/id="reasoning-mode"[^>]*>Evidence-backed assessment</);
   assert.doesNotMatch(panel.slice(panel.indexOf('async function rescan'),panel.indexOf('async function updateWatch')),/connected reasoning/i);
 });
 

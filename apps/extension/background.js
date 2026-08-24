@@ -12,7 +12,7 @@ const LOCAL_APIS = ['http://localhost:3000', 'http://localhost:8787'];
 const GATEWAY_TIMEOUT_MS = 10000;
 const FRANK_TIMEOUT_MS = 16000;
 const dirtyTimers = new Map();
-const RELEASE_VERSION = '1.6.0';
+const RELEASE_VERSION = '1.7.0';
 
 function diagnosticHash(input){let h=2166136261;for(let i=0;i<input.length;i++){h^=input.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36).toUpperCase()}
 function requestId(operation='REQ'){return `WQA-${operation}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,7).toUpperCase()}`}
@@ -176,16 +176,16 @@ async function cloudFrankPlan({graph}){
     return{plan:null,reasoning:{status:'fallback',mode:'deterministic',provider:'openai',code:'INVALID_GATEWAY_PLAN',message:'The cloud fallback returned a walkthrough that did not pass local validation.'}};
   }catch(error){return{plan:null,reasoning:{status:'fallback',mode:'deterministic',provider:'openai',code:error?.code||'GATEWAY_FRANK_FAILED',message:String(error?.message||'Cloud reasoning could not be reached.').slice(0,240)}}}
 }
-async function startFrankPlan({plan,graph,tabId}){
+async function startFrankPlan({plan,graph,tabId,reasoning=null}){
   if(!plan||!graph||!validateFrankPlan(plan,graph))throw new Error('Frank refused to start an invalid walkthrough plan.');
   const inspectedTabId=tabId||(await activeTab())?.id;if(!inspectedTabId)throw new Error('The inspected browser tab is no longer available.');
-  const start=await chrome.tabs.sendMessage(inspectedTabId,{type:'FRANK_START',plan,targets:graph.targets});if(!start?.started)throw new Error('Frank could not start on the inspected page.');
+  const start=await chrome.tabs.sendMessage(inspectedTabId,{type:'FRANK_START',plan,targets:graph.targets,reasoning});if(!start?.started)throw new Error('Frank could not start on the inspected page.');
   return{started:true,tabId:inspectedTabId};
 }
 // Backwards-compatible message for older side panels: deterministic only. New
 // 1.6.0 panels use PREPARE_FRANK, run Chrome built-in AI locally, then call
 // FRANK_START_PLAN with the locally validated plan.
-async function askFrank(message){const prepared=await prepareFrank(message);await startFrankPlan({plan:prepared.plan,graph:prepared.graph,tabId:prepared.tabId});return prepared}
+async function askFrank(message){const prepared=await prepareFrank(message);await startFrankPlan({plan:prepared.plan,graph:prepared.graph,tabId:prepared.tabId,reasoning:prepared.reasoning});return prepared}
 async function recheckFinding({finding,tabId}){
   if(!finding||!tabId)throw new Error('A current finding and inspected tab are required.');
   if(finding.link?.url){

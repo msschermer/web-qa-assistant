@@ -81,7 +81,7 @@ git status
 git checkout -b feature/final-product-pass
 ```
 
-Extract the 1.4 zip to a temporary folder. Then mirror the extracted project into the repository while explicitly preserving Git metadata, installed dependencies and local secrets:
+Extract the current release source zip to a temporary folder. Then mirror the extracted project into the repository while explicitly preserving Git metadata, installed dependencies and local secrets:
 
 ```powershell
 robocopy `
@@ -100,7 +100,7 @@ npm test
 git status
 ```
 
-Do not merge to `main` until the real-browser acceptance checklist in `docs/QA-1.6.0.md` passes.
+Do not merge to `main` until the real-browser acceptance checklist in `docs/QA-1.7.0.md` passes.
 
 ## Branch -> main delivery
 
@@ -117,8 +117,8 @@ Open a pull request. GitHub CI must pass. After merging:
 ```powershell
 git checkout main
 git pull
-git tag v1.6.0
-git push origin v1.6.0
+git tag v1.7.0
+git push origin v1.7.0
 ```
 
 The release workflow validates tag/package/manifest alignment and publishes the extension and full-source release artifacts.

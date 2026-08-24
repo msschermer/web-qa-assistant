@@ -23,6 +23,16 @@ function contrastFacts(axe){
   }
   return null;
 }
+function targetSizeFacts(axe){
+  const diagnostic=String(axe?.failureSummary||'');
+  const size=diagnostic.match(/insufficient size\s*\((\d+(?:\.\d+)?)px by (\d+(?:\.\d+)?)px, should be at least (\d+(?:\.\d+)?)px by (\d+(?:\.\d+)?)px\)/i);
+  const spacing=diagnostic.match(/clickable space has a diameter of (\d+(?:\.\d+)?)px instead of at least (\d+(?:\.\d+)?)px/i);
+  if(!size&&!spacing)return null;
+  return{
+    width:size?.[1]||'',height:size?.[2]||'',minimumWidth:size?.[3]||'',minimumHeight:size?.[4]||'',
+    spacingDiameter:spacing?.[1]||'',spacingMinimum:spacing?.[2]||''
+  };
+}
 export function targetIdForFinding(finding){return finding?.targetType==='visual'&&finding?.targetId?finding.targetId:''}
 
 export function buildEvidenceGraph({finding,page={},coverage={},context={},targetContext=null,environment=null}){
@@ -87,6 +97,15 @@ export function buildEvidenceGraph({finding,page={},coverage={},context={},targe
     push(evidence,{source:'axe',kind:'impact',label:'axe impact',value:finding.axe.impact||finding.severity,scope:'current-page',targetId});
     push(evidence,{source:'axe',kind:'failure-summary',label:'axe diagnostic',value:finding.axe.failureSummary,scope:'current-page',targetId});
     for(const bucket of ['any','all','none'])for(const check of finding.axe.checks?.[bucket]||[])push(evidence,{source:'axe',kind:`check.${bucket}`,label:check.id||`${bucket} check`,value:check.data!=null?{message:check.message||'',data:check.data}:(check.message||''),scope:'current-page',targetId});
+    const targetSize=targetSizeFacts(finding.axe);
+    if(targetSize){
+      push(evidence,{source:'axe',kind:'target-width',label:'Target width',value:targetSize.width?`${targetSize.width}px`:'',scope:'current-page',targetId});
+      push(evidence,{source:'axe',kind:'target-height',label:'Target height',value:targetSize.height?`${targetSize.height}px`:'',scope:'current-page',targetId});
+      const minimum=targetSize.minimumHeight||targetSize.minimumWidth;
+      push(evidence,{source:'axe',kind:'target-minimum',label:'Minimum target size',value:minimum?`${minimum}px × ${minimum}px`:'',scope:'standard',targetId});
+      push(evidence,{source:'axe',kind:'target-spacing',label:'Safe clickable spacing',value:targetSize.spacingDiameter?`${targetSize.spacingDiameter}px`:'',scope:'current-page',targetId});
+      push(evidence,{source:'axe',kind:'target-spacing-required',label:'Required spacing diameter',value:targetSize.spacingMinimum?`${targetSize.spacingMinimum}px`:'',scope:'standard',targetId});
+    }
     const contrast=contrastFacts(finding.axe);
     if(contrast){
       push(evidence,{source:'axe',kind:'contrast-ratio',label:'Observed contrast ratio',value:contrastRatioText(contrast.contrastRatio),scope:'current-page',targetId});
