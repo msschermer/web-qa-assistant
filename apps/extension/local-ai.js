@@ -3,6 +3,17 @@ const LOCAL_AI_OPTIONS = {
   expectedOutputs: [{ type: 'text', languages: ['en'] }]
 };
 
+
+let LOCAL_AI_TRACE_SINK = null;
+let LAST_LOCAL_AI_ATTEMPT = null;
+export function setLocalAiTraceSink(listener){ LOCAL_AI_TRACE_SINK = typeof listener === 'function' ? listener : null; }
+function traceLocalAi(type,data={}){ try { LOCAL_AI_TRACE_SINK?.(type,data); } catch {} }
+export function localAiDiagnostics({ includeOutput = false } = {}) {
+  if (!LAST_LOCAL_AI_ATTEMPT) return null;
+  const { candidate, ...meta } = LAST_LOCAL_AI_ATTEMPT;
+  return includeOutput ? { ...meta, candidate } : meta;
+}
+
 const SYSTEM_PROMPT = `You are Frank, a senior web implementation QA assistant running entirely on the user's device.
 The deterministic scanner has already decided whether the finding exists. Do not invent, upgrade, downgrade, or replace findings.
 Your only job is to make the supplied deterministic guidance more specific and useful using the supplied evidence.
@@ -115,6 +126,7 @@ export class LocalFrankRuntime {
 
   _set(status, extra = {}) {
     this.state = { status, progress: null, code: '', message: STATUS_COPY[status] || '', ...extra };
+    traceLocalAi('readiness', { status: this.state.status, progress: this.state.progress, code: this.state.code });
     for (const listener of this.listeners) { try { listener(this.snapshot()); } catch {} }
     return this.snapshot();
   }
@@ -163,6 +175,7 @@ export class LocalFrankRuntime {
     if (this.baseSession) return Promise.resolve({ ok: true, status: 'ready', session: this.baseSession, message: STATUS_COPY.ready });
     if (this.createPromise) return this.createPromise;
 
+    traceLocalAi('session-create-start', { fromUserGesture, priorStatus: this.state.status });
     this._set(this.state.status === 'downloadable' || this.state.status === 'downloading' ? 'downloading' : 'warming', {
       message: this.state.status === 'downloadable' || this.state.status === 'downloading'
         ? 'Chrome is preparing Frank on this device. You can keep reviewing the scan.'
@@ -195,11 +208,13 @@ export class LocalFrankRuntime {
     this.createPromise = Promise.resolve(promise)
       .then(session => {
         this.baseSession = session;
+        traceLocalAi('session-create-ready', { fromUserGesture });
         this._set('ready');
         return { ok: true, status: 'ready', session, message: STATUS_COPY.ready };
       })
       .catch(error => {
         const activation = error?.name === 'NotAllowedError';
+        traceLocalAi('session-create-failed', { name: error?.name || '', message: clip(error?.message || error, 180) });
         const code = activation ? 'LOCAL_AI_ACTIVATION_REQUIRED' : 'LOCAL_AI_CREATE_FAILED';
         const message = clip(error?.message || error, 220);
         this._set(activation ? 'downloadable' : 'error', { code, message: activation ? STATUS_COPY.downloadable : message });
@@ -212,7 +227,9 @@ export class LocalFrankRuntime {
   async cloneTask({ signal } = {}) {
     if (!this.baseSession) throw Object.assign(new Error('Frank is not ready on this device yet.'), { code: 'LOCAL_AI_NOT_READY' });
     if (typeof this.baseSession.clone !== 'function') throw Object.assign(new Error('This Chrome build does not support isolated Frank task sessions.'), { code: 'LOCAL_AI_CLONE_UNAVAILABLE' });
+    traceLocalAi('task-clone-start');
     const clone = await this.baseSession.clone(signal ? { signal } : undefined);
+    traceLocalAi('task-clone-ready');
     return clone;
   }
 
@@ -247,18 +264,27 @@ function allEvidenceText(graph = {}) {
   return JSON.stringify({ finding: graph.finding || {}, evidence: graph.evidence || [], environment: graph.environment || {} }).toLowerCase();
 }
 
-const REWRITE_STOP = new Set(['the','and','for','with','this','that','from','into','after','before','while','when','then','than','your','their','there','here','same','current','existing','affected','should','could','would','can','may','make','making','change','changes','check','recheck','confirm','issue','finding','element','page','user','users']);
-function contentTokens(value) {
-  return new Set((String(value || '').toLowerCase().match(/[a-z0-9][a-z0-9._:-]{2,}/g) || []).filter(token => !REWRITE_STOP.has(token)));
-}
 function deterministicBody(plan, type) { return String((plan?.steps || []).find(step => step.type === type)?.body || ''); }
-function rewriteGrounded(candidateText, baselineText, minimum = 1) {
-  const baseline = contentTokens(baselineText), candidate = contentTokens(candidateText);
-  if (!baseline.size) return true;
-  let overlap = 0; for (const token of baseline) if (candidate.has(token)) overlap++;
-  return overlap >= Math.min(minimum, baseline.size);
+function compact(value){return String(value||'').toLowerCase().replace(/\s+/g,'')}
+function evidenceValue(graph,kind){return (graph?.evidence||[]).find(e=>e.kind===kind)?.value}
+function requireRemediationFamily(ruleId, remediation){
+  const text=String(remediation||'').toLowerCase();
+  if(/color-contrast/.test(ruleId))return /contrast|color|foreground|background|darken|lighten/.test(text);
+  if(/target-size/.test(ruleId))return /target|clickable|hit[ -]?area|size|height|width|padding|spacing|margin|separation/.test(text);
+  if(/(?:label|button-name|link-name|aria.*name|input.*name)/.test(ruleId))return /accessible name|label|aria-label|aria-labelledby|name/.test(text);
+  if(/image-alt|role-img|input-image|object-alt|area-alt/.test(ruleId))return /\balt\b|alternative text|accessible name/.test(text);
+  if(/broken-link|link-404|link-410|link-5xx/.test(ruleId))return /link|destination|url|restore|redirect|server|route/.test(text);
+  if(/link-redirect-error/.test(ruleId))return /redirect|loop|chain|destination|rule/.test(text);
+  if(/noindex|robots/.test(ruleId))return /noindex|robots|index|x-robots|meta/.test(text);
+  if(/canonical/.test(ruleId))return /canonical|preferred url|head|url/.test(text);
+  if(ruleId==='performance.browser.lcp')return /lcp|largest contentful|image|font|css|render|priority|preload/.test(text);
+  if(ruleId==='performance.browser.ttfb')return /ttfb|first byte|server|origin|cache|cdn|redirect|backend|database|api/.test(text);
+  if(ruleId==='performance.browser.weight')return /transfer|payload|image|script|font|asset|compress|bundle|defer|third-party/.test(text);
+  if(/blank-opener/.test(ruleId))return /noopener|noreferrer|rel=|opener/.test(text);
+  if(/meta-refresh/.test(ruleId))return /meta refresh|redirect|navigation|3xx/.test(text);
+  if(/charset/.test(ruleId))return /charset|utf-8|content-type|encoding/.test(text);
+  return true;
 }
-
 export function validateLocalFrankOutput(candidate, graph = {}, deterministicPlan = null) {
   if (!candidate || typeof candidate !== 'object') return { ok: false, code: 'LOCAL_AI_INVALID_JSON', message: 'The on-device model did not return the expected structured guidance.' };
   for (const key of ['summary', 'interpretation', 'impact', 'remediation', 'verification']) {
@@ -270,7 +296,9 @@ export function validateLocalFrankOutput(candidate, graph = {}, deterministicPla
   }
 
   const ruleId = String(graph.finding?.ruleId || '');
-  if (/https?:\/\//i.test(text)) return { ok: false, code: 'LOCAL_AI_INVENTED_URL', message: 'The on-device response introduced a URL that is not part of Frank guidance.' };
+  const evidenceUrls = new Set();
+  for (const match of allEvidenceText(graph).matchAll(/https?:\/\/[^\s\"'<>]+/gi)) { try { const u = new URL(match[0]); evidenceUrls.add(`${u.origin}${u.pathname}`.toLowerCase()); } catch {} }
+  for (const match of text.matchAll(/https?:\/\/[^\s\"'<>]+/gi)) { let normalized=''; try { const u=new URL(match[0]); normalized=`${u.origin}${u.pathname}`.toLowerCase(); } catch {} if (!normalized || !evidenceUrls.has(normalized)) return { ok: false, code: 'LOCAL_AI_INVENTED_URL', message: 'The on-device response introduced a URL that was not present in the verified evidence.' }; }
 
   const allowedStandards = new Set((graph.finding?.wcag || []).map(value => String(value).trim()).filter(Boolean));
   for (const match of text.matchAll(/\b(?:wcag\s*)?(\d\.\d\.\d)\b/gi)) {
@@ -300,12 +328,19 @@ export function validateLocalFrankOutput(candidate, graph = {}, deterministicPla
     if (!verifiedGuidanceText.includes(match[0].toLowerCase())) return { ok: false, code: 'LOCAL_AI_UNSUPPORTED_HIGH_RISK_ACTION', message: 'The on-device response introduced a high-risk action or data concept that was not present in the verified guidance.' };
   }
 
-  if (deterministicPlan) {
-    const fields = [['interpretation', 2], ['impact', 1], ['remediation', 2], ['verification', 1]];
-    for (const [field, minimum] of fields) {
-      const baseline = deterministicBody(deterministicPlan, field);
-      if (baseline && !rewriteGrounded(candidate[field], baseline, minimum)) return { ok: false, code: 'LOCAL_AI_SEMANTIC_DRIFT', message: `The on-device ${field} drifted too far from the verified deterministic guidance.` };
-    }
+  if (deterministicPlan && !requireRemediationFamily(ruleId, candidate.remediation)) {
+    return { ok: false, code: 'LOCAL_AI_REMEDIATION_DRIFT', message: 'The on-device remediation changed the type of fix instead of improving the verified recommendation.' };
+  }
+
+  if (/target-size/.test(ruleId)) {
+    const minimum=String(evidenceValue(graph,'target-minimum')||'').match(/\d+(?:\.\d+)?px/i)?.[0]||'';
+    const observed=[evidenceValue(graph,'target-height'),evidenceValue(graph,'target-spacing')].map(v=>String(v||'').match(/\d+(?:\.\d+)?px/i)?.[0]||'').filter(Boolean);
+    const all=compact(`${candidate.interpretation} ${candidate.remediation} ${candidate.verification}`);
+    if(minimum&&!all.includes(compact(minimum)))return { ok:false, code:'LOCAL_AI_MISSED_TARGET_MINIMUM', message:'The on-device response omitted the verified minimum target-size requirement.' };
+    if(observed.length&&!observed.some(value=>all.includes(compact(value))))return { ok:false, code:'LOCAL_AI_MISSED_TARGET_MEASUREMENT', message:'The on-device response omitted the observed failing target-size or spacing measurement.' };
+    const impact=String(candidate.impact||'').toLowerCase();
+    if(!/touch|mouse|stylus|pointer|fine[- ]motor|motor precision|tremor|activate|activation/.test(impact))return { ok:false, code:'LOCAL_AI_TARGET_IMPACT_DRIFT', message:'The on-device impact explanation no longer describes the verified pointer-target problem.' };
+    if(/screen[- ]?reader|keyboard|low[- ]vision|contrast sensitivity/.test(impact))return { ok:false, code:'LOCAL_AI_TARGET_UNSUPPORTED_MODALITY', message:'The on-device impact explanation introduced an accessibility modality that this target-size finding does not establish.' };
   }
 
   const compactEvidence = evidenceText.replace(/\s+/g, '');
@@ -325,6 +360,10 @@ export function validateLocalFrankOutput(candidate, graph = {}, deterministicPla
       if (!allowedRatios.has(match[0].toLowerCase())) return { ok: false, code: 'LOCAL_AI_INVENTED_CONTRAST_RATIO', message: 'The on-device response introduced a contrast ratio that was not present in the evidence.' };
     }
   }
+
+  if (ruleId === 'performance.browser.lcp') { const observed=String(evidenceValue(graph,'lcp')||evidenceValue(graph,'largest-contentful-paint')||'').replace(/\s+/g,'').toLowerCase(); if(observed && !text.replace(/\s+/g,'').includes(observed)) return { ok:false, code:'LOCAL_AI_MISSED_LCP', message:'The on-device response omitted the observed LCP value.' }; }
+  if (ruleId === 'performance.browser.ttfb') { const observed=String(evidenceValue(graph,'ttfb')||'').replace(/\s+/g,'').toLowerCase(); if(observed && !text.replace(/\s+/g,'').includes(observed)) return { ok:false, code:'LOCAL_AI_MISSED_TTFB', message:'The on-device response omitted the observed TTFB value.' }; }
+
 
   const purpose = String(findEvidence(graph, 'image-purpose') || '').toLowerCase();
   if (purpose === 'decorative') {
@@ -360,15 +399,19 @@ export async function localFrankWalkthrough({ session, graph, deterministicPlan,
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    LAST_LOCAL_AI_ATTEMPT = { at: new Date().toISOString(), status: 'prompting', code: '', candidate: null };
+    traceLocalAi('prompt-start', { ruleId: clip(graph?.finding?.ruleId, 120) });
     const raw = await session.prompt(
       `Improve the deterministic Frank guidance below. Use the observed values and affected element details when present. Do not add new findings, numbers, causes, selectors, URLs, standards, component names, or page positions that are not in the input. Return one JSON object with exactly these string fields: summary, interpretation, impact, remediation, verification.\n\n${JSON.stringify(payload)}`,
       { signal: controller.signal, responseConstraint: LOCAL_FRANK_RESPONSE_SCHEMA, omitResponseConstraintInput: true }
     );
     let candidate;
     try { candidate = JSON.parse(raw); }
-    catch { throw Object.assign(new Error('The on-device model returned invalid structured guidance.'), { code: 'LOCAL_AI_INVALID_JSON' }); }
+    catch { LAST_LOCAL_AI_ATTEMPT = { at: new Date().toISOString(), status: 'rejected', code: 'LOCAL_AI_INVALID_JSON', candidate: null }; traceLocalAi('prompt-rejected', { code: 'LOCAL_AI_INVALID_JSON' }); throw Object.assign(new Error('The on-device model returned invalid structured guidance.'), { code: 'LOCAL_AI_INVALID_JSON' }); }
     const quality = validateLocalFrankOutput(candidate, graph, deterministicPlan);
-    if (!quality.ok) throw Object.assign(new Error(quality.message), { code: quality.code });
+    if (!quality.ok) { LAST_LOCAL_AI_ATTEMPT = { at: new Date().toISOString(), status: 'rejected', code: quality.code, candidate }; traceLocalAi('prompt-rejected', { code: quality.code }); throw Object.assign(new Error(quality.message), { code: quality.code }); }
+    LAST_LOCAL_AI_ATTEMPT = { at: new Date().toISOString(), status: 'accepted', code: '', candidate };
+    traceLocalAi('prompt-accepted', { ruleId: clip(graph?.finding?.ruleId, 120) });
     return mergeLocalFrankGuidance(deterministicPlan, candidate);
   } finally {
     clearTimeout(timer);

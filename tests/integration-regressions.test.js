@@ -51,8 +51,9 @@ test('side panel gives useful action feedback and supports copyable diagnostics'
   assert.match(panel, /extension action timed out/i);
   assert.match(panel, /showFailure/);
   assert.match(panel, /Diagnostics copied/);
-  assert.match(html, /Technical diagnostics/);
-  assert.match(html, /Copy diagnostics/);
+  assert.match(html, /Latest technical error/);
+  assert.match(html, /Copy technical error/);
+  assert.match(html, /Report a bug/);
 });
 
 test('rescan, highlight and recheck stay bound to the inspected tab', () => {
@@ -100,7 +101,7 @@ test('release build cannot silently ship stale extension files', () => {
   assert.equal(lock.packages[''].version, pkg.version);
   assert.equal(distManifest.version, sourceManifest.version);
   assert.match(distPanel, /Ask Frank/);
-  assert.match(distPanel, /Evidence and technical details/);
+  assert.match(distPanel, /Technical evidence/);
   assert.doesNotMatch(distPanel, />Explain</);
   assert.doesNotMatch(distBackground, /return await r\.json\(\)/);
 });
@@ -123,7 +124,7 @@ test('web and extension surfaces lead with Frank judgment while preserving quiet
   assert.match(webHtml, /Show all checks/);
   assert.match(panel, /judgment\(\)/);
   assert.match(panelHtml, /id="frank-overview"/);
-  assert.match(panelHtml, /Evidence and technical details/);
+  assert.match(panelHtml, /Technical evidence/);
   assert.match(panelHtml, /Site session/);
   assert.match(panelHtml, /Resolved this scan/);
 });
@@ -235,7 +236,7 @@ test('public web scanner and extension cloud AI remain opt-in while the extensio
 
 test('extension manifest pins a stable unpacked identity for settings continuity',()=>{
   const manifest=JSON.parse(read('apps/extension/manifest.json'));
-  assert.equal(manifest.version,'1.6.0');
+  assert.equal(manifest.version,'1.7.1');
   assert.match(manifest.key,/^[A-Za-z0-9+/=]+$/);
   assert.ok(manifest.key.length>300);
 });

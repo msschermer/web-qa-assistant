@@ -119,7 +119,7 @@ test('Frank rejects invented measured values outside the bounded evidence', () =
   assert.equal(result.code, 'LOCAL_AI_INVENTED_MEASUREMENT');
 });
 
-test('on-device rewrite is rejected when remediation drifts away from deterministic guidance', async () => {
+test('on-device rewrite is rejected when remediation changes the verified fix family', async () => {
   const finding = {
     id: 'axe.color-contrast:drift', ruleId: 'axe.color-contrast', title: 'Contrast issue', detail: 'RUNNING is 3.43:1 against its background; 4.5:1 is required.',
     category: 'fix', severity: 'high', confidence: 'confirmed', selector: '.status', targetType: 'visual', targetId: 'target_status', sources: ['axe'], wcag: ['1.4.3'],
@@ -131,7 +131,7 @@ test('on-device rewrite is rejected when remediation drifts away from determinis
   const driftGraph = buildEvidenceGraph({ finding, page: { url: 'https://example.com' }, environment: { type: 'production' }, targetContext: { found: true, selector: '.status', tag: 'span', text: 'RUNNING', styles: {} } });
   const plan = deterministicFrankPlan(driftGraph);
   const response = candidate({ remediation: 'Rewrite the typography system across the page and replace the font family while preserving 3.43:1 and 4.5:1 in the report.' });
-  await assert.rejects(localFrankWalkthrough({ session: { prompt: async () => JSON.stringify(response) }, graph: driftGraph, deterministicPlan: plan }), error => error?.code === 'LOCAL_AI_SEMANTIC_DRIFT');
+  await assert.rejects(localFrankWalkthrough({ session: { prompt: async () => JSON.stringify(response) }, graph: driftGraph, deterministicPlan: plan }), error => error?.code === 'LOCAL_AI_REMEDIATION_DRIFT');
 });
 
 test('on-device rewrite is rejected when hostile page text steers it toward a high-risk action', async () => {

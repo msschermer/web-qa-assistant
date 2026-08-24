@@ -2,6 +2,13 @@
   const CATEGORY_RANK={fix:3,review:2,context:1};
   const SEVERITY_RANK={critical:5,high:4,medium:3,low:2,info:1};
   const targetRegistry=new Map();
+  // A stable on-page marker plus a structural fingerprint. The live element map
+  // alone was not enough: it is cleared on every scan and holds nothing after a
+  // re-render, which is why Frank used to lose the element it was pointing at.
+  const TARGET_ATTR='data-web-qa-target';
+  const targetFingerprints=new Map();
+  const SHADOW_ROOT_BUDGET=80;
+  let lastResolutionStage='';
   const linkVerificationCache=new Map();
 
   function text(value){return String(value??'').trim()}
@@ -22,23 +29,198 @@
     }
     return parts.join(' > ');
   }
-  function snippet(el){return el?clip(el.outerHTML||el.textContent||'',520):''}
-  function resolveSelector(selector){if(!selector)return null;try{return document.querySelector(selector)}catch{return null}}
+  // The marker is an internal implementation detail, so it never reaches
+  // evidence, Frank, or a copied snippet.
+  function cleanMarkup(html){return String(html??'').replace(new RegExp(`\\s${TARGET_ATTR}="[^"]*"`,'g'),'')}
+  function snippet(el){return el?clip(cleanMarkup(el.outerHTML||'')||el.textContent||'',520):''}
+  function shadowRoots(){
+    const roots=[];
+    const walk=root=>{
+      if(roots.length>=SHADOW_ROOT_BUDGET)return;
+      let hosts=[];
+      try{hosts=root.querySelectorAll('*')}catch{return}
+      for(const host of hosts){
+        if(!host.shadowRoot)continue;
+        roots.push(host.shadowRoot);
+        if(roots.length>=SHADOW_ROOT_BUDGET)return;
+        walk(host.shadowRoot);
+      }
+    };
+    try{walk(document)}catch{}
+    return roots;
+  }
+  // Open shadow roots are common on component-driven sites, and a plain
+  // document.querySelector silently returns null for anything inside one.
+  function deepQuery(selector){
+    if(!selector)return null;
+    try{const direct=document.querySelector(selector);if(direct)return direct}catch{return null}
+    for(const root of shadowRoots()){
+      try{const hit=root.querySelector(selector);if(hit)return hit}catch{}
+    }
+    return null;
+  }
+  function uniqueMatch(selector){
+    if(!selector)return null;
+    try{const nodes=document.querySelectorAll(selector);if(nodes.length===1)return nodes[0]}catch{return null}
+    return null;
+  }
+  function resolveSelector(selector){return deepQuery(selector)}
   function presentationForElement(el){
     if(!el)return'page';
     if(document.head?.contains(el)||['META','LINK','TITLE','SCRIPT','STYLE'].includes(el.tagName))return'document';
     return document.body?.contains(el)?'visual':'page';
   }
+  // A structural description that survives a re-render, so an element can be
+  // recognised again even when its generated classes or DOM position changed.
+  function describeTarget(el){
+    return{
+      tag:(el.localName||'').toLowerCase(),
+      elId:el.id||'',
+      classes:[...(el.classList||[])].filter(Boolean).slice(0,6),
+      role:attr(el,'role'),
+      ariaLabel:attr(el,'aria-label'),
+      name:attr(el,'name'),
+      alt:attr(el,'alt'),
+      type:attr(el,'type'),
+      src:attr(el,'src').slice(0,300),
+      href:attr(el,'href').slice(0,300),
+      text:clip(el.textContent,120)
+    };
+  }
+  function scoreCandidate(el,d){
+    if(!el||el.nodeType!==1||(el.localName||'').toLowerCase()!==d.tag)return 0;
+    let score=0;
+    if(d.elId&&el.id===d.elId)score+=6;
+    if(d.src&&attr(el,'src').slice(0,300)===d.src)score+=5;
+    if(d.href&&attr(el,'href').slice(0,300)===d.href)score+=4;
+    if(d.alt&&attr(el,'alt')===d.alt)score+=3;
+    if(d.ariaLabel&&attr(el,'aria-label')===d.ariaLabel)score+=3;
+    if(d.name&&attr(el,'name')===d.name)score+=2;
+    if(d.type&&attr(el,'type')===d.type)score+=1;
+    if(d.role&&attr(el,'role')===d.role)score+=1;
+    if(d.classes.length){
+      const present=new Set([...(el.classList||[])]);
+      score+=Math.min(3,d.classes.filter(c=>present.has(c)).length);
+    }
+    if(d.text&&clip(el.textContent,120)===d.text)score+=3;
+    return score;
+  }
+  // A recorded selector often matches several elements after a page changes.
+  // Taking the first match blindly is how Frank ended up highlighting the wrong
+  // row; the fingerprint picks between them when it can, and only falls back to
+  // the first match when it genuinely cannot tell them apart.
+  function selectorCandidate(selector,targetId){
+    if(!selector)return null;
+    let nodes=[];
+    try{nodes=[...document.querySelectorAll(selector)]}catch{nodes=[]}
+    if(!nodes.length)return deepQuery(selector);
+    if(nodes.length===1)return nodes[0];
+    // Several matches and no way to tell them apart. Highlighting the first is
+    // a coin flip, and a confident wrong highlight sends someone to edit the
+    // wrong element, so this hands off to the rest of the chain instead.
+    return bestCandidate(nodes,targetFingerprints.get(targetId));
+  }
+  function bestCandidate(nodes,d){
+    if(!d)return null;
+    let best=null,bestScore=0,tied=false;
+    for(const el of nodes){
+      const score=scoreCandidate(el,d);
+      if(score>bestScore){best=el;bestScore=score;tied=false}
+      else if(score===bestScore&&score>0)tied=true;
+    }
+    return bestScore>0&&!tied?best:null;
+  }
+  function fingerprintResolve(targetId){
+    const d=targetFingerprints.get(targetId);
+    if(!d?.tag)return null;
+    let nodes=[];
+    try{nodes=[...document.getElementsByTagName(d.tag)].slice(0,800)}catch{return null}
+    let best=null,bestScore=0,tied=false;
+    for(const el of nodes){
+      const score=scoreCandidate(el,d);
+      if(score>bestScore){best=el;bestScore=score;tied=false}
+      else if(score===bestScore&&score>0)tied=true;
+    }
+    // An ambiguous match is worse than no match: pointing confidently at the
+    // wrong element is the failure mode this whole path exists to avoid.
+    return bestScore>=5&&!tied?best:null;
+  }
+  // The generated path is capped at six ancestors and leans on class names, so
+  // a wrapper change breaks the whole selector. Dropping leading segments
+  // recovers the element whenever the shortened path is still unambiguous.
+  function relaxedSelectorMatch(selector){
+    const parts=String(selector||'').split(' > ').filter(Boolean);
+    if(parts.length<2)return null;
+    for(let i=1;i<parts.length;i++){
+      const hit=uniqueMatch(parts.slice(i).join(' > '));
+      if(hit)return hit;
+    }
+    const stripped=parts.map(p=>p.replace(/:nth-of-type\(\d+\)/g,'')).filter(Boolean);
+    for(let i=0;i<stripped.length;i++){
+      const hit=uniqueMatch(stripped.slice(i).join(' > '));
+      if(hit)return hit;
+    }
+    return null;
+  }
   function registerTarget(el,seed){
     if(!el||el.nodeType!==1)return'';
     const targetId=`target_${hash(`${seed}|${selectorFor(el)}|${el.tagName}`)}`;
     targetRegistry.set(targetId,el);
+    targetFingerprints.set(targetId,describeTarget(el));
     return targetId;
   }
+  function clearTargetMarkers(){
+    try{document.querySelectorAll(`[${TARGET_ATTR}]`).forEach(el=>el.removeAttribute(TARGET_ATTR))}catch{}
+  }
+  // Ordered from most to least certain. Each stage that succeeds refreshes the
+  // live map so repeated lookups during a walkthrough stay cheap.
   function resolveTarget(targetId,selector=''){
-    const el=targetId?targetRegistry.get(targetId):null;
-    if(el?.isConnected)return el;
-    return resolveSelector(selector);
+    const cached=targetId?targetRegistry.get(targetId):null;
+    if(cached?.isConnected){lastResolutionStage='live-reference';return cached}
+    const stages=targetId?[
+      ['selector',()=>selectorCandidate(selector,targetId)],
+      ['relaxed-selector',()=>relaxedSelectorMatch(selector)],
+      ['fingerprint',()=>fingerprintResolve(targetId)]
+    ]:[
+      ['selector',()=>resolveSelector(selector)],
+      ['relaxed-selector',()=>relaxedSelectorMatch(selector)]
+    ];
+    lastResolutionStage='';
+    for(const [name,stage] of stages){
+      let el=null;
+      try{el=stage()}catch{el=null}
+      if(el?.isConnected)lastResolutionStage=name;
+      if(el?.isConnected){
+        if(targetId){
+          targetRegistry.set(targetId,el);
+          if(!targetFingerprints.has(targetId))targetFingerprints.set(targetId,describeTarget(el));
+        }
+        return el;
+      }
+    }
+    lastResolutionStage='unresolved';
+    return null;
+  }
+  // Frank needs to explain an unresolved target, not just fail quietly. This
+  // reports what was looked for and what the page currently offers instead.
+  function resolvedTargetState(targetId,selector=''){
+    const el=resolveTarget(targetId,selector);
+    if(el){
+      const rect=el.getBoundingClientRect();
+      const style=getComputedStyle(el);
+      const offscreen=rect.width<1||rect.height<1;
+      const invisible=style.display==='none'||style.visibility==='hidden'||(style.opacity!==''&&Number(style.opacity)===0);
+      return{found:true,via:lastResolutionStage,visible:!offscreen&&!invisible,tag:el.tagName.toLowerCase(),selector:selector||selectorFor(el),
+        reason:invisible?'The element is present but hidden by its current styles.':offscreen?'The element is present but currently has no rendered size.':''};
+    }
+    const d=targetFingerprints.get(targetId)||null;
+    let selectorMatches=0;
+    try{selectorMatches=selector?document.querySelectorAll(selector).length:0}catch{selectorMatches=0}
+    const reason=!selector&&!targetId?'This finding is not tied to a single page element.'
+      :selectorMatches>1?'The recorded selector now matches several elements, so Frank will not guess which one it was.'
+      :'The element was on the page when it was scanned and is not there now. It was most likely re-rendered, lazily removed, or behind a state change.';
+    return{found:false,via:'unresolved',visible:false,tag:d?.tag||'',selector,selectorMatches,reason,
+      described:d?{text:d.text,alt:d.alt,href:d.href,src:d.src,classes:d.classes.join(' ')}:null};
   }
   function finding({ruleId,title,detail,category='review',severity='medium',selector='',element=null,targetType='',evidence='',sources=['browser'],wcag=[],helpUrl='',count=1,confidence='confirmed',verification=null,extra={}}){
     const resolved=element||resolveSelector(selector);
@@ -62,7 +244,7 @@
   }
 
   function run(){
-    targetRegistry.clear();
+    clearTargetMarkers();targetRegistry.clear();targetFingerprints.clear();
     const findings=[],page=pageSummary(),titleEl=document.querySelector('title'),descEl=document.querySelector('meta[name="description" i]'),canonicalEl=document.querySelector('link[rel~="canonical"]'),robotsEl=document.querySelector('meta[name="robots" i]'),viewportEl=document.querySelector('meta[name="viewport" i]'),headings=[...document.querySelectorAll('h1,h2,h3,h4,h5,h6')],h1s=headings.filter(h=>h.tagName==='H1');
 
     if(!text(document.title))findings.push(finding({ruleId:'seo.title-missing',title:'Page title is missing',detail:'The rendered document has no usable title.',category:'fix',severity:'high',selector:'head > title',element:titleEl,targetType:'document',evidence:snippet(titleEl)}));
@@ -472,9 +654,9 @@
     return{...local,browserPerformance:local.browserPerformance||null,findings:[...seen.values()],linkAudit:{checked:linkResult.checked||0,verifiedHealthy:linkResult.verifiedHealthy||0,confirmedIssues:linkResult.confirmedIssues||0,inconclusive:linkResult.inconclusive||0,incompleteChecks:linkResult.incompleteChecks||[],reachedLimit:!!linkResult.reachedLimit,degraded:!!linkResult.degraded,cached:linkResult.cached||0},coverage:{...local.coverage,links:linkResult.status==='partial'?'partial':linkResult.status==='unavailable'?'unavailable':'complete',axe:axeResults?'complete':'unavailable'}};
   }
 
-  globalThis.WebQARules={run,axeFindings,auditLinks,recheckLink,merge,selectorFor,resolveTarget,performanceSignals,preparePerformanceSignals,semanticContextFor,targetContextFor(targetId,selector='',ruleId=''){
+  globalThis.WebQARules={run,axeFindings,resolvedTargetState,auditLinks,recheckLink,merge,selectorFor,resolveTarget,performanceSignals,preparePerformanceSignals,semanticContextFor,targetContextFor(targetId,selector='',ruleId=''){
     const el=resolveTarget(targetId,selector);if(!el)return null;
     const style=getComputedStyle(el),rect=el.getBoundingClientRect();
-    return{found:true,tag:el.tagName.toLowerCase(),selector:selector||selectorFor(el),markup:clip(el.outerHTML,1400),text:clip(el.innerText||el.textContent,500),semantics:semanticContextFor(el,ruleId),rect:{x:Math.round(rect.x),y:Math.round(rect.y),width:Math.round(rect.width),height:Math.round(rect.height)},styles:{color:style.color,backgroundColor:style.backgroundColor,fontSize:style.fontSize,fontWeight:style.fontWeight,lineHeight:style.lineHeight,display:style.display,position:style.position}};
+    return{found:true,tag:el.tagName.toLowerCase(),selector:selector||selectorFor(el),markup:clip(cleanMarkup(el.outerHTML),1400),text:clip(el.innerText||el.textContent,500),semantics:semanticContextFor(el,ruleId),rect:{x:Math.round(rect.x),y:Math.round(rect.y),width:Math.round(rect.width),height:Math.round(rect.height)},styles:{color:style.color,backgroundColor:style.backgroundColor,fontSize:style.fontSize,fontWeight:style.fontWeight,lineHeight:style.lineHeight,display:style.display,position:style.position}};
   }};
 })();

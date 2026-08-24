@@ -9,19 +9,23 @@
 </head>
 <body>
 <header class="app-header">
-  <div class="app-id">
-    <h1 id="app-name">Web QA Assistant</h1>
-    <p id="host">Current page</p>
+  <div class="brand-lockup">
+    <span class="brand-mark" aria-hidden="true">WQ</span>
+    <div class="app-id">
+      <h1 id="app-name">Web QA Assistant</h1>
+      <p id="host">Current page</p>
+    </div>
   </div>
   <button id="scan" class="btn btn-primary">Rescan</button>
 </header>
 
-<div class="contextbar">
+<div class="contextbar" aria-label="Page context">
+  <span class="context-label">Page context</span>
   <span id="environment-state" class="chip"></span>
   <span id="new-count" class="chip chip-quiet"></span>
   <label class="env-control">
     <span>Environment</span>
-    <select id="environment" aria-label="Environment">
+    <select id="environment" aria-label="Environment" title="Environment changes how deployment-sensitive findings such as noindex are prioritized.">
       <option value="auto">Auto</option>
       <option value="production">Production</option>
       <option value="staging">Staging</option>
@@ -33,76 +37,101 @@
 
 <main>
   <div id="notice" role="status" aria-live="polite"></div>
-  <details id="diagnostic" class="panel diagnostic" hidden>
-    <summary>Technical diagnostics</summary>
-    <div class="panel-body">
-      <dl class="kv"><dt>Diagnostic ID</dt><dd id="diagnostic-id"></dd><dt>Operation</dt><dd id="diagnostic-operation"></dd><dt>Version</dt><dd id="diagnostic-version"></dd></dl>
-      <pre id="diagnostic-message"></pre>
-      <button id="copy-diagnostic" class="btn btn-quiet">Copy diagnostics</button>
-    </div>
-  </details>
 
   <div id="scanner-view">
-    <section id="summary" hidden>
-      <article id="frank-overview" class="brief" data-state="loading">
-        <div class="brief-top">
-          <span class="frank-mark" aria-hidden="true">F</span>
-          <span class="frank-name">Frank</span>
-          <span id="reasoning-mode" class="chip chip-quiet">Evidence summary</span><span id="frank-readiness" class="chip" data-state="checking">Checking Frank</span>
+    <section id="summary" hidden class="workspace">
+      <section class="workspace-section assessment-section" aria-labelledby="assessment-heading">
+        <div class="workspace-section-head">
+          <div><span class="section-kicker">Current page</span><h2 id="assessment-heading">Page assessment</h2></div>
+          <span class="help-dot" tabindex="0" role="note" aria-label="Page assessment explanation" data-tooltip="Frank’s prioritized summary is built from verified scanner evidence. AI does not decide whether a finding exists.">?</span>
         </div>
-        <h2 id="judgment-title">Analysing this page</h2>
-        <p id="brief"></p>
-        <div class="brief-meta">
-          <span id="material-count"></span>
-          <span id="coverage-state"></span>
+        <article id="frank-overview" class="brief" data-state="loading">
+          <div class="brief-top">
+            <span class="frank-mark" aria-hidden="true">F</span>
+            <span class="frank-name">Frank</span>
+            <span id="reasoning-mode" class="chip chip-quiet">Evidence-backed assessment</span>
+            <span id="frank-readiness" class="chip" data-state="checking">Checking Frank</span>
+          </div>
+          <h3 id="judgment-title">Analysing this page</h3>
+          <p id="brief"></p>
+          <div class="brief-meta">
+            <span id="material-count"></span>
+            <span id="coverage-state"></span>
+          </div>
+        </article>
+      </section>
+
+      <section class="workspace-section qa-section" aria-labelledby="qa-areas-heading">
+        <div class="workspace-section-head">
+          <div><span class="section-kicker">Coverage by discipline</span><h2 id="qa-areas-heading">QA areas</h2></div>
+          <span class="help-dot" tabindex="0" role="note" aria-label="QA areas explanation" data-tooltip="Repeat instances of the same underlying problem are combined here so one noisy scanner cannot dominate the page assessment. Select an area to filter the recommended work.">?</span>
         </div>
-      </article>
+        <div id="ledger" class="ledger" aria-label="Issues by QA area"></div>
+      </section>
 
-      <!-- Impact ledger: the cross-discipline balance, made visible. This is the
-           product's thesis; it is why the feed is not just an axe list. -->
-      <div id="ledger" class="ledger" aria-label="Issues by impact area"></div>
+      <section class="workspace-section recommendations-section" aria-labelledby="priority-heading">
+        <div class="workspace-section-head priority-head">
+          <div><span class="section-kicker">Action queue</span><h2 id="priority-heading">Recommended order</h2></div>
+          <button id="show-all" class="btn btn-text">Show all checks</button>
+        </div>
+        <p class="section-intro">Start with confirmed, higher-impact problems. Lower-confidence observations stay available without crowding the queue.</p>
+        <div id="findings"></div>
+      </section>
 
-      <div class="section-head"><h3>Priority</h3><button id="show-all" class="btn btn-text">Show all checks</button></div>
-      <div id="findings"></div>
+      <section class="workspace-section tools-section" aria-labelledby="workspace-tools-heading">
+        <div class="workspace-section-head"><div><span class="section-kicker">Review, export & support</span><h2 id="workspace-tools-heading">Workspace tools</h2></div></div>
+        <div class="tool-grid" role="group" aria-label="Workspace tools">
+          <button id="report-bug" class="tool-button"><span class="tool-icon" aria-hidden="true">!</span><span><b>Report bug</b><small>Create a privacy-safe support report</small></span></button>
+          <button id="copy-md" class="tool-button"><span class="tool-icon" aria-hidden="true">↗</span><span><b>Copy report</b><small>Plain-language handoff</small></span></button>
+          <button id="copy-json" class="tool-button"><span class="tool-icon" aria-hidden="true">{ }</span><span><b>Copy data</b><small>Structured scan JSON</small></span></button>
+          <button id="watch" class="tool-button"><span class="tool-icon" aria-hidden="true">◎</span><span><b>Watch this site</b><small>Keep a local site session</small></span></button>
+        </div>
 
-      <details class="panel"><summary><span>Scan coverage</span><span id="coverage-summary" class="summary-note"></span></summary><div class="panel-body"><div id="coverage" class="kv"></div><div id="coverage-notes" class="coverage-notes"></div></div></details>
-      <details id="session-panel" class="panel"><summary><span>Site session</span><span id="session-summary" class="summary-note"></span></summary><div class="panel-body"><div id="session-pages"></div><button id="clear-session" class="btn btn-text">Clear session</button></div></details>
-      <section id="resolved-panel" class="panel resolved" hidden><div class="panel-head"><span>Resolved this scan</span><b id="resolved-count"></b></div><div id="resolved-items"></div></section>
+        <details class="panel"><summary><span>Scan coverage</span><span id="coverage-summary" class="summary-note"></span></summary><div class="panel-body"><div id="coverage" class="kv"></div><div id="coverage-notes" class="coverage-notes"></div></div></details>
+        <details id="session-panel" class="panel"><summary><span>Site session</span><span id="session-summary" class="summary-note"></span></summary><div class="panel-body"><div id="session-pages"></div><button id="clear-session" class="btn btn-text">Clear session</button></div></details>
+        <section id="resolved-panel" class="panel resolved" hidden><div class="panel-head"><span>Resolved this scan</span><b id="resolved-count"></b></div><div id="resolved-items"></div></section>
 
-      <div class="actions">
-        <button id="copy-md" class="btn btn-quiet">Copy report</button>
-        <button id="copy-json" class="btn btn-quiet">Copy JSON</button>
-        <button id="watch" class="btn btn-quiet">Watch this site</button>
-      </div>
+        <details id="connection-settings" class="panel"><summary><span>Connection settings</span></summary><div class="panel-body settings-grid">
+          <label>Assistant gateway<input id="gateway-url" type="url" placeholder="https://assistant.msschermer.us"></label>
+          <label>Developer access key <span class="summary-note">optional</span><input id="gateway-key" type="password" autocomplete="off" placeholder="Leave blank for managed installation access"></label>
+          <label class="settings-toggle"><span>Cloud AI fallback <span class="summary-note">optional · metered</span></span><input id="cloud-ai-fallback" type="checkbox"></label>
+          <div class="settings-actions"><button id="save-gateway" class="btn btn-quiet">Save connection</button><button id="test-gateway" class="btn btn-quiet">Test connection</button></div>
+          <p id="gateway-status" class="gateway-status" role="status" aria-live="polite"></p>
+          <div id="gateway-integrations" class="integration-list"></div>
+          <p class="fine-print">Normal installs use managed installation access when the gateway enables it. Frank prefers Chrome built-in AI on this device. Cloud AI is off by default and may incur provider charges when explicitly enabled. Connected context receives a sanitised, bounded report; whole DOM, cookies and form values are excluded.</p>
+        </div></details>
 
-      <details id="connection-settings" class="panel"><summary><span>Connection settings</span></summary><div class="panel-body settings-grid">
-        <label>Assistant gateway<input id="gateway-url" type="url" placeholder="https://assistant.msschermer.us"></label>
-        <label>Developer access key <span class="summary-note">optional</span><input id="gateway-key" type="password" autocomplete="off" placeholder="Leave blank for managed installation access"></label>
-        <label class="settings-toggle"><span>Cloud AI fallback <span class="summary-note">optional · metered</span></span><input id="cloud-ai-fallback" type="checkbox"></label>
-        <div class="settings-actions"><button id="save-gateway" class="btn btn-quiet">Save connection</button><button id="test-gateway" class="btn btn-quiet">Test connection</button></div>
-        <p id="gateway-status" class="gateway-status" role="status" aria-live="polite"></p>
-        <div id="gateway-integrations" class="integration-list"></div>
-        <p class="fine-print">Normal installs use managed installation access when the gateway enables it; no shared secret is bundled in the extension. Frank prefers Chrome built-in AI on the user's device, so normal walkthroughs do not require an AI API key or metered model request. Cloud AI fallback is off by default and may incur provider charges when explicitly enabled. Connected context receives a sanitised, bounded report. Whole DOM, cookies and form values are excluded.</p>
-      </div></details>
+        <details id="diagnostic" class="panel diagnostic" hidden>
+          <summary>Latest technical error</summary>
+          <div class="panel-body">
+            <dl class="kv"><dt>Diagnostic ID</dt><dd id="diagnostic-id"></dd><dt>Operation</dt><dd id="diagnostic-operation"></dd><dt>Version</dt><dd id="diagnostic-version"></dd></dl>
+            <pre id="diagnostic-message"></pre>
+            <button id="copy-diagnostic" class="btn btn-quiet">Copy technical error</button>
+          </div>
+        </details>
+      </section>
     </section>
   </div>
 
   <section id="frank-view" hidden aria-labelledby="frank-ledger-title">
-    <div class="frank-ledger-head">
-      <div><span class="eyebrow">Evidence ledger</span><h2 id="frank-ledger-title" tabindex="-1">Finding evidence</h2></div>
-      <button id="frank-exit" class="btn btn-quiet">Exit</button>
+    <div class="frank-sticky-summary">
+      <div class="frank-ledger-head">
+        <div><span class="eyebrow">Evidence ledger</span><h2 id="frank-ledger-title" tabindex="-1">What the tools observed</h2></div>
+        <button id="frank-exit" class="btn btn-quiet">Exit</button>
+      </div>
+      <div class="frank-ledger-status">
+        <span id="frank-mode" class="chip chip-quiet"></span>
+        <span id="frank-step-count" class="ledger-step-count"></span>
+      </div>
+      <h3 id="frank-title" class="ledger-finding-title"></h3>
     </div>
-    <div class="frank-ledger-status">
-      <span id="frank-mode" class="chip chip-quiet"></span>
-      <span id="frank-step-count" class="ledger-step-count"></span>
-    </div>
-    <h3 id="frank-title" class="ledger-finding-title"></h3>
+    <p class="ledger-help">This panel keeps the scanner facts. Frank’s interpretation and fix stay in the focused card on the page.</p>
     <p id="frank-finding-detail" class="ledger-finding-detail"></p>
     <div id="frank-assessment" class="ledger-verification"><b id="frank-assessment-status"></b><small id="frank-assessment-limitations"></small></div>
     <nav class="frank-progress" aria-label="Frank walkthrough progress"><span class="sr-only">Walkthrough progress</span><div><span id="frank-progress-bar"></span></div></nav>
 
     <section class="evidence-block" aria-labelledby="frank-facts-heading">
-      <div class="evidence-block-head"><span id="frank-facts-heading">Finding facts</span></div>
+      <div class="evidence-block-head"><span id="frank-facts-heading">Key facts</span><span class="help-dot help-dot-dark" tabindex="0" data-tooltip="Measured and extracted values stay separate from Frank’s interpretation so you can audit the recommendation.">?</span></div>
       <dl id="frank-facts" class="evidence-facts"></dl>
     </section>
 
@@ -126,28 +155,42 @@
   </section>
 </main>
 
+<dialog id="bug-dialog" class="bug-dialog" aria-labelledby="bug-title">
+  <form method="dialog" class="bug-card">
+    <div class="bug-head"><div><span class="section-kicker">Support</span><h2 id="bug-title">Report a bug</h2></div><button class="dialog-close" value="cancel" aria-label="Close report bug dialog">×</button></div>
+    <p>Generate a diagnostic report from this Web QA Assistant session. <b>Nothing is sent automatically.</b></p>
+    <div class="privacy-box"><span class="privacy-icon" aria-hidden="true">✓</span><div><b>Privacy-safe by default</b><p id="bug-privacy-summary"></p></div></div>
+    <label class="context-optin"><input id="bug-include-context" type="checkbox"><span><b>Include current finding and Frank wording</b><small>Useful when the problem is with Frank’s explanation. This may include bounded page-derived text after redaction.</small></span></label>
+    <label class="bug-note-label">What went wrong? <span class="summary-note">optional</span><textarea id="bug-note" rows="3" maxlength="800" placeholder="For example: Frank stayed in Verified guidance even though on-device AI was ready."></textarea></label>
+    <div class="bug-actions"><button id="bug-copy" type="button" class="btn btn-quiet">Copy report</button><button id="bug-download" type="button" class="btn btn-primary">Download report</button></div>
+    <p class="fine-print">The report never includes selectors, cookies, form values, raw DOM or stored access keys. The downloaded report is a JSON support file. Review it before sharing it with support.</p>
+  </form>
+</dialog>
+
 <template id="card">
   <article class="finding">
     <div class="finding-top">
       <span class="chips">
         <span class="chip chip-class"></span>
+        <span class="chip chip-priority"></span>
         <span class="chip chip-confidence"></span>
         <span class="chip chip-instances" hidden></span>
       </span>
     </div>
-    <h2></h2>
+    <h3></h3>
     <p class="detail"></p>
+    <div class="finding-next" hidden><span>Recommended next step</span><p></p></div>
     <p class="finding-context"></p>
     <div class="finding-actions">
-      <button class="ask-frank btn btn-brand">Ask Frank</button>
+      <button class="ask-frank btn btn-brand" title="Frank explains this verified finding using the evidence collected for it.">Ask Frank</button>
       <button class="highlight btn btn-quiet">Highlight</button>
-      <button class="recheck btn btn-quiet">Recheck</button>
+      <button class="recheck btn btn-quiet" title="Recheck only this finding. This does not run a full page scan.">Recheck</button>
       <button class="copy btn btn-quiet">Copy issue</button>
     </div>
     <div class="action-state" hidden role="status" aria-live="polite"></div>
     <details class="instances" hidden><summary><span class="instances-label"></span></summary><ul class="instance-list"></ul></details>
-    <details class="technical"><summary>Evidence and technical details</summary>
-      <dl class="kv"><dt>Rule</dt><dd class="rule-id"></dd><dt>Sources</dt><dd class="technical-sources"></dd><dt class="selector-label">Selector</dt><dd class="selector"></dd><dt class="evidence-label">Evidence</dt><dd class="evidence-value"></dd></dl>
+    <details class="technical"><summary>Technical evidence</summary>
+      <dl class="kv"><dt>Scanner rule</dt><dd class="rule-id"></dd><dt>Observed by</dt><dd class="technical-sources"></dd><dt class="selector-label">Selector</dt><dd class="selector"></dd><dt class="evidence-label">Raw evidence</dt><dd class="evidence-value"></dd></dl>
       <button class="ignore btn btn-text">Ignore this rule on site</button>
     </details>
   </article>

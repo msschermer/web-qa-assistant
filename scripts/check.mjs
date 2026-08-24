@@ -340,9 +340,25 @@ if (/prewarmIfAvailable|activateFromGesture|cloneTask|LanguageModel/.test(rescan
   bad++;
   console.error('Frank lifecycle regression: Rescan must not prepare or recover the on-device model');
 }
-if (!/LOCAL_AI_SEMANTIC_DRIFT/.test(localAiSource) || !/LOCAL_AI_UNSUPPORTED_HIGH_RISK_ACTION/.test(localAiSource)) {
+if (!/LOCAL_AI_REMEDIATION_DRIFT/.test(localAiSource) || !/LOCAL_AI_UNSUPPORTED_HIGH_RISK_ACTION/.test(localAiSource)) {
   bad++;
-  console.error('Frank adversarial regression: semantic-drift and high-risk action guards are required');
+  console.error('Frank adversarial regression: remediation-drift and high-risk action guards are required');
+}
+if (!/target-size/.test(guidanceSource) || !/vertical padding/.test(guidanceSource) || !/spacing exception/.test(guidanceSource)) {
+  bad++;
+  console.error('1.6.1 guidance regression: target-size must have rule-specific interpretation and remediation');
+}
+if (!/target-height/.test(planSource) || !/target-minimum/.test(planSource) || !/target-spacing-required/.test(planSource)) {
+  bad++;
+  console.error('1.6.1 evidence regression: target-size measurements must drive Frank step evidence');
+}
+if (!/LOCAL_AI_TARGET_UNSUPPORTED_MODALITY/.test(localAiSource) || !/LOCAL_AI_MISSED_TARGET_MINIMUM/.test(localAiSource)) {
+  bad++;
+  console.error('1.6.1 target-size AI guardrails are missing');
+}
+if (!/Observed by/.test(panelSource) || !/Reference context/.test(panelSource) || !/Automated · Axe/.test(panelSource)) {
+  bad++;
+  console.error('1.6.1 evidence-ledger source/verification semantics are missing');
 }
 const highRiskGuardStart = localAiSource.indexOf('const verifiedGuidanceText');
 const highRiskGuardEnd = localAiSource.indexOf('if (deterministicPlan)', highRiskGuardStart);
@@ -407,6 +423,10 @@ if (/Standard guidance/.test(panelHtmlSource) || /This is the evidence behind th
 
 // 1.6 focus-mode contract: sidebar is evidence; the page card is Frank's reasoning.
 const contentSource = fs.readFileSync('apps/extension/content.js', 'utf8');
+if (!/On-device reasoning/.test(contentSource) || !/Cloud reasoning · metered/.test(contentSource) || !/Verified guidance/.test(contentSource) || /Evidence-grounded guidance/.test(contentSource)) {
+  bad++;
+  console.error('1.6.1 Frank focus card must disclose the actual reasoning mode');
+}
 if (!/step\.headline/.test(contentSource) || !/step\.body/.test(contentSource) || !/aria-live/.test(contentSource)) {
   bad++;
   console.error('Frank focus regression: the page overlay must render the reasoning headline/body with an announced live region');
@@ -447,6 +467,60 @@ if (fs.existsSync(distManifestPath)) {
   }
 }
 
+
+
+// --- 1.7.0 cross-discipline workspace / support invariants -------------------
+const presentationPath = 'packages/presentation/present.js';
+const bugReportPath = 'packages/support/bug-report.js';
+const impactSource170 = fs.readFileSync('packages/findings/impact.js', 'utf8');
+const buildExtensionSource170 = fs.readFileSync('scripts/build-extension.mjs', 'utf8');
+if (!fs.existsSync(presentationPath) || !fs.existsSync(bugReportPath)) {
+  bad++;
+  console.error('1.7 product regression: presentation and Report bug modules are required');
+}
+if (!/security:\s*\{\s*id:\s*['"]security['"]/.test(impactSource170) || !/\[SIGNALS\.SECURITY\]:\s*['"]security['"]/.test(impactSource170)) {
+  bad++;
+  console.error('1.7 QA-area regression: security must remain a dedicated impact class');
+}
+for (const heading of ['Page assessment','QA areas','Recommended order','Workspace tools','Report a bug','Technical evidence']) {
+  if (!panelHtmlSource.includes(heading)) {
+    bad++;
+    console.error(`1.7 workspace regression: missing product surface "${heading}"`);
+  }
+}
+if (!panelHtmlSource.includes('Nothing is sent automatically.')) {
+  bad++;
+  console.error('1.7 support regression: Report bug must clearly state that reports are not sent automatically');
+}
+if (!/presentation\.js/.test(buildExtensionSource170) || !/bug-report\.js/.test(buildExtensionSource170)) {
+  bad++;
+  console.error('1.7 build regression: presentation/Report bug runtime modules are not packaged');
+}
+if (!/RuntimeTrace/.test(panelSource) || !/buildBugReport/.test(panelSource) || !/setLocalAiTraceSink/.test(panelSource)) {
+  bad++;
+  console.error('1.7 support regression: runtime trace and local-AI diagnostics are not connected to Report bug');
+}
+const reportBugHandlerStart = panelSource.indexOf("$('#report-bug').onclick");
+const reportBugHandlerEnd = panelSource.indexOf("$('#scan').onclick", reportBugHandlerStart);
+const reportBugHandlerSource = reportBugHandlerStart >= 0 ? panelSource.slice(reportBugHandlerStart, reportBugHandlerEnd >= 0 ? reportBugHandlerEnd : undefined) : '';
+if (reportBugHandlerStart < 0 || /fetch\s*\(|gatewayPost|\/api\//.test(reportBugHandlerSource)) {
+  bad++;
+  console.error('1.7 privacy regression: Report bug must generate/export locally and must not send a support payload automatically');
+}
+if (!/TRACE_KEYS/.test(fs.readFileSync(bugReportPath, 'utf8')) || !/includeContext/.test(fs.readFileSync(bugReportPath, 'utf8'))) {
+  bad++;
+  console.error('1.7 privacy regression: Report bug requires a bounded operational trace and explicit context opt-in');
+}
+if (!/requireRemediationFamily/.test(localAiSource) || !/performance\.browser\.lcp/.test(localAiSource) || !/broken-link/.test(localAiSource) || !/blank-opener/.test(localAiSource)) {
+  bad++;
+  console.error('1.7 Frank regression: cross-discipline on-device remediation validation is missing');
+}
+for (const builtModule of ['presentation.js','bug-report.js']) {
+  if (fs.existsSync('dist/extension') && !fs.existsSync(`dist/extension/${builtModule}`)) {
+    bad++;
+    console.error(`1.7 stale extension build: ${builtModule} is missing from dist/extension`);
+  }
+}
 
 
 // Validate the built extension's relative ES-module import graph. Chrome reports a

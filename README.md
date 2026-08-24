@@ -24,6 +24,28 @@ observation
 
 The scanner may retain lower-priority observations, but Frank's default view is intentionally selective. Inconclusive evidence never becomes a defect. A timeout, blocked checker or unavailable integration is reported as a coverage limitation instead of an issue.
 
+## What 1.7.0 adds
+
+- a real cross-discipline QA workspace organized around **Page assessment**, **QA areas**, **Recommended order**, and **Workspace tools**
+- consumer-facing finding translation across Navigation, Discoverability, Performance, Accessibility, Security, and Web quality while preserving raw scanner output under **Technical evidence**
+- a dedicated Security impact class so security findings are not hidden inside generic availability/implementation buckets
+- a privacy-bounded **Report bug** workflow that records runtime/readiness/validation state locally, exports JSON, sends nothing automatically, and keeps page/Frank content excluded by default
+- explicit context opt-in for bounded current-finding measurements and Frank wording, still excluding selectors, raw DOM, form values, cookies, and credentials
+- broader on-device Frank validation for links, indexing/robots, canonicals, LCP/TTFB/transfer weight, opener security, meta refresh, charset, and accessibility families
+- mixed-discipline acceptance tests that prevent a noisy scanner from crowding out higher-confidence navigation, discoverability, performance, or security issues
+- a presentation hierarchy where Frank explains meaning/action while the sidebar remains the auditable evidence record
+
+## What 1.6.1 adds
+
+- rule-specific Frank guidance for `axe.target-size`, using structured size and spacing evidence instead of generic accessibility boilerplate
+- target-size impact language grounded in pointer/touch activation rather than unrelated keyboard or low-vision claims
+- claim/fix-family validation for on-device rewrites so Chrome AI can substantially improve wording without being forced to echo deterministic prose
+- explicit reasoning-mode disclosure in the centered Frank card: **On-device reasoning**, **Verified guidance**, or **Cloud reasoning · metered**
+- step-specific evidence selection so Frank highlights the measurements that actually support the current explanation
+- evidence-ledger source semantics that separate observed evidence from standards/reference context and suppress meaningless single-pass verification counts
+- a compact sticky finding identity in Frank mode plus scroll reset so the finding title is not lost when the walkthrough opens
+- the failed real-world 24px target-size scenario promoted into the automated acceptance suite
+
 ## What 1.6.0 adds
 
 - a dedicated Chrome built-in AI readiness manager that is independent from page scanning
@@ -155,17 +177,17 @@ Detailed procedures:
 
 - `docs/INSTALLATION.md`
 - `docs/DEPLOYMENT.md`
-- `docs/QA-1.6.0.md`
+- `docs/QA-1.7.0.md`
 - `docs/RELEASE-CHECKLIST.md`
 
 ## Release workflow
 
 `main` is the known-good release branch. Development happens on feature/fix branches. GitHub Actions runs the extension build, static checks and tests on every PR. A `v*` tag validates version alignment and packages both the clean extension zip and full source zip for the GitHub Release.
 
-Current delivery candidate: **1.6.0**.
+Current delivery candidate: **1.7.1**.
 
 
 ## Documentation
 
-- `RELEASE_NOTES_1.6.0.md` - current release changes
-- `docs/FINAL-REVIEW-1.6.0.md` - final multi-role, adversarial, and product review gate
+- `RELEASE_NOTES_1.7.0.md` - current release changes
+- `docs/FINAL-REVIEW-1.7.0.md` - final multi-role, adversarial, security, and product review gate
