@@ -82,4 +82,4 @@ These are **current-page lab observations**, not field Core Web Vitals or real-u
 - Cloudflare-gated sites may remain blocked at the gateway renderer while a normal browser session reaches the real page; target integrity handles this safely but does not guarantee scan completion.
 
 - Target-integrity behavior for blocked, challenge, and substituted pages from 1.7.2–1.7.3 remains intact.
-- Production deployment remains on v1.7.3 until an explicit upgrade.
+- Production deployment: live on v1.7.4 at `ccdcddc` (post-release `undici` hotfix on `origin/main`). Tag `v1.7.4` alone omits that dependency fix.

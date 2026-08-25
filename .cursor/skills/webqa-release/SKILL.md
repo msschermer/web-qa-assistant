@@ -17,13 +17,15 @@ disable-model-invocation: true
 
 ## Production deployment (post-tag)
 
-After the release tag is pushed, deploy the **exact tag** on the production droplet:
+After the release tag is pushed, deploy a **verified deploy revision** on the production droplet (the tag itself, or a later commit on `origin/main` if a post-tag hotfix was required):
 
 1. `ssh portfolio` — WebQA production SSH uses the local alias `portfolio`. **`assistant.msschermer.us` is not the SSH target.**
 2. `cd ~/web-qa-assistant`
-3. `git fetch origin --tags && git switch --detach vX.Y.Z`
+3. `git fetch origin --tags && git switch --detach <commit-or-tag>`
 4. `docker compose -f docker-compose.yml -f docker-compose.portfolio.yml up -d --build`
 5. Confirm `https://assistant.msschermer.us/api/health` reports the deployed version.
+
+If a post-release hotfix landed after the tag (for example v1.7.4 needed `ccdcddc` for renderer `undici`), do **not** deploy from the tag alone until a patch tag includes that commit. See `docs/DEPLOYMENT.md` for the current production revision.
 
 See `docs/DEPLOYMENT.md` for full topology, rollback, and health checks.
 

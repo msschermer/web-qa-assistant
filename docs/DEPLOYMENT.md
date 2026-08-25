@@ -55,9 +55,12 @@ On the Linux host:
 ```bash
 git clone https://github.com/msschermer/web-qa-assistant.git
 cd web-qa-assistant
-git checkout v1.7.4
+git fetch origin --tags
+git switch --detach ccdcddc
 cp .env.example .env
 ```
+
+Use commit `ccdcddc` or later on `origin/main` for a working server install. Tag `v1.7.4` (`e3ad225`) is missing the post-release `undici` dependency required by the renderer; do not check out that tag alone for server deployment until a patch tag supersedes it.
 
 Generate independent random values:
 
@@ -230,14 +233,14 @@ docker compose logs -f egress-proxy
 
 ## 8. Upgrade
 
-After a tested release tag is published, on the production droplet:
+After a tested release is published, on the production droplet:
 
 ```bash
 ssh portfolio
 cd ~/web-qa-assistant
 git fetch origin --tags
-git switch --detach v1.7.4
-git describe --tags --exact-match
+git switch --detach ccdcddc
+git describe --tags --always
 docker network ls | grep portfolio-infra_web
 docker compose -f docker-compose.yml -f docker-compose.portfolio.yml config --quiet
 docker compose -f docker-compose.yml -f docker-compose.portfolio.yml up -d --build
@@ -245,7 +248,9 @@ curl -s http://127.0.0.1:8787/api/health
 curl -s https://assistant.msschermer.us/api/health
 ```
 
-Replace `v1.7.4` with the exact release tag being deployed. Use `git switch --detach vX.Y.Z` so production tracks the tag, not a moving branch.
+**Tag caveat:** package version **1.7.4** is correct, but tag `v1.7.4` (`e3ad225`) omits the post-release `undici` hotfix (`ccdcddc`) required for renderer boot. Production currently tracks `origin/main` at `ccdcddc`. For tag-based deploys, wait for a patch tag that includes the hotfix, or deploy the exact hotfix commit shown above.
+
+Replace `ccdcddc` with the exact release commit or tag being deployed. Use `git switch --detach` so production tracks a fixed revision, not a moving branch.
 
 Drop the `-f docker-compose.portfolio.yml` flags if you are not using the shared portfolio network.
 

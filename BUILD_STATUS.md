@@ -4,13 +4,13 @@
 
 1.7.4 is the cross-discipline QA release on top of the 1.7.3 product-quality baseline. It adds workspace redesign, issue correlation, expanded navigation/runtime QA, safe external probing, Ask Frank focus mode, Report Bug v2 diagnostics, and read-only MCP diagnostic inspection.
 
-Production remains **v1.7.3** until deployment.
+Production is live on **v1.7.4** at commit `ccdcddcacd2ec67ee0d814e784c767fab9d0fb78` (`origin/main`). Tag `v1.7.4` (`e3ad225`) is the release metadata commit but omits the post-release `undici` dependency hotfix required for renderer boot — do not deploy from the tag alone until a patch tag supersedes it.
 
 ## Frozen product commit
 
 `f7965b2fd811ab69df90d237870dc23ec6643f66`
 
-Release metadata and packaging updates are layered on this frozen HEAD without further product-logic changes.
+Release metadata and packaging updates are layered on this frozen HEAD. Post-release commit `ccdcddc` adds only the root `undici` dependency required by `packages/security/safe-probe.js`.
 
 ## Release objectives
 
