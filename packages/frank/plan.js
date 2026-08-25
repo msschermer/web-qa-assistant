@@ -22,17 +22,19 @@ function safeCode(graph){
 function comparisonMetrics(graph){return evidenceBy(graph,e=>['canonical','title','description','robots'].includes(e.kind)).slice(0,4).map(e=>({label:e.label,value:e.value}))}
 function trendMetrics(graph){return evidenceBy(graph,e=>e.source==='performance-monitor'&&['mobile-score','desktop-score','threshold','mobile-change','desktop-change'].includes(e.kind)).slice(0,6).map(e=>({label:e.label,value:e.value}))}
 function issueMetrics(graph){return evidenceBy(graph,e=>['link-url','http-status','link-occurrences','link-location','link-prominence','environment','confidence'].includes(e.kind)).slice(0,8).map(e=>({label:e.label,value:e.value}))}
-function assessmentFor(f){
+function clipLimit(value,n=320){const s=String(value||'').replace(/\s+/g,' ').trim();return s.length>n?`${s.slice(0,n-1)}…`:s}
+function assessmentFor(f,guidance={}){
   const purpose=f.semantics?.imagePurpose||null;
+  const extra=clipLimit(guidance.limitations||'');
   if(purpose?.purpose==='uncertain'){
-    return{status:'review',statement:'The accessibility violation is confirmed, but the correct remediation depends on unresolved image purpose.',limitations:'Confirm whether the image is informative or decorative before choosing alt text.'};
+    return{status:'review',statement:'The accessibility violation is confirmed, but the correct remediation depends on unresolved image purpose.',limitations:extra||'Confirm whether the image is informative or decorative before choosing alt text.'};
   }
   const c=String(f.confidence||'confirmed');
-  if(c==='confirmed'||c==='corroborated')return{status:'verified',statement:'Verified by the available deterministic evidence.',limitations:''};
-  if(c==='inferred')return{status:'review',statement:'Observed, but implementation intent is not proven.',limitations:'Confirm intent before changing production behavior.'};
-  return{status:'context',statement:'Context only; this is not a verified defect.',limitations:'Frank should not present inconclusive evidence as an issue.'};
+  if(c==='confirmed'||c==='corroborated')return{status:'verified',statement:'Verified by the available deterministic evidence.',limitations:extra};
+  if(c==='inferred')return{status:'review',statement:'Observed, but implementation intent is not proven.',limitations:extra||'Confirm intent before changing production behavior.'};
+  return{status:'context',statement:'Context only; this is not a verified defect.',limitations:extra||'Frank should not present inconclusive evidence as an issue.'};
 }
-const INTERPRETATION_KINDS=new Set(['finding','rule','text','naming.aria-label','image-purpose','image-purpose-confidence','nearby-text','interactive-ancestor','element-size','target-width','target-height','target-minimum','target-spacing','target-spacing-required','contrast-ratio','contrast-required','foreground-color','background-color','font-size','font-weight','link-url','http-status','robots','canonical','measurement-type','lcp','ttfb','transfer','lcp-element','redirect-chain']);
+const INTERPRETATION_KINDS=new Set(['finding','rule','text','naming.aria-label','image-purpose','image-purpose-confidence','nearby-text','interactive-ancestor','element-size','target-width','target-height','target-minimum','target-spacing','target-spacing-required','contrast-ratio','contrast-required','foreground-color','background-color','font-size','font-weight','link-url','http-status','robots','canonical','measurement-type','lcp','ttfb','transfer','lcp-element','redirect-chain','cls','overflow-px','overflow-viewport','resource-url']);
 const IMPACT_KINDS=new Set(['finding','rule','wcag','impact','target-minimum','target-spacing-required','contrast-required','confidence','link-prominence','http-status','robots','canonical','measurement-type','lcp','ttfb','transfer','mobile-change','desktop-change']);
 const REMEDIATION_KINDS=new Set(['rule','text','naming.aria-label','element-size','target-width','target-height','target-minimum','target-spacing','target-spacing-required','contrast-ratio','contrast-required','foreground-color','background-color','failure-summary','link-url','http-status','canonical','robots','measurement-type','lcp','ttfb','transfer','lcp-element','heaviest-resource','redirect-chain','image-purpose','image-purpose-confidence','nearby-text','image-purpose-signal']);
 const VERIFICATION_KINDS=new Set(['rule','wcag','target-width','target-height','target-minimum','target-spacing','target-spacing-required','contrast-ratio','contrast-required','http-status','link-url','verification-method','robots','canonical','lcp','ttfb','transfer','mobile-score','desktop-score','last-checked','image-purpose','image-purpose-confidence']);
@@ -74,5 +76,5 @@ export function deterministicFrankPlan(graph){const f=graph.finding,targetId=tar
   if(g.alternatives)steps.push(step('alternatives','evidence','What I ruled out',g.alternatives,{targetId:stepTarget,evidence:graph.evidence.slice(0,4)}));
   steps.push(step('verify','verification','Verify the correction',g.verify,{targetId:stepTarget,evidence:stepEvidence(graph,'verification')}));
   const sourceText=graph.sources.map(sourceLabel).join(', ')||'the current scan';
-  return{version:3,title:f.title,summary:`Frank is using ${sourceText}. Environment: ${graph.environment?.type||'unknown'} (${graph.environment?.confidenceLabel||'unconfirmed'}).`,mode:'deterministic',findingId:graph.findingId,sources:graph.sources,assessment:assessmentFor(f),steps:trimSteps(steps)}}
+  return{version:3,title:f.title,summary:`Frank is using ${sourceText}. Environment: ${graph.environment?.type||'unknown'} (${graph.environment?.confidenceLabel||'unconfirmed'}).`,mode:'deterministic',findingId:graph.findingId,sources:graph.sources,assessment:assessmentFor(f,g),steps:trimSteps(steps)}}
 export function validateFrankPlan(plan,graph){if(!plan||plan.version!==3||!plan.assessment||!Array.isArray(plan.steps)||plan.steps.length<3||plan.steps.length>8)return false;const validTargets=new Set(Object.keys(graph.targets||{})),validEvidence=new Set((graph.evidence||[]).map(e=>e.id));let hasVerification=false;for(const s of plan.steps){if(!FRANK_STEP_TYPES.includes(s.type)||!s.headline||!s.body)return false;if(s.targetId&&!validTargets.has(s.targetId))return false;if((s.evidenceRefs||[]).some(id=>!validEvidence.has(id)))return false;if(s.preview?.enabled&&(!s.targetId||!FRANK_PREVIEW_PROPERTIES.includes(s.preview.property)||!s.preview.value))return false;if(s.type==='verification')hasVerification=true}return hasVerification}
