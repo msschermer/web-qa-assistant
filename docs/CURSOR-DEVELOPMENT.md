@@ -382,11 +382,19 @@ It writes an ignored local QA artifact for reviewer handoff.
 
 ## `webqa_latest_run`
 
-Reads the newest JSON QA artifact under `qa-runs/`.
+Reads the newest JSON QA artifact under `qa-runs/` that is not a Report Bug diagnostic.
+
+## `webqa_latest_diagnostic`
+
+Compact pointer to the newest valid Report Bug diagnostic under `qa-runs/`. Skips `api-scan`, invalid kinds, oversize files, and symlink escapes. This is the newest **exported** file, not the page currently open. Save the extension Report Bug JSON under `qa-runs/` first.
+
+## `webqa_diagnostic_section`
+
+Reads one bounded section of a v2 diagnostic (`scan`, `coverage`, `pageDiagnostics`, `webqaDiagnostics`, `frank`, `timeline`, …). Does not dump the full bundle. If `artifact` is omitted, uses the latest valid diagnostic.
 
 ## `webqa_read_report_bug`
 
-Reads only an intentionally exported Report Bug JSON inside the current repository and below the size limit. It does not search Chrome storage or arbitrary filesystem locations.
+Reads only an intentionally exported Report Bug JSON inside `qa-runs/` and below the size limit. Legacy v1 returns the sanitized report. v2 returns a compact index and tells the agent to use `webqa_diagnostic_section`. It does not search Chrome storage or arbitrary filesystem locations.
 
 Returned paths are repository-relative rather than exposing the full local Windows path to the model.
 
@@ -721,7 +729,7 @@ qa-runs/manual/
 Then ask:
 
 ```text
-Use webqa_read_report_bug on qa-runs/manual/<file>.json. Reconstruct the runtime sequence. Do not edit until the failing subsystem and supporting evidence are identified.
+Use webqa_latest_diagnostic, then webqa_diagnostic_section for coverage, pageDiagnostics, webqaDiagnostics, frank, and timeline. Reconstruct the runtime sequence. Distinguish page errors from WebQA errors. Do not edit until the failing subsystem and supporting evidence are identified.
 ```
 
 ---

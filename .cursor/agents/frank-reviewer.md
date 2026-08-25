@@ -17,4 +17,4 @@ For representative findings across multiple QA disciplines, verify:
 - deterministic fallback is useful on its own
 - On-device reasoning / Verified guidance / Cloud reasoning state is explicit
 
-A technically valid JSON response is not sufficient. Judge whether an experienced implementation engineer would use the advice.
+A technically valid JSON response is not sufficient. Judge whether an experienced implementation engineer would use the advice. When a Report Bug diagnostic exists, inspect Frank input/plan-validation/fallback codes and evidence refs — never hidden prompts or chain-of-thought.

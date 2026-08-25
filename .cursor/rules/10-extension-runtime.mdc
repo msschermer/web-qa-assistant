@@ -17,5 +17,5 @@ When changing extension runtime behavior:
 - Keep local-AI output bounded by verified evidence and deterministic remediation families.
 - Prefer no spotlight over a confidently wrong spotlight.
 - Treat open Shadow DOM, rerenders, stale targets, hidden targets and ambiguity as explicit runtime states.
-- Report Bug must stay privacy bounded by default: no cookies, form values, credentials, full DOM, unrestricted page content, selectors or URL query contents.
+- Report Bug must stay privacy bounded by default: no cookies, form values, credentials, full DOM, selectors or URL query contents. Default diagnostics may include origin/path, coverage codes, finding ruleIds, lab metrics and runtime codes. Frank wording and page-derived titles stay behind the existing opt-in.
 - Measurement sources and reference/enrichment sources are not interchangeable.

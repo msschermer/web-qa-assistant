@@ -60,3 +60,5 @@ For each requested site:
 Do not equate finding count with importance. Across a release sample, cover several of Navigation, Discoverability, Performance, Accessibility, Security/Web quality and Coverage.
 
 Save outputs under `qa-runs/`; never commit those artifacts unless they are intentionally sanitized fixtures. Prefer explicit artifact paths from `webqa_scan_url` over `webqa_latest_run` for review/Frank (latest-run is a thin pointer only).
+
+When a Report Bug diagnostic exists for the tested page/run, inspect it with `webqa_latest_diagnostic` / `webqa_diagnostic_section` before asking for raw logs. Do not require a diagnostic for every review. Treat a stale or different-page diagnostic as unrelated.

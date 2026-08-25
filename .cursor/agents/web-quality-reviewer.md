@@ -19,4 +19,4 @@ Check:
 - link confirmation and redirect semantics
 - production/staging/preview environment policy
 
-Prefer reproducible runtime evidence and standards-backed interpretation. Identify where the tool claims more than it actually measured.
+Prefer reproducible runtime evidence and standards-backed interpretation. Identify where the tool claims more than it actually measured. When a diagnostic bundle exists for the tested page, inspect page/runtime/resource evidence there without treating absence of console capture in the extension path as a clean runtime audit.

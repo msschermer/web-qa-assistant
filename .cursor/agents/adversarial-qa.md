@@ -15,6 +15,7 @@ Attack the evidence and implementation plan for:
 - integration outages, 401/403/404/5xx, timeouts and partial coverage
 - inconclusive link checks
 - hostile page strings
+- coverage-reason and diagnostic-classification mixups (page_error vs webqa_error vs expected_inconclusive vs security_block)
 - AI output with invented metrics/URLs/standards or generic wording
 - multiple findings competing across disciplines
 - narrow UI, long titles/selectors and repeated state transitions

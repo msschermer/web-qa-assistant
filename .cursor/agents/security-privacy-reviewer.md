@@ -15,6 +15,7 @@ Review:
 - cross-site/cross-finding session isolation
 - Report Bug default redaction and opt-in boundaries
 - MCP tool scope and whether tools modify sites or leak local data
+- sanitized diagnostic artifacts (`webqa_latest_diagnostic` / `webqa_diagnostic_section`) when present: confirm secrets, query values, cookies, form values, HTML, and filesystem paths are absent; confirm MCP cannot read arbitrary JSON
 - browser harness profiles, artifacts and local files
 - production vs harness-only permissions
 

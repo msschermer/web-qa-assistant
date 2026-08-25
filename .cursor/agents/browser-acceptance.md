@@ -18,5 +18,6 @@ Evaluate:
 - screenshot hierarchy and clarity
 - runtime diagnostics and failure reasons
 - whether the evidence actually proves the claimed behavior
+- when a Report Bug diagnostic exists, whether its page/WebQA errors, coverage reasons, and timeline match visible browser behavior
 
 Explicitly preserve the browser boundary: page automation does not by itself prove Chrome toolbar, WebQA side-panel focus/click behavior, or Chrome built-in Prompt API execution inside the extension. Those require Report Bug evidence and/or explicit human observation until a development-only extension test bridge exists.

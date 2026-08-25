@@ -51,6 +51,20 @@ For runtime questions, use the `webqa` MCP tools for deterministic backend evide
 
 `webqa_health` confirms gateway health and version only. Use `webqa_scan_url` for end-to-end renderer evidence. A blocked, WAF, or challenge response is a valid target-integrity outcome: withhold page-derived QA rather than treating it as a successful audit. When acceptance requires browser proof, use Cursor native Browser; do not silently substitute curl or web search.
 
+## Report Bug diagnostics
+
+When debugging reported extension behavior:
+
+1. Check whether a recent sanitized diagnostic exists with `webqa_latest_diagnostic`.
+2. If one exists and its timestamp, URL origin/path, and scan status match this task, inspect bounded sections with `webqa_diagnostic_section` (`coverage`, `pageDiagnostics`, `webqaDiagnostics`, `frank`, `timeline`) before asking the user for raw logs.
+3. Distinguish `page_error` / `resource_failure` from `webqa_error`. Do not treat missing findings as a clean page when coverage is partial or a mismatch flag is set.
+4. Inspect coverage reasons before assuming Frank or correlation failed.
+5. Use Browser or manual Chrome evidence only where the diagnostic is missing, stale, or unrelated.
+
+Do not consume a diagnostic blindly. State when it is stale or for a different page. `webqa_latest_diagnostic` is a pointer to the newest exported file under `qa-runs/`, not the tab currently open. Clipboard copy is not visible to MCP; the user must save Report Bug JSON under `qa-runs/`.
+
+Do not use `webqa:*` wildcards. The read-only diagnostic tools are exactly `webqa_latest_diagnostic`, `webqa_diagnostic_section`, and `webqa_read_report_bug`.
+
 ## Required repository gates
 
 Before calling a release candidate complete, run:

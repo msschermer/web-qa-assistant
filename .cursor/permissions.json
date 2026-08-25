@@ -1,7 +1,8 @@
 {
   "autoRun": {
     "allow_instructions": [
-      "Read-only repository inspection, git status/diff/log, npm test, npm run check, npm run build:extension, and WebQA health checks are normal development actions for this repository."
+      "Read-only repository inspection, git status/diff/log, npm test, npm run check, npm run build:extension, and WebQA health checks are normal development actions for this repository.",
+    "Read-only WebQA diagnostic inspection with the exact tools webqa_latest_diagnostic, webqa_diagnostic_section, and webqa_read_report_bug is a normal development action when a sanitized Report Bug JSON already exists under qa-runs/. These tools do not scan sites, mutate the repository, or read arbitrary files."
     ],
     "block_instructions": [
       "Require review before browser automation or scans of external sites until the requested test origin is clear and intentional.",
