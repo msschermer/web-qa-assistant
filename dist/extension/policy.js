@@ -27,9 +27,35 @@ function linkProminence(f){
   const p=f.link?.prominence||'normal';
   return p==='primary'||p==='navigation'||p==='cta';
 }
+function imagePurpose(f){
+  return f.semantics?.imagePurpose||f.imagePurpose||null;
+}
+function isUncertainImageAlt(f){
+  if(!/^axe\.image-alt/.test(String(f.ruleId||''))||f.axe?.incomplete)return false;
+  const purpose=imagePurpose(f);
+  // Only demote when purpose is unresolved. Do not demote informative/functional
+  // images merely because classifier confidence is low.
+  return purpose?.purpose==='uncertain';
+}
+function visibleByRule(rows,ruleId){
+  return rows.filter(f=>f.ruleId===ruleId&&f.frankVisible!==false);
+}
+// Cross-tool duplicates inflate Recommended Order without adding a second problem.
+// Keep the clearer browser rule and quiet the overlapping axe twin; evidence stays in full results.
+function suppressAttentionDuplicates(rows){
+  const quiet=(list,reason)=>{for(const f of list)set(f,{visible:false,priority:'quiet',reason})};
+  if(visibleByRule(rows,'seo.title-missing').length&&visibleByRule(rows,'axe.document-title').length){
+    quiet(visibleByRule(rows,'axe.document-title'),'duplicate of seo.title-missing; retained in full results');
+  }
+  if(visibleByRule(rows,'a11y.lang-missing').length&&visibleByRule(rows,'axe.html-has-lang').length){
+    quiet(visibleByRule(rows,'axe.html-has-lang'),'duplicate of a11y.lang-missing; retained in full results');
+  }
+  return rows;
+}
+
 export function applyFindingPolicy(findings=[],environment={type:'unknown'}){
   const env=environment?.type||'unknown';
-  return findings.map(original=>{
+  const mapped=findings.map(original=>{
     const f=clone(original);const signal=f.signal||signalForFinding(f);f.signal=signal;
     f.confidence=normalizeConfidence(f.confidence,'confirmed');
     f.verification=f.verification||{state:f.confidence,method:'normalized finding evidence',attempts:1,evidence:[]};
@@ -73,7 +99,15 @@ export function applyFindingPolicy(findings=[],environment={type:'unknown'}){
       return set(f,{visible:true,priority:'medium',category:'review',severity:'medium',reason:'cross-site canonical is not automatically safe on a non-production host'});
     }
 
-    if(/seo\.title-(long|short)|seo\.description-(long|missing|multiple)|seo\.canonical-missing|social\.og-incomplete|security\.blank-opener|web\.charset-missing|structure\.(heading-skip|h1-missing|h1-multiple)/.test(f.ruleId||'')){
+    if(/security\.blank-opener/.test(f.ruleId||'')){
+      return set(f,{visible:true,priority:'low',category:'review',severity:'low',reason:'confirmed missing opener isolation on target=_blank; grouped in Recommended Order without blocker weight'});
+    }
+
+    if(isUncertainImageAlt(f)){
+      return set(f,{visible:true,priority:'medium',category:'review',severity:'medium',reason:'image purpose is unresolved; keep visible without blocker materiality'});
+    }
+
+    if(/seo\.title-(long|short)|seo\.description-(long|missing|multiple)|seo\.canonical-missing|social\.og-incomplete|web\.charset-missing|structure\.(heading-skip|h1-missing|h1-multiple)/.test(f.ruleId||'')){
       return set(f,{visible:false,priority:'quiet',reason:'low materiality or optimization context'});
     }
     if(/axe\..*\.review$/.test(f.ruleId||'')||f.axe?.incomplete){
@@ -95,6 +129,12 @@ export function applyFindingPolicy(findings=[],environment={type:'unknown'}){
     else if(f.category==='context')f.frankPriority='quiet';
 
     return f;
-  }).map(f=>({...f,impactClass:impactClassFor(f)})).sort((a,b)=>(scoreRank[b.frankPriority]||0)-(scoreRank[a.frankPriority]||0));
+  }).map(f=>{
+    // Drop sticky impactClass from older gateway artifacts so local re-apply
+    // recomputes class from the current signal/rule mapping.
+    const {impactClass:_ignored,...rest}=f;
+    return {...rest,impactClass:impactClassFor(rest)};
+  });
+  return suppressAttentionDuplicates(mapped).sort((a,b)=>(scoreRank[b.frankPriority]||0)-(scoreRank[a.frankPriority]||0));
 }
 export function frankFindings(findings=[]){return findings.filter(f=>f.frankVisible!==false)}

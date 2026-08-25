@@ -11,6 +11,8 @@ import {
   sanitizeUrl
 } from './evidence-contract.js';
 import { composeAttention, composedBrief } from '../findings/compose.js';
+import { applyFindingPolicy } from '../findings/policy.js';
+import { resolvePerformanceCoverage } from '../findings/coverage.js';
 import { materialityScore } from '../findings/impact.js';
 import { QA_AREA_META, presentFinding } from '../presentation/present.js';
 import {
@@ -42,15 +44,15 @@ export function buildReviewProvenance(report = {}) {
     },
     attention: {
       source: REVIEW_PROVENANCE.attention_priority,
-      method: 'packages/findings/compose.js#composeAttention',
+      method: 'packages/findings/policy.js#applyFindingPolicy + packages/findings/compose.js#composeAttention',
       gatewayProvided: gatewayHadAttention,
-      note: 'Recommended Order / attention groups are recomposed locally by MCP. Gateway /api/scan does not return attention.'
+      note: 'Recommended Order is recomposed locally: applyFindingPolicy then composeAttention. Gateway /api/scan does not return attention.'
     },
     priority: {
       source: REVIEW_PROVENANCE.attention_priority,
       method: 'packages/findings/compose.js#composedBrief',
       gatewayBriefPresent: Boolean(report.priorityBrief),
-      note: 'priority.brief and ordering are recomposed locally from composeAttention. Do not treat them as verbatim /api/scan priorityBrief.'
+      note: 'priority.brief and ordering are recomposed locally from local policy + composeAttention. Do not treat them as verbatim /api/scan priorityBrief.'
     },
     frank: {
       source: REVIEW_PROVENANCE.frank_deterministic,
@@ -222,7 +224,9 @@ export function buildReviewBundle(report = {}, {
   const rawFindings = Array.isArray(report.findings) ? report.findings : [];
   // Review bundle is stricter than production suppress prefixes: when the page was
   // not reached, do not surface any residual findings as auditable site QA.
-  const findings = pageQaWithheld ? [] : rawFindings;
+  // Re-apply local policy so MCP review reflects current product rules even when
+  // the gateway artifact was produced by an older deploy.
+  const findings = pageQaWithheld ? [] : applyFindingPolicy(rawFindings, environment);
   const findingsById = new Map();
   for (const f of findings) {
     const id = findingId(f);
@@ -284,11 +288,19 @@ export function buildReviewBundle(report = {}, {
   }));
 
   const pageQaWithheldFlag = pageQaWithheld;
+  const coverage = {
+    ...(report.coverage || {}),
+    performance: resolvePerformanceCoverage(
+      report.coverage || {},
+      report.browserPerformance || labPerformance(report),
+      report.context?.services?.performance || null
+    )
+  };
   const recomposedBrief = pageQaWithheldFlag
     ? (targetIntegrityBrief(integrity) || sanitizeText(report.priorityBrief || '', 900))
     : composedBrief(composition, {
       linkAudit: report.linkAudit || null,
-      coverage: report.coverage || {},
+      coverage,
       targetIntegrity: integrity
     });
   const bundle = {
@@ -319,7 +331,7 @@ export function buildReviewBundle(report = {}, {
       environment: sanitizeEnvironment(environment)
     },
     targetIntegrity: sanitizeTargetIntegrity(integrity),
-    coverage: coverageSnapshot(report.coverage),
+    coverage: coverageSnapshot(coverage),
     attention: {
       provenance: REVIEW_PROVENANCE.attention_priority,
       materialGroupCount: Number(composition.materialGroupCount || 0),

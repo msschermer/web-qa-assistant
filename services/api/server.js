@@ -10,6 +10,7 @@ import { buildEvidenceGraph, evidenceHash } from '../../packages/frank/evidence.
 import { deterministicFrankPlan, validateFrankPlan } from '../../packages/frank/plan.js';
 import { classifyEnvironment } from '../../packages/environment/classify.js';
 import { applyFindingPolicy } from '../../packages/findings/policy.js';
+import { resolvePerformanceCoverage } from '../../packages/findings/coverage.js';
 import { applyTargetIntegrityReport, attachTargetIntegrity, finalizeBlockedTargetReport } from '../../packages/integrity/apply-report.js';
 import { targetIntegrityLimitsAudit } from '../../packages/integrity/target-integrity.js';
 import { issueInstallationToken, verifyInstallationToken } from '../../packages/auth/install-access.js';
@@ -112,7 +113,7 @@ async function enrich(local, requestId = '', { allowAi = true } = {}) {
   const coverage = {
     ...base.coverage,
     published: coverageStatus(context.meta, 'published'),
-    performance: coverageStatus(context.performance, 'performance'),
+    performance: resolvePerformanceCoverage(base.coverage, base.browserPerformance, context.performance),
     wcag: coverageStatus(context.wcag, 'wcag')
   };
   const finalized = finalizeBlockedTargetReport({ ...base, coverage }, policyFindings);
