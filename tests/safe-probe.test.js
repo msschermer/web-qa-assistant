@@ -1,0 +1,207 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import fs from 'node:fs';
+import {
+  isPrivateIpAddress,
+  isPrivateProbeHost,
+  sanitizeProbeUrl,
+  assertPublicProbeDestination,
+  probeExternalDestination,
+  probeExternalCandidates,
+  mapExternalProbeRows,
+  evidenceUrl
+} from '../packages/security/safe-probe.js';
+
+function listen(handler) {
+  const server = http.createServer(handler);
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      resolve({
+        server,
+        port,
+        origin: `http://127.0.0.1:${port}`,
+        url: (path = '/') => `http://127.0.0.1:${port}${path}`
+      });
+    });
+  });
+}
+
+/** Map public-looking host to the local fixture while SSRF still sees a public DNS answer. */
+function fixtureOptions(origin) {
+  return {
+    lookup: async () => [{ address: '93.184.216.34', family: 4 }],
+    fetch: async (input, init = {}) => {
+      const u = new URL(String(input));
+      const rewritten = `${origin}${u.pathname}${u.search}`;
+      return fetch(rewritten, init);
+    }
+  };
+}
+
+test('SSRF host policy blocks private, localhost, CGNAT, metadata, userinfo', () => {
+  for (const ip of ['127.0.0.1', '10.2.3.4', '172.16.0.1', '192.168.1.1', '169.254.169.254', '100.64.1.2', '0.0.0.0']) {
+    assert.equal(isPrivateIpAddress(ip), true, ip);
+  }
+  assert.equal(isPrivateIpAddress('8.8.8.8'), false);
+  assert.equal(isPrivateProbeHost('localhost'), true);
+  assert.equal(isPrivateProbeHost('::1'), true);
+  assert.equal(sanitizeProbeUrl('http://user:pass@example.com/x'), null);
+  assert.equal(sanitizeProbeUrl('ftp://example.com/x'), null);
+  assert.equal(sanitizeProbeUrl('http://127.0.0.1/secret'), null);
+  assert.equal(sanitizeProbeUrl('http://10.0.0.1/'), null);
+  const ok = sanitizeProbeUrl('https://example.com/a?token=secret#frag');
+  assert.match(ok, /^https:\/\/example\.com\/a\?token=secret$/);
+  assert.doesNotMatch(ok, /#/);
+  assert.match(evidenceUrl('https://example.com/a?token=secret'), /redacted|value/i);
+});
+
+test('direct private destinations are blocked before network', async () => {
+  const blocked = await assertPublicProbeDestination('http://127.0.0.1/secret');
+  assert.equal(blocked.ok, false);
+  assert.equal(blocked.error, 'destination-not-allowed');
+  const row = await probeExternalDestination('http://127.0.0.1/secret');
+  assert.equal(row.status, 0);
+  assert.equal(row.error, 'destination-not-allowed');
+});
+
+test('userinfo destinations are blocked', async () => {
+  const row = await probeExternalDestination('http://user:pass@example.com/');
+  assert.equal(row.error, 'destination-not-allowed');
+});
+
+test('HEAD/GET fixture classifies 200/404/410/403/429 conservatively', async () => {
+  const { server, origin } = await listen((req, res) => {
+    if (req.method === 'HEAD') {
+      if (req.url === '/head-fail') {
+        res.writeHead(405, { allow: 'GET' });
+        return void res.end();
+      }
+    }
+    if (req.url === '/ok') return void res.writeHead(200).end('ok');
+    if (req.url === '/missing') return void res.writeHead(404).end('no');
+    if (req.url === '/gone') return void res.writeHead(410).end('gone');
+    if (req.url === '/deny') return void res.writeHead(403).end('no');
+    if (req.url === '/slow') return void res.writeHead(429).end('wait');
+    if (req.url === '/head-fail') return void res.writeHead(404).end('no');
+    res.writeHead(404).end();
+  });
+  const opts = fixtureOptions(origin);
+  try {
+    assert.equal((await probeExternalDestination('https://probe.example.com/ok', opts)).status, 200);
+    assert.equal((await probeExternalDestination('https://probe.example.com/missing', opts)).status, 404);
+    assert.equal((await probeExternalDestination('https://probe.example.com/gone', opts)).status, 410);
+    assert.equal((await probeExternalDestination('https://probe.example.com/deny', opts)).status, 403);
+    assert.equal((await probeExternalDestination('https://probe.example.com/slow', opts)).status, 429);
+    const viaGet = await probeExternalDestination('https://probe.example.com/head-fail', opts);
+    assert.equal(viaGet.status, 404);
+    assert.equal(viaGet.method, 'GET');
+  } finally {
+    server.close();
+  }
+});
+
+test('mapExternalProbeRows collapses duplicates and keeps 403/429 inconclusive', () => {
+  const candidates = [
+    { url: 'https://example.com/missing', text: 'A', occurrences: 2 },
+    { url: 'https://example.com/deny', text: 'B', occurrences: 1 },
+    { url: 'https://example.com/ok', text: 'C', occurrences: 1 }
+  ];
+  const rows = [
+    { url: candidates[0].url, status: 404, durationMs: 1 },
+    { url: candidates[1].url, status: 403, durationMs: 1 },
+    { url: candidates[2].url, status: 200, durationMs: 1 }
+  ];
+  const mapped = mapExternalProbeRows(candidates, rows);
+  assert.equal(mapped.findings.length, 1);
+  assert.equal(mapped.findings[0].ruleId, 'navigation.link-404-external');
+  assert.equal(mapped.findings[0].count, 2);
+  assert.equal(mapped.findings.some((f) => /403/.test(f.ruleId)), false);
+  assert.ok(mapped.incompleteChecks.some((c) => c.reason === 'http-403'));
+});
+
+test('duplicate candidate URLs share one network probe', async () => {
+  let hits = 0;
+  const { server, origin } = await listen((req, res) => {
+    hits += 1;
+    res.writeHead(404).end('x');
+  });
+  const opts = { ...fixtureOptions(origin), concurrency: 2 };
+  try {
+    const candidates = [
+      { url: 'https://probe.example.com/dup' },
+      { url: 'https://probe.example.com/dup' },
+      { url: 'https://probe.example.com/dup#section' }
+    ];
+    const rows = await probeExternalCandidates(candidates, opts);
+    assert.equal(rows.length, 3);
+    assert.equal(rows.every((r) => r.status === 404), true);
+    assert.equal(hits, 1);
+  } finally {
+    server.close();
+  }
+});
+
+test('redirect to private IP is blocked after hop revalidation', async () => {
+  const { server, origin } = await listen((req, res) => {
+    if (req.url === '/to-private') {
+      res.writeHead(302, { location: 'http://127.0.0.1/' });
+      return void res.end();
+    }
+    if (req.url === '/to-ok') {
+      res.writeHead(302, { location: 'https://probe.example.com/final' });
+      return void res.end();
+    }
+    if (req.url === '/final') return void res.writeHead(200).end('ok');
+    res.writeHead(404).end();
+  });
+  const opts = fixtureOptions(origin);
+  try {
+    const blocked = await probeExternalDestination('https://probe.example.com/to-private', opts);
+    assert.equal(blocked.error, 'destination-not-allowed');
+    const ok = await probeExternalDestination('https://probe.example.com/to-ok', opts);
+    assert.equal(ok.status, 200);
+    assert.equal(ok.redirected, true);
+  } finally {
+    server.close();
+  }
+});
+
+test('DNS answer to private IP is blocked', async () => {
+  const row = await probeExternalDestination('https://evil.example.com/', {
+    lookup: async () => [{ address: '169.254.169.254', family: 4 }]
+  });
+  assert.equal(row.error, 'destination-not-allowed');
+});
+
+test('timeout and network errors stay inconclusive', async () => {
+  const timed = await probeExternalDestination('https://probe.example.com/hang', {
+    lookup: async () => [{ address: '93.184.216.34', family: 4 }],
+    timeoutMs: 50,
+    fetch: async () => {
+      await new Promise((r) => setTimeout(r, 200));
+      throw new Error('timeout');
+    }
+  });
+  assert.equal(timed.status, 0);
+  assert.match(String(timed.error), /timeout/i);
+});
+
+test('query values sanitized in mapped evidence; fragment stripped from sanitizeProbeUrl', () => {
+  const candidates = [{ url: 'https://example.com/x?token=abc', text: 'A', occurrences: 3, selector: '#a' }];
+  const rows = [{ url: candidates[0].url, status: 404, durationMs: 2 }];
+  const mapped = mapExternalProbeRows(candidates, rows);
+  assert.equal(mapped.findings[0].count, 3);
+  assert.doesNotMatch(mapped.findings[0].detail, /token=abc/);
+  assert.equal(sanitizeProbeUrl('https://example.com/x#frag'), 'https://example.com/x');
+});
+
+test('link validation paths never request wildcard host permissions', () => {
+  const bg = fs.readFileSync('apps/extension/background.js', 'utf8');
+  const side = fs.readFileSync('apps/extension/sidepanel.js', 'utf8');
+  assert.doesNotMatch(bg, /permissions\.request\(\s*\{\s*origins:\s*\[[^\]]*http:\/\/\*\/\*/);
+  assert.doesNotMatch(bg, /permissions\.request\(\s*\{\s*origins:\s*\[[^\]]*https:\/\/\*\/\*/);
+  assert.doesNotMatch(side, /origins:\s*\[[^\]]*http:\/\/\*\/\*[^\]]*https:\/\/\*\/\*/);
+  assert.match(bg, /privilegedExternal:privatePage/);
+});

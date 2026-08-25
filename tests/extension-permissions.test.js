@@ -15,3 +15,10 @@ test('extension keeps broad host access optional',()=>{
   assert.equal(manifest.host_permissions.includes('<all_urls>'),false);
   assert.deepEqual(manifest.optional_host_permissions,['http://*/*','https://*/*']);
 });
+
+test('link enrichment does not request optional wildcard hosts',()=>{
+  const bg=fs.readFileSync('apps/extension/background.js','utf8');
+  assert.match(bg,/privilegedExternal:privatePage/);
+  assert.doesNotMatch(bg,/permissions\.request\([^\)]*http:\/\/\*\/\*/);
+  assert.doesNotMatch(bg,/permissions\.request\([^\)]*https:\/\/\*\/\*/);
+});
