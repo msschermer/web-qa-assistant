@@ -9,6 +9,8 @@ function clip(value, max) {
 export function sanitizeUrl(value) {
   try {
     const url = new URL(String(value));
+    url.username = '';
+    url.password = '';
     for (const key of [...url.searchParams.keys()]) {
       if (SENSITIVE_NAME.test(key)) url.searchParams.set(key, '[redacted]');
       else url.searchParams.set(key, '[value]');
@@ -16,6 +18,20 @@ export function sanitizeUrl(value) {
     url.hash = '';
     return url.toString();
   } catch { return clip(value, 600); }
+}
+
+/** Origin + pathname only. Prefer this for diagnostic/Report Bug URLs. */
+export function sanitizeUrlOriginPath(value) {
+  try {
+    const url = new URL(String(value));
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return clip(String(value ?? '').split(/[?#]/)[0], 600);
+  }
 }
 
 export function sanitizeSelector(value) {

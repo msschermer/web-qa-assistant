@@ -5,8 +5,8 @@ const RELEASE_VERSION = '1.7.3';
 const runtimeTrace = new RuntimeTrace();
 setLocalAiTraceSink((type,data)=>runtimeTrace.record(`local-ai:${type}`,data));
 
-let report = null, filter = 'all', tab = null, scanInFlight = false, frank = null,
-    showAllChecks = false, lastDiagnostic = null, siteSession = null, classFilter = '', cloudAiFallback = false, frankReturnFocus = null, frankRequestSeq = 0, pendingFrankCancel = null;
+let report = null, filter = 'all', tab = null, scanInFlight = false, frank = null, lastFrank = null,
+    showAllChecks = false, lastDiagnostic = null, lastScanAttempt = null, siteSession = null, classFilter = '', cloudAiFallback = false, frankReturnFocus = null, frankRequestSeq = 0, pendingFrankCancel = null;
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -552,6 +552,7 @@ function enterFrank() {
 }
 function leaveFrankLocal() {
   const returnFocus = frankReturnFocus; frankReturnFocus = null;
+  if (frank) lastFrank = frank;
   frank = null; document.body.dataset.mode = '';
   $('#scanner-view').hidden = false; $('#frank-view').hidden = true;
   $('#host').textContent = report?.page?.hostname || report?.page?.url || 'Current page';
@@ -675,7 +676,8 @@ async function startFrank(finding, card, triggerButton = null) {
     return;
   }
 
-  frank = { plan, graph: prepared.graph, tabId: prepared.tabId || tabId, index: 0, finding, reasoning };
+  frank = { plan, graph: prepared.graph, tabId: prepared.tabId || tabId, index: 0, finding, reasoning, planValid: true };
+  lastFrank = frank;
   runtimeTrace.record('frank-started', { mode: plan.mode, provider: reasoning.provider, status: reasoning.status, code: reasoning.code || '', stepCount: plan.steps?.length || 0 });
 
   const windowInfo = await chrome.windows.getCurrent().catch(() => null);
@@ -699,7 +701,8 @@ async function startFrank(finding, card, triggerButton = null) {
   if (!snapshot.ok) {
     // Keep the side panel as the sole surface: tear down the page coach to avoid an orphaned overlay.
     await send({ type: 'FRANK_END', tabId: prepared.tabId || tabId }, 4000).catch(() => {});
-    frank = { plan, graph: prepared.graph, tabId: prepared.tabId || tabId, index: 0, finding, reasoning };
+    frank = { plan, graph: prepared.graph, tabId: prepared.tabId || tabId, index: 0, finding, reasoning, planValid: true };
+  lastFrank = frank;
     enterFrank();
     renderFrankEvidenceLedger();
     const aiOperationalFail = frank.plan.mode === 'ai' && frank.reasoning?.status === 'operational';
@@ -711,7 +714,8 @@ async function startFrank(finding, card, triggerButton = null) {
     return;
   }
 
-  frank = { plan, graph: prepared.graph, tabId: prepared.tabId || tabId, index: 0, finding, reasoning };
+  frank = { plan, graph: prepared.graph, tabId: prepared.tabId || tabId, index: 0, finding, reasoning, planValid: true };
+  lastFrank = frank;
   const aiOperational = frank.plan.mode === 'ai' && frank.reasoning?.status === 'operational';
   const onDevice = aiOperational && frank.reasoning?.provider === 'chrome-built-in';
   // Cost-control / mode notice is recorded in the runtime trace; the panel closes immediately after.
@@ -745,7 +749,12 @@ async function loadSession() {
 
 async function rescan() {
   if (scanInFlight) return;
-  runtimeTrace.record('scan-start', { hasTab: Boolean(tab?.id), mode: tab?.id ? 'current-tab' : 'active-tab' });
+  const scanId = `scan-${Date.now().toString(36)}`;
+  const scanMode = tab?.id ? 'current-tab' : 'active-tab';
+  runtimeTrace.clear();
+  lastScanAttempt = { scanId, ok: false, mode: scanMode, at: new Date().toISOString() };
+  lastFrank = null;
+  runtimeTrace.record('scan-start', { hasTab: Boolean(tab?.id), mode: scanMode, scanId });
   pendingFrankCancel?.(); pendingFrankCancel = null; frankRequestSeq++;
   if (frank) await endFrank();
   scanInFlight = true; classFilter = '';
@@ -768,8 +777,15 @@ async function rescan() {
   clearDiagnostic(); notice('Inspecting the current page…');
   try {
     const r = await send(tab?.id ? { type: 'SCAN_TAB', tabId: tab.id } : { type: 'SCAN_ACTIVE' }, 20000);
-    if (!r.ok) { showFailure(r, 'The page scan could not complete.'); return; }
+    if (!r.ok) {
+      lastScanAttempt = { ...lastScanAttempt, ok: false, operation: r.diagnostic?.operation || 'SCAN', code: r.diagnostic?.id || '' };
+      runtimeTrace.record('scan-failed', { scanId, diagnosticId: r.diagnostic?.id || '', operation: r.diagnostic?.operation || 'SCAN' });
+      showFailure(r, 'The page scan could not complete.');
+      return;
+    }
     tab = r.tab; report = r.report;
+    report.scanId = scanId;
+    lastScanAttempt = { scanId, ok: true, mode: scanMode, at: new Date().toISOString() };
     $('#new-count').textContent = 'Local scan';
     report.priorityBrief = 'Local evidence is ready. Connected context is still running.';
     render();
@@ -778,7 +794,7 @@ async function rescan() {
     const enriched = await send({ type: 'ENRICH', report, tabId: tab?.id }, 32000);
     if (enriched.ok) {
       report = enriched.report;
-      runtimeTrace.record('scan-complete', { findingCount: Number(report.findings?.length||0), materialGroupCount: Number(report.attention?.materialGroupCount||0), representedClasses: report.attention?.representedClasses||[], connectedMode: report.connectedMode||'unknown' });
+      runtimeTrace.record('scan-complete', { findingCount: Number(report.findings?.length||0), materialGroupCount: Number(report.attention?.materialGroupCount||0), representedClasses: report.attention?.representedClasses||[], connectedMode: report.connectedMode||'unknown', scanId });
       const changed = [report.lifecycle?.newCount ? `${report.lifecycle.newCount} new` : '', report.lifecycle?.resolvedCount ? `${report.lifecycle.resolvedCount} resolved` : ''].filter(Boolean).join(' · ') || 'No changes';
       $('#new-count').textContent = changed;
       render();
@@ -792,7 +808,10 @@ async function rescan() {
         notice('Browser QA completed locally. The saved assistant access key was rejected. Verify the key under Connection settings to restore connected services.', 'warn');
       } else if (report.connectedMode === 'unavailable') notice('Browser QA completed. The assistant gateway could not be reached. Browser QA remains available with local evidence and verified guidance.', 'warn');
       else notice(unavailable.length ? `Scan complete with limited coverage: ${unavailable.join(', ')}.` : `Scan complete at ${scanned}.`, unavailable.length ? 'warn' : 'ok');
-    } else { runtimeTrace.record('scan-enrichment-failed', { code: enriched?.diagnostic?.id || '', error: enriched?.error || '' }); showFailure(enriched, 'Local scan completed, but connected context could not finish.'); }
+    } else {
+      runtimeTrace.record('scan-enrichment-failed', { scanId, diagnosticId: enriched?.diagnostic?.id || '', operation: enriched?.diagnostic?.operation || 'ENRICH', code: enriched?.diagnostic?.id || '' });
+      showFailure(enriched, 'Local scan completed, but connected context could not finish.');
+    }
     await updateWatch();
   } finally {
     scanInFlight = false;
@@ -800,8 +819,13 @@ async function rescan() {
     button.disabled = false;
     button.textContent = report ? 'Rescan' : 'Scan page';
     if (!report) {
-      $('#summary').hidden = true;
-      $('#idle-state').hidden = false;
+      if (lastDiagnostic) {
+        $('#summary').hidden = false;
+        $('#idle-state').hidden = true;
+      } else {
+        $('#summary').hidden = true;
+        $('#idle-state').hidden = false;
+      }
     }
   }
 }
@@ -837,16 +861,19 @@ $('#copy-diagnostic').onclick = async () => {
 
 function currentBugArtifact() {
   const includeContext = $('#bug-include-context')?.checked === true;
+  const diagnostic = lastDiagnostic ? { id: lastDiagnostic.id, operation: lastDiagnostic.operation, timestamp: lastDiagnostic.timestamp } : null;
   return buildBugReport({
     version: RELEASE_VERSION,
     trace: runtimeTrace.snapshot(),
     readiness: localFrankRuntime.snapshot(),
     report,
-    frank,
+    frank: frank || lastFrank,
     localAi: localAiDiagnostics({ includeOutput: includeContext }),
     userNote: $('#bug-note')?.value || '',
     includeContext,
-    userAgent: navigator.userAgent
+    userAgent: navigator.userAgent,
+    lastDiagnostic: diagnostic,
+    lastScanAttempt
   });
 }
 function refreshBugPrivacyCopy(){ const includeContext = $('#bug-include-context')?.checked === true; $('#bug-privacy-summary').textContent = bugReportPrivacySummary(includeContext); }

@@ -349,7 +349,7 @@
     findings.push(...malformedLinkFindings());
 
     findings.sort((a,b)=>(CATEGORY_RANK[b.category]-CATEGORY_RANK[a.category])||(SEVERITY_RANK[b.severity]-SEVERITY_RANK[a.severity]));
-    return{scannedAt:new Date().toISOString(),page,findings,browserPerformance,coverage:{browser:'complete',links:'pending',axe:'pending',published:'pending',performance:browserPerformance.available?'current-page':'pending',wcag:'pending',ai:'pending',runtime:globalThis.__WEBQA_RUNTIME_ERRORS__?'renderer':'not applicable'}};
+    return{scannedAt:new Date().toISOString(),page,findings,browserPerformance,diagnostics:{failedResources:diagnosticFailedResources()},pageDiagnostics:{errors:(globalThis.__WEBQA_RUNTIME_ERRORS__?.samples||[]).slice(0,20)},coverage:{browser:'complete',links:'pending',axe:'pending',published:'pending',performance:browserPerformance.available?'current-page':'pending',wcag:'pending',ai:'pending',runtime:globalThis.__WEBQA_RUNTIME_ERRORS__?'renderer':'not applicable'}};
   }
 
   // Semantic context is what lets Frank reason about the correct implementation
@@ -726,6 +726,20 @@
         element:inHead?null:el,targetType:inHead||!el?'document':'visual',
         evidence:`http-${row.status} ${row.url}`,extra:{resourceUrl:row.url}
       }));
+    }
+    return out;
+  }
+  function diagnosticFailedResources(){
+    const out=[];
+    let resources=[];
+    try{resources=performance.getEntriesByType('resource')||[]}catch{return out}
+    for(const entry of resources){
+      if(out.length>=25)break;
+      const status=Number(entry.responseStatus);
+      if(!Number.isFinite(status)||status<400)continue;
+      const url=sanitizeHttpUrl(entry.name);if(!url)continue;
+      let parsed=null;try{parsed=new URL(entry.name)}catch{}
+      out.push({kind:'resource_failure',initiator:String(entry.initiatorType||'other').slice(0,40),status,source:url,sameOrigin:parsed?parsed.origin===location.origin:false});
     }
     return out;
   }
@@ -1125,12 +1139,18 @@
     for(const f of findings){const key=`${f.ruleId}|${f.selector}|${f.evidence}`;if(!seen.has(key))seen.set(key,f)}
     const linksStatus=linkResult.status==='partial'?'partial':linkResult.status==='unavailable'?'unavailable':Number(linkResult.checked||0)===0?'none_checked':'complete';
     const runtimeStatus=globalThis.__WEBQA_RUNTIME_ERRORS__||local.coverage?.runtime==='renderer'?'renderer':(local.coverage?.runtime||'not applicable');
-    return{...local,browserPerformance:local.browserPerformance||null,findings:[...seen.values()],linkAudit:{checked:linkResult.checked||0,verifiedHealthy:linkResult.verifiedHealthy||0,confirmedIssues:linkResult.confirmedIssues||0,inconclusive:linkResult.inconclusive||0,incompleteChecks:linkResult.incompleteChecks||[],reachedLimit:!!linkResult.reachedLimit,degraded:!!linkResult.degraded,cached:linkResult.cached||0},coverage:{...local.coverage,links:linksStatus,axe:axeResults?'complete':'unavailable',runtime:runtimeStatus}};
+    return{...local,browserPerformance:local.browserPerformance||null,findings:[...seen.values()],linkAudit:{checked:linkResult.checked||0,verifiedHealthy:linkResult.verifiedHealthy||0,confirmedIssues:linkResult.confirmedIssues||0,inconclusive:linkResult.inconclusive||0,incompleteChecks:linkResult.incompleteChecks||[],reachedLimit:!!linkResult.reachedLimit,degraded:!!linkResult.degraded,cached:linkResult.cached||0},coverage:{...local.coverage,links:linksStatus,axe:axeResults?'complete':'unavailable',runtime:runtimeStatus},diagnostics:local.diagnostics||null,pageDiagnostics:local.pageDiagnostics||null};
   }
 
   function recordRuntimeErrors(payload){
     const count=Math.max(0,Math.min(20,Number(payload?.count||0)));
-    globalThis.__WEBQA_RUNTIME_ERRORS__={count};
+    const samples=Array.isArray(payload?.samples)?payload.samples.slice(0,20).map(s=>({
+      kind:'page_error',
+      message:clip(s?.message,240),
+      source:sanitizeResourceUrl(s?.source||'',220),
+      line:Number(s?.line)||0
+    })):[];
+    globalThis.__WEBQA_RUNTIME_ERRORS__={count,samples};
   }
 
   globalThis.WebQARules={run,axeFindings,resolvedTargetState,auditLinks,recheckLink,applyExternalProbeResults,merge,recordRuntimeErrors,selectorFor,resolveTarget,performanceSignals,preparePerformanceSignals,semanticContextFor,targetContextFor(targetId,selector='',ruleId=''){

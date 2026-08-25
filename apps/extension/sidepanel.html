@@ -164,12 +164,12 @@
 <dialog id="bug-dialog" class="bug-dialog" aria-labelledby="bug-title">
   <form method="dialog" class="bug-card">
     <div class="bug-head"><div><span class="section-kicker">Support</span><h2 id="bug-title">Report a bug</h2></div><button class="dialog-close" value="cancel" aria-label="Close report bug dialog">×</button></div>
-    <p>Generate a diagnostic report from this Web QA Assistant session. <b>Nothing is sent automatically.</b></p>
+    <p>Creates a sanitized diagnostic report with scan evidence, coverage, page/WebQA error codes, and Frank status. <b>Nothing is sent automatically.</b></p>
     <div class="privacy-box"><span class="privacy-icon" aria-hidden="true">✓</span><div><b>Privacy-safe by default</b><p id="bug-privacy-summary"></p></div></div>
     <label class="context-optin"><input id="bug-include-context" type="checkbox"><span><b>Include current finding and Frank wording</b><small>Useful when the problem is with Frank’s explanation. This may include bounded page-derived text after redaction.</small></span></label>
     <label class="bug-note-label">What went wrong? <span class="summary-note">optional</span><textarea id="bug-note" rows="3" maxlength="800" placeholder="For example: Frank stayed in Verified guidance even though on-device AI was ready."></textarea></label>
-    <div class="bug-actions"><button id="bug-copy" type="button" class="btn btn-quiet">Copy report</button><button id="bug-download" type="button" class="btn btn-primary">Download report</button></div>
-    <p class="fine-print">The report never includes selectors, cookies, form values, raw DOM or stored access keys. The downloaded report is a JSON support file. Review it before sharing it with support.</p>
+    <div class="bug-actions"><button id="bug-copy" type="button" class="btn btn-quiet">Copy JSON</button><button id="bug-download" type="button" class="btn btn-primary">Download report</button></div>
+    <p class="fine-print">The report never includes selectors, cookies, form values, raw DOM or stored access keys. Finding titles are omitted unless you opt in. For Cursor debugging, download the JSON and save it under qa-runs/ — clipboard copy is not visible to Cursor. Review it before sharing.</p>
   </form>
 </dialog>
 

@@ -11,6 +11,33 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     return s.length > max ? s.slice(0, max - 1) + '…' : s;
   };
 
+  const PAGE_DIAG = globalThis.__WEBQA_PAGE_DIAGNOSTICS__ || (globalThis.__WEBQA_PAGE_DIAGNOSTICS__ = { errors: [] });
+  function isExtensionNoise(source) {
+    return /^(chrome-extension:|moz-extension:|safari-extension:)/i.test(String(source || ''));
+  }
+  function rememberRuntimeEvent(kind, payload) {
+    if (PAGE_DIAG.errors.length >= 25) return;
+    const source = String(payload.source || '');
+    if (isExtensionNoise(source)) return;
+    PAGE_DIAG.errors.push({
+      kind,
+      message: clip(payload.message, 240),
+      source: clip(source.split(/[?#]/)[0], 220),
+      line: Number(payload.line) || 0
+    });
+  }
+  if (!globalThis.__WEBQA_PAGE_DIAG_BOUND__) {
+    globalThis.__WEBQA_PAGE_DIAG_BOUND__ = true;
+    addEventListener('error', event => {
+      rememberRuntimeEvent('page_error', { message: event.message || '', source: event.filename || '', line: event.lineno || 0 });
+    });
+    addEventListener('unhandledrejection', event => {
+      const reason = event.reason;
+      const message = reason && typeof reason === 'object' ? (reason.message || String(reason)) : String(reason || 'unhandledrejection');
+      rememberRuntimeEvent('unhandled_rejection', { message, source: '', line: 0 });
+    });
+  }
+
   async function scan() {
     try { await window.WebQARules.preparePerformanceSignals?.(); } catch {}
     const local = window.WebQARules.run();
@@ -37,6 +64,10 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       });
     }
     report.coverage.links = 'pending';
+    const idleErrors = globalThis.__WEBQA_PAGE_DIAGNOSTICS__?.errors || [];
+    report.pageDiagnostics = {
+      errors: [...(report.pageDiagnostics?.errors || []), ...idleErrors].slice(-25)
+    };
     return report;
   }
   async function auditLinks() {

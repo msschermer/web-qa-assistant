@@ -59,8 +59,21 @@ async function openPage(url) {
   const b = await browser();
   const context = await b.newContext({ ignoreHTTPSErrors: false, javaScriptEnabled: true, acceptDownloads: false, serviceWorkers: 'block', viewport: { width: 1365, height: 850 } });
   const page = await context.newPage();
-  const runtimeErrors = { count: 0 };
-  page.on('pageerror', () => { runtimeErrors.count += 1; });
+  const runtimeErrors = { count: 0, samples: [] };
+  page.on('pageerror', (err) => {
+    runtimeErrors.count += 1;
+    if (runtimeErrors.samples.length >= 20) return;
+    const stack = String(err?.stack || '');
+    const frame = stack.split('\n').find(line => /https?:\/\//.test(line)) || stack.split('\n')[1] || '';
+    const sourceMatch = frame.match(/https?:\/\/[^\s)]+/);
+    const lineMatch = frame.match(/:(\d+):\d+/);
+    runtimeErrors.samples.push({
+      kind: 'page_error',
+      message: String(err?.message || err).slice(0, 240),
+      source: String(sourceMatch?.[0] || '').replace(/[?#].*$/, '').slice(0, 220),
+      line: Number(lineMatch?.[1]) || 0
+    });
+  });
   await page.route('**/*', route => {
     const u = route.request().url();
     if (!/^https?:/i.test(u)) return route.abort('blockedbyclient');
@@ -102,15 +115,16 @@ app.post('/scan', async (req, res) => {
     await page.addScriptTag({ path: path.resolve(__dirname, '../../packages/rules/image-purpose.js') });
     await page.addScriptTag({ path: path.resolve(__dirname, '../../packages/rules/browser-rules.js') });
     const errorCount = Math.max(0, Math.min(20, Number(runtimeErrors?.count || 0)));
-    const report = await page.evaluate(async (runtimeErrorCount) => {
-      try { window.WebQARules.recordRuntimeErrors?.({ count: runtimeErrorCount }); } catch {}
+    const errorSamples = Array.isArray(runtimeErrors?.samples) ? runtimeErrors.samples.slice(0, 20) : [];
+    const report = await page.evaluate(async ({ runtimeErrorCount, samples }) => {
+      try { window.WebQARules.recordRuntimeErrors?.({ count: runtimeErrorCount, samples }); } catch {}
       try { await window.WebQARules.preparePerformanceSignals?.(); } catch {}
       const local = window.WebQARules.run(); let axe = null; let links = { findings: [], checked: 0 };
       try { axe = await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] } }); } catch {}
       try { links = await window.WebQARules.auditLinks({ limit: 30, concurrency: 6, timeoutMs: 3000, retryTimeoutMs: 6000, budgetMs: 10000 }); } catch {}
       if (runtimeErrorCount >= 0) local.coverage = { ...local.coverage, runtime: 'renderer' };
       return { local, axe, links };
-    }, errorCount);
+    }, { runtimeErrorCount: errorCount, samples: errorSamples });
     const { local, axe, links } = report;
     // Gateway-authoritative privileged probes (SSRF+DNS per hop). No browser host permissions.
     const externalCandidates = Array.isArray(links?.externalCandidates) ? links.externalCandidates.slice(0, 12) : [];
