@@ -12,8 +12,9 @@ import { classifyEnvironment } from '../../packages/environment/classify.js';
 import { applyFindingPolicy } from '../../packages/findings/policy.js';
 import { resolvePerformanceCoverage } from '../../packages/findings/coverage.js';
 import { applyTargetIntegrityReport, attachTargetIntegrity, finalizeBlockedTargetReport } from '../../packages/integrity/apply-report.js';
-import { targetIntegrityLimitsAudit } from '../../packages/integrity/target-integrity.js';
+import { targetIntegrityLimitsAudit, targetIntegrityBlocksAudit } from '../../packages/integrity/target-integrity.js';
 import { issueInstallationToken, verifyInstallationToken } from '../../packages/auth/install-access.js';
+import { probeExternalCandidates, mapExternalProbeRows } from '../../packages/security/safe-probe.js';
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -101,10 +102,67 @@ function coverageStatus(result, kind) {
   return 'complete';
 }
 
+async function applyServerExternalLinkProbes(report) {
+  if (!report || targetIntegrityBlocksAudit(report.page?.targetIntegrity)) return report;
+  const fromField = Array.isArray(report.externalLinkCandidates) ? report.externalLinkCandidates : [];
+  const fromIncomplete = (report.linkAudit?.incompleteChecks || [])
+    .filter((c) => c?.kind === 'external-link' && (!c.status || Number(c.status) === 0))
+    .map((c) => ({
+      url: c.url,
+      text: c.text || '',
+      occurrences: 1,
+      prominence: c.prominence || '',
+      location: c.location || '',
+      selector: '',
+      sources: []
+    }));
+  const seen = new Set();
+  const candidates = [];
+  for (const row of [...fromField, ...fromIncomplete]) {
+    const key = String(row?.url || '');
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    candidates.push(row);
+    if (candidates.length >= 12) break;
+  }
+  if (!candidates.length) return report;
+
+  const rows = await probeExternalCandidates(candidates);
+  const applied = mapExternalProbeRows(candidates, rows);
+  const resolved = new Set(applied.resolvedUrls || []);
+  const priorIncomplete = (report.linkAudit?.incompleteChecks || [])
+    .filter((c) => !(c.kind === 'external-link' && resolved.has(c.url)));
+  const incompleteChecks = [...priorIncomplete, ...(applied.incompleteChecks || [])];
+  const findings = [...(report.findings || []), ...(applied.findings || [])];
+  const confirmedIssues = findings.filter((f) => /navigation\.link-(404|410|5xx)/.test(String(f.ruleId || ''))).length;
+  const checked = Math.max(Number(report.linkAudit?.checked || 0), candidates.length);
+  const linksCoverage = incompleteChecks.length
+    ? 'partial'
+    : checked > 0
+      ? 'complete'
+      : (report.coverage?.links || 'none_checked');
+  return {
+    ...report,
+    findings,
+    externalLinkCandidates: undefined,
+    linkAudit: {
+      ...(report.linkAudit || {}),
+      checked,
+      confirmedIssues: Math.max(Number(report.linkAudit?.confirmedIssues || 0), confirmedIssues),
+      inconclusive: incompleteChecks.length,
+      incompleteChecks,
+      privilegedProbe: 'gateway'
+    },
+    coverage: { ...(report.coverage || {}), links: linksCoverage }
+  };
+}
+
 async function enrich(local, requestId = '', { allowAi = true } = {}) {
-  const base = attachTargetIntegrity(local, {
-    requestedUrl: local.page?.requestedUrl || local.page?.url,
-    html: local.page?.documentHtmlSample || ''
+  let withLinks = local;
+  try { withLinks = await applyServerExternalLinkProbes(local); } catch { withLinks = local; }
+  const base = attachTargetIntegrity(withLinks, {
+    requestedUrl: withLinks.page?.requestedUrl || withLinks.page?.url,
+    html: withLinks.page?.documentHtmlSample || ''
   });
   const context = await allContext(base, { requestId });
   const correlated = correlate(base, context);

@@ -224,7 +224,11 @@ async function contextualize(report,context=null){
   return{...finalized,environment,page:{...finalized.page,environment},findings,attention:{groups:attention.groups.map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead.id,selectors:g.selectors,instanceIds:g.instances.map(x=>x.id),rootCauseKey:g.lead.rootCauseKey||g.key,targetability:g.lead.targetability||'',lenses:g.lead.lenses||[]})),worthChecking:(attention.worthChecking||[]).map(w=>({key:w.key,title:w.title,scope:w.scope,lens:w.lens,fixOwner:w.fixOwner,size:w.size,instanceCount:w.instanceCount,findingIds:w.findings.map(f=>f.id)})),classCounts:attention.classCounts,materialGroupCount:attention.materialGroupCount,materialFindingCount:attention.materialFindingCount,representedClasses:attention.representedClasses,classLabels:Object.fromEntries(Object.entries(IMPACT_CLASSES).map(([k,v])=>[k,v.label]))},priorityBrief:finalized.priorityBrief||report.priorityBrief||null,targetIntegrityBlocked:finalized.targetIntegrityBlocked||false};
 }
 function mergeGatewayReport(local,remote){
-  if(!remote)return local;const byId=new Map((local.findings||[]).map(f=>[f.id||f.fingerprint,f]));
+  if(!remote)return local;
+  if(remote.linkAudit?.privilegedProbe==='gateway'){
+    return{...local,...remote,page:{...(remote.page||{}),...(local.page||{}),environment:remote.page?.environment||local.page?.environment},findings:remote.findings||local.findings,linkAudit:remote.linkAudit,coverage:{...(local.coverage||{}),...(remote.coverage||{})}};
+  }
+  const byId=new Map((local.findings||[]).map(f=>[f.id||f.fingerprint,f]));
   const findings=(remote.findings||[]).map(r=>{const l=byId.get(r.id||r.fingerprint);if(!l)return r;return{...r,selector:l.selector||r.selector,targetId:l.targetId||r.targetId,targetType:l.targetType||r.targetType,evidence:l.evidence??r.evidence,axe:l.axe,link:l.link||r.link,verification:r.verification||l.verification};});
   return{...local,...remote,page:{...(remote.page||{}),...(local.page||{}),environment:remote.page?.environment||local.page?.environment},findings,linkAudit:local.linkAudit||remote.linkAudit};
 }
@@ -247,14 +251,16 @@ async function updateState(tab,report){
 
 async function scanExistingTab(tabId){if(!tabId)throw new Error('The inspected tab is no longer available.');let report;try{await chrome.tabs.sendMessage(tabId,{type:'PING'});report=await chrome.tabs.sendMessage(tabId,{type:'SCAN'})}catch{try{await ensureInjected(tabId);report=await chrome.tabs.sendMessage(tabId,{type:'SCAN'})}catch{throw new Error('This tab navigated or page access expired. Click the toolbar icon on the current page, or enable Watch this site for persistent rescans.')}}if(!report?.page?.url||!/^https?:/i.test(report.page.url))throw new Error('This browser page cannot be inspected. Open a normal HTTP or HTTPS page.');return contextualize(report)}
 async function localScan(tab){if(!tab?.id)throw new Error('No active browser tab was found.');if(tab.url&&!/^https?:/i.test(tab.url))throw new Error('This browser page cannot be inspected. Open a normal HTTP or HTTPS page.');try{await ensureInjected(tab.id)}catch(error){const message=String(error?.message||error||'');if(/Cannot access|Missing host permission|activeTab|chrome:\/\/|edge:\/\/|about:/i.test(message))throw new Error('Page access expired. Click the toolbar icon on this page, then use Rescan normally.');throw error}let report=await chrome.tabs.sendMessage(tab.id,{type:'SCAN'});if(!report?.page?.url||!/^https?:/i.test(report.page.url))throw new Error('This browser page cannot be inspected. Open a normal HTTP or HTTPS page.');return contextualize(report)}
-async function addLinkAudit(report,tabId){
-  if(['complete','partial'].includes(report?.coverage?.links)&&report?.linkAudit)return report;if(!tabId)return report;
+async function addLinkAudit(report,tabId,{privilegedExternal=true}={}){
+  if(['complete','partial'].includes(report?.coverage?.links)&&report?.linkAudit&&!report?.externalLinkCandidates?.length)return report;if(!tabId)return report;
   try{
     const result=await chrome.tabs.sendMessage(tabId,{type:'AUDIT_LINKS'});
     let linkFindings=Array.isArray(result?.findings)?result.findings:[];
     let incompleteChecks=Array.isArray(result?.incompleteChecks)?result.incompleteChecks:[];
     const externalCandidates=Array.isArray(result?.externalCandidates)?result.externalCandidates.slice(0,12):[];
-    if(externalCandidates.length){
+    // Connected scans: leave external confirmation to the gateway (no broad host permission prompts).
+    // Local-only / private pages: optional SW fetch only when host permission already exists — never request wildcards.
+    if(privilegedExternal&&externalCandidates.length){
       const probeRows=[];
       for(const candidate of externalCandidates){
         const started=Date.now();
@@ -278,7 +284,7 @@ async function addLinkAudit(report,tabId){
       }catch{}
     }
     const status=result?.status==='unavailable'?'unavailable':incompleteChecks.length?'partial':'complete';
-    return{...report,findings:[...(report.findings||[]),...linkFindings],linkAudit:{checked:Number(result?.checked||0),verifiedHealthy:Number(result?.verifiedHealthy||0),confirmedIssues:Number(result?.confirmedIssues||linkFindings.length),inconclusive:incompleteChecks.length,incompleteChecks,limit:Number(result?.limit||0),reachedLimit:Boolean(result?.reachedLimit),degraded:Boolean(result?.degraded),cached:Number(result?.cached||0)},coverage:{...report.coverage,links:status}};
+    return{...report,findings:[...(report.findings||[]),...linkFindings],externalLinkCandidates:externalCandidates,linkAudit:{checked:Number(result?.checked||0),verifiedHealthy:Number(result?.verifiedHealthy||0),confirmedIssues:Number(result?.confirmedIssues||linkFindings.length),inconclusive:incompleteChecks.length,incompleteChecks,limit:Number(result?.limit||0),reachedLimit:Boolean(result?.reachedLimit),degraded:Boolean(result?.degraded),cached:Number(result?.cached||0)},coverage:{...report.coverage,links:status}};
   }catch{return{...report,linkAudit:{checked:0,verifiedHealthy:0,confirmedIssues:0,inconclusive:0,incompleteChecks:[]},coverage:{...report.coverage,links:'unavailable'}}}
 }
 
@@ -349,8 +355,10 @@ async function testGateway(overrides={}){
 
 function localOnlyCoverage(report){return{...report.coverage,published:'local-only',performance:'local-only',wcag:'local-only',ai:'local-only'}}
 async function enrich(report,tabId=null){
-  report=await addLinkAudit(report,tabId);report=await contextualize(report);
-  if(isPrivateHost(report.page?.hostname||'')){const coverage=localOnlyCoverage(report);return{...report,coverage,priorityBrief:'Local inspection complete. Frank is using browser and accessibility evidence only; connected services are intentionally disabled for this private environment.',priorityMode:'deterministic',connectedMode:'local-only',context:{performance:null,services:{}}}}
+  const privatePage=isPrivateHost(report.page?.hostname||'');
+  // Connected public pages: content-script audit only; gateway performs privileged external probes.
+  report=await addLinkAudit(report,tabId,{privilegedExternal:privatePage});report=await contextualize(report);
+  if(privatePage){const coverage=localOnlyCoverage(report);return{...report,coverage,priorityBrief:'Local inspection complete. Frank is using browser and accessibility evidence only; connected services are intentionally disabled for this private environment.',priorityMode:'deterministic',connectedMode:'local-only',context:{performance:null,services:{}}}}
   try{
     const result=await gatewayPost('/api/context',gatewayContextEnvelope(report),22000,'CONTEXT');
     if(result?.report){const merged=mergeGatewayReport(report,result.report),contextual=await contextualize(merged,result.report.context?.services?.performance);return{...contextual,aiGateway:result.gateway,requestId:result.requestId,connectedMode:'gateway'}}

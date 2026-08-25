@@ -283,7 +283,17 @@ export function gatewayContextEnvelope(report = {}) {
       checked: Number(report.linkAudit.checked || 0), verifiedHealthy: Number(report.linkAudit.verifiedHealthy || 0),
       confirmedIssues: Number(report.linkAudit.confirmedIssues || 0), inconclusive: Number(report.linkAudit.inconclusive || 0),
       limit: Number(report.linkAudit.limit || 0), reachedLimit: Boolean(report.linkAudit.reachedLimit), degraded: Boolean(report.linkAudit.degraded), cached: Number(report.linkAudit.cached || 0)
-    } : null
+    } : null,
+    // First-party gateway probes need destination URLs; values are still treated as untrusted data.
+    externalLinkCandidates: (report.externalLinkCandidates || []).slice(0, 12).map((c) => ({
+      url: String(c.url || '').slice(0, 2000),
+      text: sanitizeText(c.text, 180),
+      occurrences: Math.max(1, Number(c.occurrences || 1)),
+      prominence: sanitizeText(c.prominence, 40),
+      location: sanitizeText(c.location, 40),
+      selector: sanitizeSelector(c.selector || ''),
+      sources: Array.isArray(c.sources) ? c.sources.slice(0, 8).map((s) => sanitizeStructured(s)) : []
+    }))
   };
 }
 

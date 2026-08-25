@@ -4,6 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { applyTargetIntegrityReport } from '../../packages/integrity/apply-report.js';
+import { probeExternalCandidates, mapExternalProbeRows } from '../../packages/security/safe-probe.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -54,23 +55,6 @@ function browser() {
   }
   return browserPromise;
 }
-function isPrivateProbeHost(host){
-  const h=String(host||'').toLowerCase();
-  if(!h||h==='localhost'||h.endsWith('.local')||h.endsWith('.internal')||h.endsWith('.localhost'))return true;
-  if(/^127\./.test(h)||/^10\./.test(h)||/^192\.168\./.test(h)||/^169\.254\./.test(h)||/^0\.0\.0\.0$/.test(h))return true;
-  if(/^\[?::1\]?$/.test(h)||/^\[?fc/i.test(h)||/^\[?fd/i.test(h)||/^\[?fe80:/i.test(h))return true;
-  const m=/^172\.(\d+)\./.exec(h);return!!(m&&Number(m[1])>=16&&Number(m[1])<=31);
-}
-function sanitizeProbeUrl(raw){
-  try{
-    const u=new URL(String(raw||''));
-    if(!/^https?:$/.test(u.protocol))return null;
-    if(u.username||u.password)return null;
-    if(isPrivateProbeHost(u.hostname))return null;
-    u.hash='';
-    return u.toString();
-  }catch{return null}
-}
 async function openPage(url) {
   const b = await browser();
   const context = await b.newContext({ ignoreHTTPSErrors: false, javaScriptEnabled: true, acceptDownloads: false, serviceWorkers: 'block', viewport: { width: 1365, height: 850 } });
@@ -96,6 +80,12 @@ async function targetContext(page, selector) {
   } catch { return null; }
 }
 
+function authorized(req) {
+  const expected = String(process.env.RENDERER_TOKEN || 'dev-token');
+  const actual = String(req.headers['x-renderer-token'] || '');
+  return Boolean(expected) && actual === expected;
+}
+
 app.get('/health', (req, res) => res.json({ ok: true, service: 'renderer', frankSnapshots: true, chromiumAvailable: Boolean(resolvedChromium()) }));
 app.post('/scan', async (req, res) => {
   if (!authorized(req)) return res.status(403).json({ ok: false, error: 'Forbidden' });
@@ -117,25 +107,11 @@ app.post('/scan', async (req, res) => {
       return { local, axe, links };
     });
     const { local, axe, links } = report;
-    // Privileged probe for external destinations the page context could not classify (CORS).
+    // Gateway-authoritative privileged probes (SSRF+DNS per hop). No browser host permissions.
     const externalCandidates = Array.isArray(links?.externalCandidates) ? links.externalCandidates.slice(0, 12) : [];
     if (externalCandidates.length) {
-      const probeRows = [];
-      for (const candidate of externalCandidates) {
-        const started = Date.now();
-        const probeUrl = sanitizeProbeUrl(candidate.url);
-        if (!probeUrl) {
-          probeRows.push({ url: candidate.url, status: 0, error: 'destination-not-allowed', durationMs: 0 });
-          continue;
-        }
-        try {
-          const res = await opened.context.request.get(probeUrl, { timeout: 4500, maxRedirects: 8, failOnStatusCode: false });
-          probeRows.push({ url: candidate.url, status: res.status(), finalUrl: res.url(), redirected: res.url() !== probeUrl, durationMs: Date.now() - started });
-        } catch (error) {
-          probeRows.push({ url: candidate.url, status: 0, error: String(error?.message || error), durationMs: Date.now() - started });
-        }
-      }
-      const applied = await page.evaluate(({ candidates, rows }) => window.WebQARules.applyExternalProbeResults(candidates, rows), { candidates: externalCandidates, rows: probeRows });
+      const probeRows = await probeExternalCandidates(externalCandidates);
+      const applied = mapExternalProbeRows(externalCandidates, probeRows);
       if (applied?.findings?.length) links.findings = [...(links.findings || []), ...applied.findings];
       if (applied?.resolvedUrls?.length) {
         const resolved = new Set(applied.resolvedUrls);
