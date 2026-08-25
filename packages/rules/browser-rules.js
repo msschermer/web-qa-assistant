@@ -14,6 +14,12 @@
   function text(value){return String(value??'').trim()}
   function attr(el,name){return text(el?.getAttribute?.(name))}
   function clip(value,n=420){const s=text(value).replace(/\s+/g,' ');return s.length>n?s.slice(0,n-1)+'…':s}
+  function sanitizeResourceUrl(raw,n=220){
+    const value=String(raw||'').trim();
+    if(!value)return'';
+    try{const u=new URL(value);u.search='';u.hash='';return clip(u.toString(),n)}
+    catch{return clip(value.split(/[?#]/)[0]||value,n)}
+  }
   function hash(input){let h=2166136261;for(let i=0;i<input.length;i++){h^=input.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36)}
   function selectorFor(el){
     if(!el||el.nodeType!==1)return'';
@@ -365,7 +371,7 @@
       const lcp=latestLcp;
       let lcpElement=null;
       if(lcp?.element){
-        try{lcpElement={tag:String(lcp.element.tagName||'').toLowerCase(),selector:selectorFor(lcp.element),url:clip(lcp.url||lcp.element.currentSrc||lcp.element.src||'',220),size:Number(lcp.size||0)};}catch{}
+        try{lcpElement={tag:String(lcp.element.tagName||'').toLowerCase(),selector:selectorFor(lcp.element),url:sanitizeResourceUrl(lcp.url||lcp.element.currentSrc||lcp.element.src||''),size:Number(lcp.size||0)};}catch{}
       }
       const knownResources=resources.filter(r=>(Number(r.transferSize)||0)>0);
       return{
@@ -384,7 +390,7 @@
         unknownTransferCount,
         resourceCount:resources.length,
         resourceMix:byType,
-        heaviest:knownResources.slice().sort((a,b)=>(Number(b.transferSize)||0)-(Number(a.transferSize)||0)).slice(0,5).map(r=>({name:clip(r.name,220),type:r.initiatorType||'other',bytes:Number(r.transferSize)||0,durationMs:Math.round(r.duration||0)}))
+        heaviest:knownResources.slice().sort((a,b)=>(Number(b.transferSize)||0)-(Number(a.transferSize)||0)).slice(0,5).map(r=>({name:sanitizeResourceUrl(r.name),type:r.initiatorType||'other',bytes:Number(r.transferSize)||0,durationMs:Math.round(r.duration||0)}))
       };
     }catch(error){return{available:false,reason:String(error?.message||error)}}
   }
