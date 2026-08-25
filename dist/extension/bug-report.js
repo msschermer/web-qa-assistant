@@ -78,9 +78,9 @@ export function redactText(value, max = DIAGNOSTIC_CAPS.string) {
 }
 
 function sanitize(value, { includePageText = false, depth = 0, maxArray = 30 } = {}) {
-  if (depth > 5) return '[truncated]';
   if (value == null || typeof value === 'boolean' || typeof value === 'number') return value;
   if (typeof value === 'string') return redactText(value);
+  if (depth > 5) return '[truncated]';
   if (Array.isArray(value)) return value.slice(0, maxArray).map(v => sanitize(v, { includePageText, depth: depth + 1, maxArray }));
   if (typeof value === 'object') {
     const out = {};

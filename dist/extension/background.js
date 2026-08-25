@@ -14,7 +14,7 @@ const GATEWAY_TIMEOUT_MS = 10000;
 const FRANK_TIMEOUT_MS = 16000;
 const dirtyTimers = new Map();
 const workspaceHot = new Map();
-const RELEASE_VERSION = '1.7.3';
+const RELEASE_VERSION = '1.7.4';
 const WORKSPACE_SESSION_KEY = 'qaWorkspaceByTab';
 
 async function readWorkspaceStore() {

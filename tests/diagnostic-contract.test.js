@@ -230,3 +230,17 @@ test('section reader has no full dump and rejects unknown sections', () => {
   assert.equal(isReportBugArtifact({ kind: 'api-scan' }), false);
   assert.equal(isReportBugArtifact({ schema: 'web-qa-assistant-bug-report/v1' }), true);
 });
+
+test('hardened MCP read path preserves timeline coverage_degraded area names', () => {
+  const report = reachedReport({
+    coverage: { browser: 'complete', links: 'partial', axe: 'complete', performance: 'current-page', runtime: 'not applicable' }
+  });
+  report.coverageReasons = explainCoverageReasons(report);
+  const artifact = buildBugReport({ report });
+  const hardened = hardenReportBugArtifact(artifact);
+  const timeline = selectDiagnosticSection(hardened, 'timeline');
+  const degraded = timeline.items.find(e => e.type === 'coverage_degraded');
+  assert.ok(degraded, 'expected coverage_degraded timeline event');
+  assert.deepEqual(degraded.data.areas, ['links', 'runtime']);
+  assert.doesNotMatch(JSON.stringify(degraded.data), /\[truncated\]/);
+});
