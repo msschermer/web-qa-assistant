@@ -21,6 +21,12 @@ test('AI evidence contract redacts URL query contents while preserving useful ro
   assert.doesNotMatch(safe,/#section/);
 });
 
+test('AI evidence contract strips URL userinfo',()=>{
+  const safe=sanitizeUrl('https://user:pass@example.com/contact?token=supersecret#section');
+  assert.doesNotMatch(safe,/user:pass/);
+  assert.doesNotMatch(safe,/supersecret/);
+});
+
 test('AI envelope explicitly forbids whole DOM, cookies and form values',()=>{
   const envelope=aiEvidenceEnvelope({
     finding:{ruleId:'axe.label',title:'Missing label',detail:'Control has no accessible name',selector:'#email',verification:{state:'confirmed',method:'axe',attempts:1}},
