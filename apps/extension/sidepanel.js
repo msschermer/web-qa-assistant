@@ -390,6 +390,8 @@ function render() {
     wrap.appendChild(node);
   }
 
+  if (!classFilter && !showAllChecks) renderWorthChecking(wrap);
+
   if (!wrap.children.length) {
     const empty = document.createElement('div');
     empty.className = 'empty-findings';
@@ -400,6 +402,47 @@ function render() {
       : '<b>No priority issues need attention.</b> Use Show all checks to inspect lower-priority observations.';
     wrap.appendChild(empty);
   }
+}
+
+function renderWorthChecking(wrap) {
+  const groups = report?.attention?.worthChecking || [];
+  if (!groups.length || targetBlocked()) return;
+  const section = document.createElement('section');
+  section.className = 'worth-checking';
+  section.setAttribute('aria-label', 'Worth checking further');
+  const heading = document.createElement('h2');
+  heading.className = 'section-title';
+  heading.textContent = 'Worth checking further';
+  section.appendChild(heading);
+  const intro = document.createElement('p');
+  intro.className = 'muted';
+  intro.textContent = 'Secondary or inconclusive related checks. Confirmed material issues stay in Recommended order above.';
+  section.appendChild(intro);
+  for (const g of groups.slice(0, 6)) {
+    const block = document.createElement('div');
+    block.className = 'worth-group';
+    const title = document.createElement('h3');
+    title.textContent = `${g.title}${g.instanceCount > 1 ? ` · ${g.instanceCount}` : ''}`;
+    block.appendChild(title);
+    const list = document.createElement('ul');
+    for (const id of (g.findingIds || []).slice(0, 6)) {
+      const f = (report.findings || []).find(x => x.id === id);
+      if (!f) continue;
+      const li = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'linkish';
+      button.textContent = f.title || f.ruleId;
+      button.onclick = () => startFrank(f);
+      li.appendChild(button);
+      list.appendChild(li);
+    }
+    if (list.children.length) {
+      block.appendChild(list);
+      section.appendChild(block);
+    }
+  }
+  if (section.querySelector('.worth-group')) wrap.appendChild(section);
 }
 
 /* ---------------- Frank walkthrough ---------------- */

@@ -389,9 +389,16 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     selectorNode.textContent = selector;
 
     if (state.documentLevel) {
+      const markupMode = /markup/i.test(String(frankSession?.plan?.finding?.targetability || ''));
       anchor.dataset.tone = 'document';
-      head.textContent = 'Document-level finding';
-      note.textContent = state.reason;
+      head.textContent = markupMode ? 'Page configuration' : 'Document-level finding';
+      note.textContent = markupMode
+        ? (state.reason || 'This finding is about document markup rather than a single visible element. The relevant sanitized markup is shown below.')
+        : (state.reason || 'This finding is about page-level behavior rather than one visible element, so Frank does not fake a spotlight.');
+    } else if (!step?.targetId && /spotlight|multiple/i.test(String(frankSession?.plan?.finding?.targetability || ''))) {
+      anchor.dataset.tone = 'missing';
+      head.textContent = 'Element not re-anchored';
+      note.textContent = 'The recorded element could not be re-anchored on the live page, so Frank will not guess a spotlight. The evidence below still stands.';
     } else if (state.found && state.visible !== false) {
       anchor.dataset.tone = 'located';
       head.textContent = `Highlighted on the page${state.tag ? ` · <${state.tag}>` : ''}`;
@@ -637,6 +644,11 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     if (msg.type === 'PING') { send({ ok: true }); return; }
     if (msg.type === 'SCAN') { scan().then(send); return true; }
     if (msg.type === 'AUDIT_LINKS') { auditLinks().then(send); return true; }
+    if (msg.type === 'APPLY_EXTERNAL_LINK_PROBES') {
+      try { send(window.WebQARules.applyExternalProbeResults(msg.candidates || [], msg.rows || [])); }
+      catch (error) { send({ findings: [], incompleteChecks: [], resolvedUrls: [], error: error?.message || 'External probe apply failed.' }); }
+      return;
+    }
     if (msg.type === 'RECHECK_LINK') { window.WebQARules.recheckLink(msg.url || '').then(send).catch(error => send({ verificationState: 'inconclusive', confidence: 'inconclusive', error: error?.message || 'Link recheck failed.' })); return true; }
     if (msg.type === 'HIGHLIGHT') { send(highlight(msg.targetId, msg.selector)); return; }
     if (msg.type === 'TARGET_CONTEXT') { send(targetContext(msg.targetId, msg.selector, msg.ruleId)); return; }

@@ -1,10 +1,9 @@
-import { deterministicBrief } from './correlate.js';
+import { deterministicBrief, finalizeCorrelatedFindings, composeReportAttention } from './correlate.js';
 import { buildEvidenceGraph } from './frank-evidence.js';
 import { deterministicFrankPlan, validateFrankPlan } from './frank-plan.js';
 import { classifyEnvironment } from './environment.js';
 import { applyFindingPolicy } from './policy.js';
 import { attachTargetIntegrity, finalizeBlockedTargetReport } from './apply-report.js';
-import { composeAttention } from './compose.js';
 import { IMPACT_CLASSES } from './impact.js';
 import { gatewayContextEnvelope, gatewayFrankGraph } from './evidence-contract.js';
 
@@ -201,17 +200,28 @@ async function ensureInjected(tabId){try{await chrome.tabs.sendMessage(tabId,{ty
 async function activeTab(){return(await chrome.tabs.query({active:true,currentWindow:true}))[0]}
 function pageKey(url){const u=new URL(url);return u.origin+u.pathname}
 function isPrivateHost(host){const h=String(host||'').toLowerCase();if(h==='localhost'||h.endsWith('.local')||h.endsWith('.internal'))return true;if(/^127\./.test(h)||/^10\./.test(h)||/^192\.168\./.test(h)||/^169\.254\./.test(h))return true;const m=/^172\.(\d+)\./.exec(h);return!!(m&&Number(m[1])>=16&&Number(m[1])<=31)}
+function sanitizeExternalProbeUrl(raw){
+  try{
+    const u=new URL(String(raw||''));
+    if(!/^https?:$/.test(u.protocol))return null;
+    if(u.username||u.password)return null;
+    if(isPrivateHost(u.hostname)||u.hostname.endsWith('.localhost'))return null;
+    u.hash='';
+    return u.toString();
+  }catch{return null}
+}
 async function contextualize(report,context=null){
   if(!report?.page?.url)return report;const s=await settings(),origin=new URL(report.page.url).origin,override=s.environmentOverridesByOrigin?.[origin]||'',monitored=context?.performance?.data?.monitored===true||context?.performance?.monitored===true;
   const environment=classifyEnvironment(report.page,{override,canonical:report.page.canonical,monitored});environment.pathname=new URL(report.page.url).pathname;
   const attached=attachTargetIntegrity(report);
-  const policyFindings=applyFindingPolicy(attached.findings||[],environment);
-  const finalized=finalizeBlockedTargetReport(attached,policyFindings);
+  const correlated=finalizeCorrelatedFindings(attached.findings||[],attached);
+  const policyFindings=applyFindingPolicy(correlated,environment);
+  const finalized=finalizeBlockedTargetReport({...attached,page:{...attached.page,platform:attached.page?.platform||null}},policyFindings);
   const findings=finalized.findings;
   // Attention is composed once here so every surface (panel, brief, markdown
   // export) reads the same grouped, cross-discipline view.
-  const attention=composeAttention(findings,{limit:8});
-  return{...finalized,environment,page:{...finalized.page,environment},findings,attention:{groups:attention.groups.map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead.id,selectors:g.selectors,instanceIds:g.instances.map(x=>x.id)})),classCounts:attention.classCounts,materialGroupCount:attention.materialGroupCount,materialFindingCount:attention.materialFindingCount,representedClasses:attention.representedClasses,classLabels:Object.fromEntries(Object.entries(IMPACT_CLASSES).map(([k,v])=>[k,v.label]))},priorityBrief:finalized.priorityBrief||report.priorityBrief||null,targetIntegrityBlocked:finalized.targetIntegrityBlocked||false};
+  const attention=composeReportAttention(findings,{limit:8});
+  return{...finalized,environment,page:{...finalized.page,environment},findings,attention:{groups:attention.groups.map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead.id,selectors:g.selectors,instanceIds:g.instances.map(x=>x.id),rootCauseKey:g.lead.rootCauseKey||g.key,targetability:g.lead.targetability||'',lenses:g.lead.lenses||[]})),worthChecking:(attention.worthChecking||[]).map(w=>({key:w.key,title:w.title,scope:w.scope,lens:w.lens,fixOwner:w.fixOwner,size:w.size,instanceCount:w.instanceCount,findingIds:w.findings.map(f=>f.id)})),classCounts:attention.classCounts,materialGroupCount:attention.materialGroupCount,materialFindingCount:attention.materialFindingCount,representedClasses:attention.representedClasses,classLabels:Object.fromEntries(Object.entries(IMPACT_CLASSES).map(([k,v])=>[k,v.label]))},priorityBrief:finalized.priorityBrief||report.priorityBrief||null,targetIntegrityBlocked:finalized.targetIntegrityBlocked||false};
 }
 function mergeGatewayReport(local,remote){
   if(!remote)return local;const byId=new Map((local.findings||[]).map(f=>[f.id||f.fingerprint,f]));
@@ -239,7 +249,37 @@ async function scanExistingTab(tabId){if(!tabId)throw new Error('The inspected t
 async function localScan(tab){if(!tab?.id)throw new Error('No active browser tab was found.');if(tab.url&&!/^https?:/i.test(tab.url))throw new Error('This browser page cannot be inspected. Open a normal HTTP or HTTPS page.');try{await ensureInjected(tab.id)}catch(error){const message=String(error?.message||error||'');if(/Cannot access|Missing host permission|activeTab|chrome:\/\/|edge:\/\/|about:/i.test(message))throw new Error('Page access expired. Click the toolbar icon on this page, then use Rescan normally.');throw error}let report=await chrome.tabs.sendMessage(tab.id,{type:'SCAN'});if(!report?.page?.url||!/^https?:/i.test(report.page.url))throw new Error('This browser page cannot be inspected. Open a normal HTTP or HTTPS page.');return contextualize(report)}
 async function addLinkAudit(report,tabId){
   if(['complete','partial'].includes(report?.coverage?.links)&&report?.linkAudit)return report;if(!tabId)return report;
-  try{const result=await chrome.tabs.sendMessage(tabId,{type:'AUDIT_LINKS'}),linkFindings=Array.isArray(result?.findings)?result.findings:[],incompleteChecks=Array.isArray(result?.incompleteChecks)?result.incompleteChecks:[],status=result?.status==='unavailable'?'unavailable':incompleteChecks.length?'partial':'complete';return{...report,findings:[...(report.findings||[]),...linkFindings],linkAudit:{checked:Number(result?.checked||0),verifiedHealthy:Number(result?.verifiedHealthy||0),confirmedIssues:Number(result?.confirmedIssues||linkFindings.length),inconclusive:Number(result?.inconclusive||incompleteChecks.length),incompleteChecks,limit:Number(result?.limit||0),reachedLimit:Boolean(result?.reachedLimit),degraded:Boolean(result?.degraded),cached:Number(result?.cached||0)},coverage:{...report.coverage,links:status}}}catch{return{...report,linkAudit:{checked:0,verifiedHealthy:0,confirmedIssues:0,inconclusive:0,incompleteChecks:[]},coverage:{...report.coverage,links:'unavailable'}}}
+  try{
+    const result=await chrome.tabs.sendMessage(tabId,{type:'AUDIT_LINKS'});
+    let linkFindings=Array.isArray(result?.findings)?result.findings:[];
+    let incompleteChecks=Array.isArray(result?.incompleteChecks)?result.incompleteChecks:[];
+    const externalCandidates=Array.isArray(result?.externalCandidates)?result.externalCandidates.slice(0,12):[];
+    if(externalCandidates.length){
+      const probeRows=[];
+      for(const candidate of externalCandidates){
+        const started=Date.now();
+        const probeUrl=sanitizeExternalProbeUrl(candidate.url);
+        if(!probeUrl){probeRows.push({url:candidate.url,status:0,error:'destination-not-allowed',durationMs:0});continue}
+        try{
+          const res=await fetch(probeUrl,{method:'GET',redirect:'follow',credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(4500)});
+          probeRows.push({url:candidate.url,status:res.status,finalUrl:res.url||probeUrl,redirected:Boolean(res.redirected),durationMs:Date.now()-started});
+        }catch(error){
+          probeRows.push({url:candidate.url,status:0,error:String(error?.message||error),durationMs:Date.now()-started});
+        }
+      }
+      try{
+        const applied=await chrome.tabs.sendMessage(tabId,{type:'APPLY_EXTERNAL_LINK_PROBES',candidates:externalCandidates,rows:probeRows});
+        if(Array.isArray(applied?.findings)&&applied.findings.length)linkFindings=[...linkFindings,...applied.findings];
+        if(Array.isArray(applied?.resolvedUrls)&&applied.resolvedUrls.length){
+          const resolved=new Set(applied.resolvedUrls);
+          incompleteChecks=incompleteChecks.filter(c=>!(c.kind==='external-link'&&resolved.has(c.url)));
+          incompleteChecks=[...incompleteChecks,...(applied.incompleteChecks||[])];
+        }
+      }catch{}
+    }
+    const status=result?.status==='unavailable'?'unavailable':incompleteChecks.length?'partial':'complete';
+    return{...report,findings:[...(report.findings||[]),...linkFindings],linkAudit:{checked:Number(result?.checked||0),verifiedHealthy:Number(result?.verifiedHealthy||0),confirmedIssues:Number(result?.confirmedIssues||linkFindings.length),inconclusive:incompleteChecks.length,incompleteChecks,limit:Number(result?.limit||0),reachedLimit:Boolean(result?.reachedLimit),degraded:Boolean(result?.degraded),cached:Number(result?.cached||0)},coverage:{...report.coverage,links:status}};
+  }catch{return{...report,linkAudit:{checked:0,verifiedHealthy:0,confirmedIssues:0,inconclusive:0,incompleteChecks:[]},coverage:{...report.coverage,links:'unavailable'}}}
 }
 
 async function fetchJson(url,options={},timeoutMs=GATEWAY_TIMEOUT_MS){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{const response=await fetch(url,{...options,signal:controller.signal}),text=await response.text();if(!text.trim())throw new Error(`empty response (HTTP ${response.status})`);let data;try{data=JSON.parse(text)}catch{throw new Error(`invalid JSON response (HTTP ${response.status})`)}if(!response.ok)throw Object.assign(new Error(data?.error||`HTTP ${response.status}`),{status:response.status,code:data?.code||''});return data}finally{clearTimeout(timer)}}
