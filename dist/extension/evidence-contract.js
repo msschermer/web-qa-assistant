@@ -285,6 +285,11 @@ export function gatewayContextEnvelope(report = {}) {
       limit: Number(report.linkAudit.limit || 0), reachedLimit: Boolean(report.linkAudit.reachedLimit), degraded: Boolean(report.linkAudit.degraded), cached: Number(report.linkAudit.cached || 0)
     } : null,
     // First-party gateway probes need destination URLs; values are still treated as untrusted data.
+    // Candidate total is retained so truncation cannot be reported as a complete external audit.
+    externalLinkCandidateTotal: Math.max(
+      Number(report.externalLinkCandidateTotal || 0),
+      Array.isArray(report.externalLinkCandidates) ? report.externalLinkCandidates.length : 0
+    ),
     externalLinkCandidates: (report.externalLinkCandidates || []).slice(0, 12).map((c) => ({
       url: String(c.url || '').slice(0, 2000),
       text: sanitizeText(c.text, 180),

@@ -117,14 +117,15 @@ async function applyServerExternalLinkProbes(report) {
       sources: []
     }));
   const seen = new Set();
-  const candidates = [];
+  const allCandidates = [];
   for (const row of [...fromField, ...fromIncomplete]) {
     const key = String(row?.url || '');
     if (!key || seen.has(key)) continue;
     seen.add(key);
-    candidates.push(row);
-    if (candidates.length >= 12) break;
+    allCandidates.push(row);
   }
+  const candidateTotal = Math.max(Number(report.externalLinkCandidateTotal || 0), allCandidates.length);
+  const candidates = allCandidates.slice(0, 12);
   if (!candidates.length) return report;
 
   const rows = await probeExternalCandidates(candidates);
@@ -133,6 +134,20 @@ async function applyServerExternalLinkProbes(report) {
   const priorIncomplete = (report.linkAudit?.incompleteChecks || [])
     .filter((c) => !(c.kind === 'external-link' && resolved.has(c.url)));
   const incompleteChecks = [...priorIncomplete, ...(applied.incompleteChecks || [])];
+  const truncated = candidateTotal > candidates.length;
+  if (truncated) {
+    incompleteChecks.push({
+      kind: 'external-link',
+      url: '',
+      path: '',
+      text: '',
+      reason: 'candidate-budget',
+      status: 0,
+      attempts: [],
+      prominence: '',
+      location: ''
+    });
+  }
   const findings = [...(report.findings || []), ...(applied.findings || [])];
   const confirmedIssues = findings.filter((f) => /navigation\.link-(404|410|5xx)/.test(String(f.ruleId || ''))).length;
   const checked = Math.max(Number(report.linkAudit?.checked || 0), candidates.length);
@@ -145,12 +160,14 @@ async function applyServerExternalLinkProbes(report) {
     ...report,
     findings,
     externalLinkCandidates: undefined,
+    externalLinkCandidateTotal: undefined,
     linkAudit: {
       ...(report.linkAudit || {}),
       checked,
       confirmedIssues: Math.max(Number(report.linkAudit?.confirmedIssues || 0), confirmedIssues),
       inconclusive: incompleteChecks.length,
       incompleteChecks,
+      reachedLimit: Boolean(report.linkAudit?.reachedLimit) || truncated,
       privilegedProbe: 'gateway'
     },
     coverage: { ...(report.coverage || {}), links: linksCoverage }

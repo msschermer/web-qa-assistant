@@ -5,6 +5,7 @@
  */
 import dns from 'node:dns/promises';
 import net from 'node:net';
+import { Agent, fetch as undiciFetch } from 'undici';
 import { sanitizeUrl } from '../ai/evidence-contract.js';
 
 export const PROBE_DEFAULTS = Object.freeze({
@@ -20,6 +21,15 @@ function normalizeHost(host) {
   return String(host || '').toLowerCase().replace(/^\[|\]$/g, '');
 }
 
+function ipv4MappedFromHex(h) {
+  const m = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(h);
+  if (!m) return null;
+  const hi = parseInt(m[1], 16);
+  const lo = parseInt(m[2], 16);
+  if (!Number.isFinite(hi) || !Number.isFinite(lo)) return null;
+  return `${(hi >> 8) & 255}.${hi & 255}.${(lo >> 8) & 255}.${lo & 255}`;
+}
+
 export function isPrivateIpAddress(ip) {
   const raw = normalizeHost(ip);
   if (!raw) return true;
@@ -27,22 +37,23 @@ export function isPrivateIpAddress(ip) {
     const p = raw.split('.').map(Number);
     const [a, b] = p;
     if (a === 0 || a === 10 || a === 127 || a >= 224) return true;
-    if (a === 169 && b === 254) return true; // link-local / metadata
+    if (a === 169 && b === 254) return true;
     if (a === 172 && b >= 16 && b <= 31) return true;
     if (a === 192 && b === 168) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
-    if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    if (a === 198 && (b === 18 || b === 19)) return true;
     return false;
   }
   if (net.isIPv6(raw)) {
     const h = raw.toLowerCase();
     if (h === '::1' || h === '::') return true;
-    if (h.startsWith('fc') || h.startsWith('fd')) return true; // ULA
-    if (h.startsWith('fe80:')) return true; // link-local
-    if (h.startsWith('ff')) return true; // multicast
-    // IPv4-mapped
-    const mapped = h.match(/^:?:ffff:(\d+\.\d+\.\d+\.\d+)$/i) || h.match(/^:?:ffff:([0-9a-f:.]+)$/i);
-    if (mapped && net.isIPv4(mapped[1])) return isPrivateIpAddress(mapped[1]);
+    if (h.startsWith('fc') || h.startsWith('fd')) return true;
+    if (h.startsWith('fe80:')) return true;
+    if (h.startsWith('ff')) return true;
+    const dotted = h.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+    if (dotted) return isPrivateIpAddress(dotted[1]);
+    const fromHex = ipv4MappedFromHex(h);
+    if (fromHex) return isPrivateIpAddress(fromHex);
     return false;
   }
   return true;
@@ -104,10 +115,35 @@ export async function assertPublicProbeDestination(raw, options = {}) {
 function redirectLocation(res, currentUrl) {
   const loc = res.headers.get('location');
   if (!loc) return null;
-  try { return new URL(loc, currentUrl).toString(); } catch { return null; }
+  try {
+    const next = new URL(loc, currentUrl);
+    if (!/^https?:$/i.test(next.protocol)) return null;
+    if (next.username || next.password) return null;
+    return next.toString();
+  } catch { return null; }
 }
 
-async function fetchHop(url, method, timeoutMs, maxBodyBytes, fetchImpl = fetch) {
+function pinnedFetch(addresses, hostname) {
+  const pick = normalizeHost((addresses || [])[0] || '');
+  const agent = new Agent({
+    connect: {
+      lookup(_host, _options, callback) {
+        if (!pick || isPrivateIpAddress(pick)) {
+          callback(new Error('destination-not-allowed'));
+          return;
+        }
+        callback(null, pick, net.isIPv6(pick) ? 6 : 4);
+      }
+    }
+  });
+  return (url, init = {}) => undiciFetch(url, {
+    ...init,
+    dispatcher: agent,
+    headers: { ...(init.headers || {}), host: hostname }
+  });
+}
+
+async function fetchHop(url, method, timeoutMs, maxBodyBytes, fetchImpl) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -117,10 +153,7 @@ async function fetchHop(url, method, timeoutMs, maxBodyBytes, fetchImpl = fetch)
       credentials: 'omit',
       cache: 'no-store',
       signal: controller.signal,
-      headers: {
-        'accept': '*/*',
-        // Intentionally omit Authorization, Cookie, and Referer.
-      }
+      headers: { accept: '*/*' }
     });
     if (method === 'GET' && res.body) {
       try {
@@ -145,9 +178,17 @@ async function fetchHop(url, method, timeoutMs, maxBodyBytes, fetchImpl = fetch)
   }
 }
 
+function isRedirect(status) {
+  return [301, 302, 303, 307, 308].includes(status);
+}
+
+function isMissingOrServerError(status) {
+  return status === 404 || status === 410 || status >= 500;
+}
+
 /**
- * Probe one destination with DNS+SSRF on every hop.
- * HEAD first; GET fallback when HEAD is rejected/ambiguous.
+ * Probe one destination with DNS+SSRF on every hop (addresses pinned for connect).
+ * HEAD is preflight only. Broken/5xx require agreeing dual GET.
  */
 export async function probeExternalDestination(raw, options = {}) {
   const timeoutMs = Number(options.timeoutMs || PROBE_DEFAULTS.timeoutMs);
@@ -156,7 +197,7 @@ export async function probeExternalDestination(raw, options = {}) {
   const started = Date.now();
   let current = String(raw || '');
   let redirected = false;
-  let usedGet = false;
+  let method = 'HEAD';
 
   for (let hop = 0; hop <= maxRedirects; hop++) {
     const gate = await assertPublicProbeDestination(current, options);
@@ -168,29 +209,87 @@ export async function probeExternalDestination(raw, options = {}) {
         finalUrl: evidenceUrl(current),
         redirected,
         durationMs: Date.now() - started,
-        method: usedGet ? 'GET' : 'HEAD'
+        method,
+        attempts: 0
       };
     }
 
-    let res;
+    const hostname = new URL(gate.url).hostname;
+    const fetchImpl = options.fetch || pinnedFetch(gate.addresses, hostname);
+
+    let headStatus = 0;
     try {
-      res = await fetchHop(gate.url, usedGet ? 'GET' : 'HEAD', timeoutMs, maxBodyBytes, options.fetch || fetch);
+      const headRes = await fetchHop(gate.url, 'HEAD', timeoutMs, maxBodyBytes, fetchImpl);
+      headStatus = Number(headRes.status || 0);
+      if (isRedirect(headStatus)) {
+        const next = redirectLocation(headRes, gate.url);
+        if (!next) {
+          return {
+            url: String(raw || ''),
+            status: headStatus,
+            error: 'redirect-missing-location',
+            finalUrl: evidenceUrl(gate.url),
+            redirected: true,
+            durationMs: Date.now() - started,
+            method: 'HEAD',
+            attempts: 1
+          };
+        }
+        redirected = true;
+        current = next;
+        continue;
+      }
+    } catch (error) {
+      headStatus = 0;
+      const msg = String(error?.message || error);
+      if (/destination-not-allowed/i.test(msg)) {
+        return {
+          url: String(raw || ''),
+          status: 0,
+          error: 'destination-not-allowed',
+          finalUrl: evidenceUrl(gate.url),
+          redirected,
+          durationMs: Date.now() - started,
+          method: 'HEAD',
+          attempts: 1
+        };
+      }
+    }
+
+    // HEAD 2xx is a cheap healthy signal — never confirm broken from HEAD alone.
+    if (headStatus >= 200 && headStatus < 400) {
+      return {
+        url: String(raw || ''),
+        status: headStatus,
+        finalUrl: evidenceUrl(gate.url),
+        redirected,
+        durationMs: Date.now() - started,
+        method: 'HEAD',
+        attempts: 1
+      };
+    }
+
+    method = 'GET';
+    let first;
+    try {
+      first = await fetchHop(gate.url, 'GET', timeoutMs, maxBodyBytes, fetchImpl);
     } catch (error) {
       const msg = String(error?.name === 'AbortError' ? 'timeout' : (error?.message || error));
       return {
         url: String(raw || ''),
         status: 0,
-        error: /abort|timeout/i.test(msg) ? 'timeout' : msg,
+        error: /abort|timeout/i.test(msg) ? 'timeout' : (/destination-not-allowed/i.test(msg) ? 'destination-not-allowed' : msg),
         finalUrl: evidenceUrl(gate.url),
         redirected,
         durationMs: Date.now() - started,
-        method: usedGet ? 'GET' : 'HEAD'
+        method: 'GET',
+        attempts: 1
       };
     }
 
-    const status = Number(res.status || 0);
-    if ([301, 302, 303, 307, 308].includes(status)) {
-      const next = redirectLocation(res, gate.url);
+    const status = Number(first.status || 0);
+    if (isRedirect(status)) {
+      const next = redirectLocation(first, gate.url);
       if (!next) {
         return {
           url: String(raw || ''),
@@ -199,20 +298,53 @@ export async function probeExternalDestination(raw, options = {}) {
           finalUrl: evidenceUrl(gate.url),
           redirected: true,
           durationMs: Date.now() - started,
-          method: usedGet ? 'GET' : 'HEAD'
+          method: 'GET',
+          attempts: 1
         };
       }
       redirected = true;
       current = next;
-      if ([302, 303].includes(status)) usedGet = true; // historical POST→GET; for HEAD continue with GET on 303
       continue;
     }
 
-    // HEAD often unsupported — fall back once to GET on same URL.
-    if (!usedGet && (status === 405 || status === 501)) {
-      usedGet = true;
-      hop -= 1;
-      continue;
+    if (isMissingOrServerError(status)) {
+      let secondStatus = 0;
+      try {
+        const second = await fetchHop(gate.url, 'GET', timeoutMs, maxBodyBytes, fetchImpl);
+        secondStatus = Number(second.status || 0);
+      } catch {
+        return {
+          url: String(raw || ''),
+          status: 0,
+          error: 'inconclusive-mismatch',
+          finalUrl: evidenceUrl(gate.url),
+          redirected,
+          durationMs: Date.now() - started,
+          method: 'GET',
+          attempts: 2
+        };
+      }
+      if (secondStatus !== status) {
+        return {
+          url: String(raw || ''),
+          status: 0,
+          error: 'inconclusive-mismatch',
+          finalUrl: evidenceUrl(gate.url),
+          redirected,
+          durationMs: Date.now() - started,
+          method: 'GET',
+          attempts: 2
+        };
+      }
+      return {
+        url: String(raw || ''),
+        status,
+        finalUrl: evidenceUrl(gate.url),
+        redirected,
+        durationMs: Date.now() - started,
+        method: 'GET',
+        attempts: 2
+      };
     }
 
     return {
@@ -221,7 +353,8 @@ export async function probeExternalDestination(raw, options = {}) {
       finalUrl: evidenceUrl(gate.url),
       redirected,
       durationMs: Date.now() - started,
-      method: usedGet ? 'GET' : 'HEAD'
+      method: 'GET',
+      attempts: headStatus ? 2 : 1
     };
   }
 
@@ -232,7 +365,8 @@ export async function probeExternalDestination(raw, options = {}) {
     finalUrl: evidenceUrl(current),
     redirected: true,
     durationMs: Date.now() - started,
-    method: usedGet ? 'GET' : 'HEAD'
+    method,
+    attempts: 0
   };
 }
 
@@ -278,7 +412,8 @@ export async function probeExternalCandidates(candidates = [], options = {}) {
           finalUrl: evidenceUrl(url),
           redirected: false,
           durationMs: 0,
-          method: 'HEAD'
+          method: 'GET',
+          attempts: 0
         });
         continue;
       }
@@ -290,10 +425,9 @@ export async function probeExternalCandidates(candidates = [], options = {}) {
 
   await Promise.all(Array.from({ length: Math.min(concurrency, uniqueUrls.length || 1) }, () => worker()));
 
-  // One row per original candidate (preserve occurrence identity upstream).
   return list.map((c) => {
     const key = candidateKey(c?.url);
-    const row = resultByKey.get(key) || { url: c?.url, status: 0, error: 'unavailable', durationMs: 0 };
+    const row = resultByKey.get(key) || { url: c?.url, status: 0, error: 'unavailable', durationMs: 0, method: 'GET', attempts: 0 };
     return { ...row, url: c.url };
   });
 }
@@ -314,12 +448,15 @@ export function mapExternalProbeRows(candidates = [], probeRows = []) {
     const status = Number(row.status || 0);
     const text = candidate.text || '';
     const occurrences = Number(candidate.occurrences || 1);
+    const method = String(row.method || 'GET').toUpperCase() === 'HEAD' ? 'HEAD' : 'GET';
+    const attemptsCount = Math.max(1, Number(row.attempts || 1));
     const attempt = {
-      attempt: 1,
+      attempt: attemptsCount,
       state: status ? 'complete' : 'unavailable',
       status,
+      method,
       durationMs: Number(row.durationMs || 0),
-      finalUrl: row.finalUrl || candidate.url
+      finalUrl: evidenceUrl(row.finalUrl || candidate.url)
     };
     const link = {
       url: evidenceUrl(candidate.url),
@@ -336,8 +473,8 @@ export function mapExternalProbeRows(candidates = [], probeRows = []) {
     };
     const verification = {
       state: 'confirmed',
-      method: 'privileged external GET',
-      attempts: 1,
+      method: method === 'HEAD' ? 'privileged external HEAD' : 'privileged external GET',
+      attempts: attemptsCount,
       evidence: [attempt]
     };
 
@@ -346,7 +483,7 @@ export function mapExternalProbeRows(candidates = [], probeRows = []) {
         id: `navigation.link-${status}-external:${hash(candidate.url)}`,
         ruleId: `navigation.link-${status === 410 ? 410 : 404}-external`,
         title: 'External link points to a missing page',
-        detail: `${text ? `"${text}" ` : ''}points to ${evidenceUrl(candidate.url)}. A privileged request confirmed HTTP ${status}.`,
+        detail: `${text ? `"${text}" ` : ''}points to ${evidenceUrl(candidate.url)}. Privileged GET requests confirmed HTTP ${status}.`,
         category: 'fix',
         severity: 'high',
         confidence: 'confirmed',
@@ -356,7 +493,7 @@ export function mapExternalProbeRows(candidates = [], probeRows = []) {
         targetType: 'visual',
         sources: ['browser'],
         link,
-        verification,
+        verification: { ...verification, method: 'privileged external GET' },
         fingerprint: hash(`ext-${status}|${candidate.url}|${occurrences}`)
       });
       resolvedUrls.add(candidate.url);
@@ -367,7 +504,7 @@ export function mapExternalProbeRows(candidates = [], probeRows = []) {
         id: `navigation.link-5xx-external:${hash(candidate.url)}`,
         ruleId: 'navigation.link-5xx-external',
         title: 'External link points to a server error',
-        detail: `${text ? `"${text}" ` : ''}points to ${evidenceUrl(candidate.url)}. A privileged request confirmed a server error.`,
+        detail: `${text ? `"${text}" ` : ''}points to ${evidenceUrl(candidate.url)}. Privileged GET requests confirmed a server error.`,
         category: 'fix',
         severity: 'critical',
         confidence: 'confirmed',
@@ -377,7 +514,7 @@ export function mapExternalProbeRows(candidates = [], probeRows = []) {
         targetType: 'visual',
         sources: ['browser'],
         link,
-        verification,
+        verification: { ...verification, method: 'privileged external GET' },
         fingerprint: hash(`ext-5xx|${candidate.url}|${status}`)
       });
       resolvedUrls.add(candidate.url);

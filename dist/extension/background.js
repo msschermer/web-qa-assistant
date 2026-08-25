@@ -226,7 +226,17 @@ async function contextualize(report,context=null){
 function mergeGatewayReport(local,remote){
   if(!remote)return local;
   if(remote.linkAudit?.privilegedProbe==='gateway'){
-    return{...local,...remote,page:{...(remote.page||{}),...(local.page||{}),environment:remote.page?.environment||local.page?.environment},findings:remote.findings||local.findings,linkAudit:remote.linkAudit,coverage:{...(local.coverage||{}),...(remote.coverage||{})}};
+    const probed=new Set((remote.findings||[]).map(f=>f?.link?.url).filter(Boolean));
+    const localExtra=(local.linkAudit?.incompleteChecks||[]).filter(c=>{
+      if(c?.kind!=='external-link')return true;
+      if(!c.url)return true;
+      // Keep local incompletes the gateway never received (budget truncation).
+      return!probed.has(c.url)&&!(remote.linkAudit?.incompleteChecks||[]).some(r=>r.url===c.url);
+    });
+    const incompleteChecks=[...(remote.linkAudit?.incompleteChecks||[]),...localExtra];
+    const linkAudit={...(remote.linkAudit||{}),incompleteChecks,inconclusive:incompleteChecks.length,reachedLimit:Boolean(remote.linkAudit?.reachedLimit||local.linkAudit?.reachedLimit||localExtra.length)};
+    const linksCoverage=incompleteChecks.length?'partial':(remote.coverage?.links||local.coverage?.links);
+    return{...local,...remote,page:{...(remote.page||{}),...(local.page||{}),environment:remote.page?.environment||local.page?.environment},findings:remote.findings||local.findings,linkAudit,coverage:{...(local.coverage||{}),...(remote.coverage||{}),links:linksCoverage}};
   }
   const byId=new Map((local.findings||[]).map(f=>[f.id||f.fingerprint,f]));
   const findings=(remote.findings||[]).map(r=>{const l=byId.get(r.id||r.fingerprint);if(!l)return r;return{...r,selector:l.selector||r.selector,targetId:l.targetId||r.targetId,targetType:l.targetType||r.targetType,evidence:l.evidence??r.evidence,axe:l.axe,link:l.link||r.link,verification:r.verification||l.verification};});
@@ -257,7 +267,9 @@ async function addLinkAudit(report,tabId,{privilegedExternal=true}={}){
     const result=await chrome.tabs.sendMessage(tabId,{type:'AUDIT_LINKS'});
     let linkFindings=Array.isArray(result?.findings)?result.findings:[];
     let incompleteChecks=Array.isArray(result?.incompleteChecks)?result.incompleteChecks:[];
+    const externalCandidateTotal=Array.isArray(result?.externalCandidates)?result.externalCandidates.length:0;
     const externalCandidates=Array.isArray(result?.externalCandidates)?result.externalCandidates.slice(0,12):[];
+    const externalBudgetLimited=externalCandidateTotal>externalCandidates.length;
     // Connected scans: leave external confirmation to the gateway (no broad host permission prompts).
     // Local-only / private pages: optional SW fetch only when host permission already exists — never request wildcards.
     if(privilegedExternal&&externalCandidates.length){
@@ -283,8 +295,11 @@ async function addLinkAudit(report,tabId,{privilegedExternal=true}={}){
         }
       }catch{}
     }
+    if(externalBudgetLimited&&!incompleteChecks.some(c=>c.reason==='candidate-budget')){
+      incompleteChecks=[...incompleteChecks,{kind:'external-link',url:'',path:'',text:'',reason:'candidate-budget',status:0,attempts:[]}];
+    }
     const status=result?.status==='unavailable'?'unavailable':incompleteChecks.length?'partial':'complete';
-    return{...report,findings:[...(report.findings||[]),...linkFindings],externalLinkCandidates:externalCandidates,linkAudit:{checked:Number(result?.checked||0),verifiedHealthy:Number(result?.verifiedHealthy||0),confirmedIssues:Number(result?.confirmedIssues||linkFindings.length),inconclusive:incompleteChecks.length,incompleteChecks,limit:Number(result?.limit||0),reachedLimit:Boolean(result?.reachedLimit),degraded:Boolean(result?.degraded),cached:Number(result?.cached||0)},coverage:{...report.coverage,links:status}};
+    return{...report,findings:[...(report.findings||[]),...linkFindings],externalLinkCandidates:externalCandidates,externalLinkCandidateTotal:externalCandidateTotal,linkAudit:{checked:Number(result?.checked||0),verifiedHealthy:Number(result?.verifiedHealthy||0),confirmedIssues:Number(result?.confirmedIssues||linkFindings.length),inconclusive:incompleteChecks.length,incompleteChecks,limit:Number(result?.limit||0),reachedLimit:Boolean(result?.reachedLimit)||externalBudgetLimited,degraded:Boolean(result?.degraded),cached:Number(result?.cached||0)},coverage:{...report.coverage,links:status}};
   }catch{return{...report,linkAudit:{checked:0,verifiedHealthy:0,confirmedIssues:0,inconclusive:0,incompleteChecks:[]},coverage:{...report.coverage,links:'unavailable'}}}
 }
 

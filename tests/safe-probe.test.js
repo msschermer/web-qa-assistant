@@ -45,6 +45,8 @@ test('SSRF host policy blocks private, localhost, CGNAT, metadata, userinfo', ()
     assert.equal(isPrivateIpAddress(ip), true, ip);
   }
   assert.equal(isPrivateIpAddress('8.8.8.8'), false);
+  assert.equal(isPrivateIpAddress('::ffff:7f00:1'), true);
+  assert.equal(isPrivateIpAddress('::ffff:127.0.0.1'), true);
   assert.equal(isPrivateProbeHost('localhost'), true);
   assert.equal(isPrivateProbeHost('::1'), true);
   assert.equal(sanitizeProbeUrl('http://user:pass@example.com/x'), null);
@@ -72,31 +74,49 @@ test('userinfo destinations are blocked', async () => {
 });
 
 test('HEAD/GET fixture classifies 200/404/410/403/429 conservatively', async () => {
+  const counts = { missing: 0 };
   const { server, origin } = await listen((req, res) => {
     if (req.method === 'HEAD') {
       if (req.url === '/head-fail') {
         res.writeHead(405, { allow: 'GET' });
         return void res.end();
       }
+      if (req.url === '/head-lie') {
+        res.writeHead(404).end();
+        return;
+      }
     }
     if (req.url === '/ok') return void res.writeHead(200).end('ok');
-    if (req.url === '/missing') return void res.writeHead(404).end('no');
+    if (req.url === '/missing') {
+      counts.missing += 1;
+      return void res.writeHead(404).end('no');
+    }
     if (req.url === '/gone') return void res.writeHead(410).end('gone');
     if (req.url === '/deny') return void res.writeHead(403).end('no');
     if (req.url === '/slow') return void res.writeHead(429).end('wait');
     if (req.url === '/head-fail') return void res.writeHead(404).end('no');
+    if (req.url === '/head-lie') return void res.writeHead(200).end('alive');
     res.writeHead(404).end();
   });
   const opts = fixtureOptions(origin);
   try {
-    assert.equal((await probeExternalDestination('https://probe.example.com/ok', opts)).status, 200);
-    assert.equal((await probeExternalDestination('https://probe.example.com/missing', opts)).status, 404);
+    const ok = await probeExternalDestination('https://probe.example.com/ok', opts);
+    assert.equal(ok.status, 200);
+    assert.equal(ok.method, 'HEAD');
+    const missing = await probeExternalDestination('https://probe.example.com/missing', opts);
+    assert.equal(missing.status, 404);
+    assert.equal(missing.method, 'GET');
+    assert.equal(missing.attempts, 2);
+    assert.ok(counts.missing >= 2, '404 requires dual GET confirmation');
     assert.equal((await probeExternalDestination('https://probe.example.com/gone', opts)).status, 410);
     assert.equal((await probeExternalDestination('https://probe.example.com/deny', opts)).status, 403);
     assert.equal((await probeExternalDestination('https://probe.example.com/slow', opts)).status, 429);
     const viaGet = await probeExternalDestination('https://probe.example.com/head-fail', opts);
     assert.equal(viaGet.status, 404);
     assert.equal(viaGet.method, 'GET');
+    const headLie = await probeExternalDestination('https://probe.example.com/head-lie', opts);
+    assert.equal(headLie.status, 200);
+    assert.equal(headLie.method, 'GET');
   } finally {
     server.close();
   }
@@ -109,13 +129,15 @@ test('mapExternalProbeRows collapses duplicates and keeps 403/429 inconclusive',
     { url: 'https://example.com/ok', text: 'C', occurrences: 1 }
   ];
   const rows = [
-    { url: candidates[0].url, status: 404, durationMs: 1 },
-    { url: candidates[1].url, status: 403, durationMs: 1 },
-    { url: candidates[2].url, status: 200, durationMs: 1 }
+    { url: candidates[0].url, status: 404, durationMs: 1, method: 'GET', attempts: 2 },
+    { url: candidates[1].url, status: 403, durationMs: 1, method: 'GET', attempts: 1 },
+    { url: candidates[2].url, status: 200, durationMs: 1, method: 'HEAD', attempts: 1 }
   ];
   const mapped = mapExternalProbeRows(candidates, rows);
   assert.equal(mapped.findings.length, 1);
   assert.equal(mapped.findings[0].ruleId, 'navigation.link-404-external');
+  assert.equal(mapped.findings[0].verification.method, 'privileged external GET');
+  assert.equal(mapped.findings[0].verification.attempts, 2);
   assert.equal(mapped.findings[0].count, 2);
   assert.equal(mapped.findings.some((f) => /403/.test(f.ruleId)), false);
   assert.ok(mapped.incompleteChecks.some((c) => c.reason === 'http-403'));
@@ -137,7 +159,26 @@ test('duplicate candidate URLs share one network probe', async () => {
     const rows = await probeExternalCandidates(candidates, opts);
     assert.equal(rows.length, 3);
     assert.equal(rows.every((r) => r.status === 404), true);
-    assert.equal(hits, 1);
+    // One shared destination: HEAD preflight + dual GET confirmation.
+    assert.equal(hits, 3);
+  } finally {
+    server.close();
+  }
+});
+
+test('mismatched dual GET stays inconclusive', async () => {
+  let gets = 0;
+  const { server, origin } = await listen((req, res) => {
+    if (req.method === 'HEAD') return void res.writeHead(404).end();
+    gets += 1;
+    res.writeHead(gets === 1 ? 404 : 200).end(gets === 1 ? 'no' : 'ok');
+  });
+  const opts = fixtureOptions(origin);
+  try {
+    const row = await probeExternalDestination('https://probe.example.com/flaky', opts);
+    assert.equal(row.status, 0);
+    assert.equal(row.error, 'inconclusive-mismatch');
+    assert.equal(row.attempts, 2);
   } finally {
     server.close();
   }

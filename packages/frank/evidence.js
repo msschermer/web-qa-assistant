@@ -1,7 +1,9 @@
+import { sanitizeUrl } from '../ai/evidence-contract.js';
 import { signalForFinding, SIGNALS } from './signals.js';
 
 function text(value){return String(value??'').trim()}
 function clip(value,max=900){const s=text(value).replace(/\s+/g,' ');return s.length>max?s.slice(0,max-1)+'…':s}
+function safeLinkUrl(value){return sanitizeUrl(value)}
 function hash(input){let h=2166136261;for(let i=0;i<input.length;i++){h^=input.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36)}
 function contrastRatioText(value){const raw=String(value??'').trim();if(!raw)return'';return raw.includes(':')?raw:`${raw}:1`}
 function push(list,{source,kind,label,value,scope='finding',confidence='deterministic',targetId=''}){
@@ -54,7 +56,7 @@ export function buildEvidenceGraph({finding,page={},coverage={},context={},targe
   if(Array.isArray(finding.lenses)&&finding.lenses.length)push(evidence,{source:'browser',kind:'lenses',label:'QA lenses',value:finding.lenses.join(', '),scope:'context'});
   if(finding.resourceUrl)push(evidence,{source:'browser',kind:'resource-url',label:'Related resource',value:finding.resourceUrl,scope:'current-page',targetId});
   if(finding.link){
-    push(evidence,{source:'browser',kind:'link-url',label:'Link destination',value:finding.link.url,scope:'current-page',targetId});
+    push(evidence,{source:'browser',kind:'link-url',label:'Link destination',value:safeLinkUrl(finding.link.url),scope:'current-page',targetId});
     push(evidence,{source:'browser',kind:'http-status',label:'Destination HTTP status',value:finding.link.status,scope:'current-page',targetId});
     push(evidence,{source:'browser',kind:'link-occurrences',label:'Occurrences on page',value:finding.link.occurrences,scope:'current-page',targetId});
     push(evidence,{source:'browser',kind:'link-text',label:'Link text',value:finding.link.text,scope:'current-page',targetId});
