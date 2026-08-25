@@ -406,6 +406,41 @@ test('blocked target review withholds page QA and Frank page fixes', () => {
   assert.equal(frank.rewrite, 'none');
 });
 
+test('deterministic Frank preserves decorative alt family and evidence refs', () => {
+  const report = gatewayShapedReport([decorativeImageFinding()]);
+  const review = buildReviewBundle(report);
+  const frank = frankPlanFromReview(review, 'f-decor');
+  assert.equal(frank.withheld, false);
+  assert.equal(frank.mode, 'deterministic');
+  assert.equal(frank.valid, true);
+  assert.ok(frank.plan.steps.some(s => s.type === 'remediation'));
+  assert.ok(frank.plan.steps.some(s => s.type === 'verification'));
+  const fix = frank.plan.steps.find(s => s.type === 'remediation');
+  assert.match(fix.body, /alt\s*=\s*""|empty|decorative/i);
+  assert.ok(fix.evidenceRefs.length >= 1);
+  assert.ok(fix.evidenceRefs.every(id => frank.evidence.some(e => e.id === id)));
+});
+
+test('deterministic Frank preserves uncertain image fork', () => {
+  const report = gatewayShapedReport([unresolvedImageFinding()]);
+  const review = buildReviewBundle(report);
+  const frank = frankPlanFromReview(review, 'f-unresolved');
+  assert.equal(frank.withheld, false);
+  const fix = frank.plan.steps.find(s => s.type === 'remediation');
+  assert.match(fix.body, /if the image|informative|functional|decorative|alternatives|either|depends/i);
+  assert.doesNotMatch(fix.body, /^set alt=""\.?$/i);
+});
+
+test('decorative Frank remediation cites image-purpose evidence', () => {
+  const report = gatewayShapedReport([decorativeImageFinding()]);
+  const review = buildReviewBundle(report);
+  const frank = frankPlanFromReview(review, 'f-decor');
+  const fix = frank.plan.steps.find(s => s.type === 'remediation');
+  const purposeIds = frank.evidence.filter(e => /image-purpose|nearby-text/.test(e.kind)).map(e => e.id);
+  assert.ok(purposeIds.length >= 1);
+  assert.ok(fix.evidenceRefs.some(id => purposeIds.includes(id)));
+});
+
 test('forged api-scan review is re-allowlisted on read', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'webqa-forge-'));
   const qaRuns = path.join(root, 'qa-runs');
