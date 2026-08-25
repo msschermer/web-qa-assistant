@@ -5,6 +5,7 @@ import {
   applyLocalDiscoverabilityCorrelations,
   applyPerformanceCorrelations,
   applyResponsiveCorrelations,
+  applyRuntimeResourceCorrelations,
   attachCorrelationMetadata,
   composeWorthChecking,
   detectPlatform
@@ -76,6 +77,7 @@ export function finalizeCorrelatedFindings(findings=[], local={}){
   let next=applyLocalDiscoverabilityCorrelations(findings, page);
   next=applyPerformanceCorrelations(next, local.browserPerformance||page.browserPerformance||null);
   next=applyResponsiveCorrelations(next);
+  next=applyRuntimeResourceCorrelations(next);
   const platform=detectPlatform(page, page.documentHtmlSample||'');
   next=attachCorrelationMetadata(next, {platform});
   if(platform?.id){

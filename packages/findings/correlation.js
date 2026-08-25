@@ -328,6 +328,28 @@ export function applyResponsiveCorrelations(findings = []) {
 }
 
 /**
+ * Correlate runtime and resource failures when evidence supports a shared root cause.
+ */
+export function applyRuntimeResourceCorrelations(findings = []) {
+  const out = [...findings];
+  const scriptFailed = out.filter(f => f.ruleId === 'runtime.script-failed');
+  const uncaught = out.find(f => f.ruleId === 'runtime.uncaught-error');
+  if (scriptFailed.length && uncaught) {
+    const key = `runtime-failure:${hash(scriptFailed.map(f => f.resourceUrl || f.evidence).join('|'))}`;
+    uncaught.rootCauseKey = key;
+    scriptFailed.forEach(f => { f.rootCauseKey = key; });
+  }
+  const cssFailed = out.filter(f => f.ruleId === 'web.stylesheet-failed');
+  const overflow = out.find(f => f.ruleId === 'web.horizontal-overflow');
+  if (cssFailed.length && overflow) {
+    const key = `stylesheet-layout:${hash(cssFailed.map(f => f.resourceUrl || f.evidence).join('|'))}`;
+    cssFailed.forEach(f => { f.rootCauseKey = key; });
+    overflow.rootCauseKey = overflow.rootCauseKey || key;
+  }
+  return out;
+}
+
+/**
  * Secondary review/inconclusive/context items grouped for "Worth checking further".
  * Confirmed material RO leads are excluded.
  */

@@ -184,6 +184,12 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
   if(msg.type==='IGNORE_RULE'){const current=await activeTab(),s=await settings(),url=msg.pageUrl||current?.url;if(!url)throw new Error('Page context is unavailable.');const origin=new URL(url).origin,list=s.ignoredRulesByOrigin[origin]||[];s.ignoredRulesByOrigin[origin]=[...new Set([...list,msg.ruleId])];await chrome.storage.local.set({ignoredRulesByOrigin:s.ignoredRulesByOrigin});return{ignored:true}}
   if(msg.type==='SET_ENVIRONMENT'){const url=msg.pageUrl||(await activeTab())?.url;if(!url)throw new Error('Page context is unavailable.');const origin=new URL(url).origin,allowed=new Set(['production','staging','preview','local','auto']);if(!allowed.has(msg.environment))throw new Error('Unsupported environment value.');const s=await settings();if(msg.environment==='auto')delete s.environmentOverridesByOrigin[origin];else s.environmentOverridesByOrigin[origin]=msg.environment;await chrome.storage.local.set({environmentOverridesByOrigin:s.environmentOverridesByOrigin});return{saved:true}}
   if(msg.type==='WATCH_DIRTY'&&sender.tab){const s=await settings(),origin=new URL(sender.tab.url).origin;if(s.watchedOrigins.includes(origin))scheduleWatched(sender.tab);return{scheduled:true}}
+  if(msg.type==='OPEN_REPORT_BUG_FROM_FRANK'){
+    const windowId=msg.windowId||sender.tab?.windowId;
+    if(windowId)await chrome.sidePanel.open({windowId}).catch(()=>{});
+    chrome.runtime.sendMessage({type:'OPEN_REPORT_BUG'}).catch(()=>{});
+    return{opened:true};
+  }
   return null;
 })().then(x=>send({ok:true,...x})).catch(error=>{console.error(`[Web QA Assistant ${RELEASE_VERSION}] ${msg?.type||'UNKNOWN'} failed`,error);send({ok:false,...failurePayload(error,msg?.type||'UNKNOWN')})});return true});
 
@@ -197,7 +203,22 @@ chrome.tabs.onUpdated.addListener(async(tabId,change,updatedTab)=>{
 });
 
 async function settings(){return chrome.storage.local.get({apiBase:'',apiKey:'',cloudAiFallback:false,installationId:'',installToken:'',installTokenExpiresAt:0,watchedOrigins:[],scanState:{},siteSessions:{},ignoredRulesByOrigin:{},environmentOverridesByOrigin:{}})}
-async function ensureInjected(tabId){try{await chrome.tabs.sendMessage(tabId,{type:'PING'});return}catch{}await chrome.scripting.executeScript({target:{tabId},files:['vendor/axe.min.js','image-purpose.js','target-integrity.browser.js','browser-rules.js','content.js']})}
+async function ensureInjected(tabId){
+  try{await chrome.tabs.sendMessage(tabId,{type:'PING'});return}catch{}
+  try{
+    await chrome.scripting.executeScript({target:{tabId},files:['page-diagnostics.js'],injectImmediately:true,world:'ISOLATED'});
+  }catch{}
+  await chrome.scripting.executeScript({target:{tabId},files:['vendor/axe.min.js','image-purpose.js','target-integrity.browser.js','browser-rules.js','content.js']});
+}
+try{
+  chrome.scripting.registerContentScripts([{
+    id:'webqa-page-diagnostics',
+    matches:['http://*/*','https://*/*'],
+    js:['page-diagnostics.js'],
+    runAt:'DOCUMENT_START',
+    persistAcrossSessions:true
+  }]).catch(()=>{});
+}catch{}
 async function activeTab(){return(await chrome.tabs.query({active:true,currentWindow:true}))[0]}
 function pageKey(url){const u=new URL(url);return u.origin+u.pathname}
 function isPrivateHost(host){const h=String(host||'').toLowerCase();if(h==='localhost'||h.endsWith('.local')||h.endsWith('.internal'))return true;if(/^127\./.test(h)||/^10\./.test(h)||/^192\.168\./.test(h)||/^169\.254\./.test(h))return true;const m=/^172\.(\d+)\./.exec(h);return!!(m&&Number(m[1])>=16&&Number(m[1])<=31)}

@@ -31,7 +31,7 @@ export function signalForFinding(f={}){
   if(/nested-form|form-no-submit|hidden-required|input-type-mismatch/.test(id))return SIGNALS.FORM_STRUCTURE;
   if(/mixed-content/.test(id))return SIGNALS.MIXED_CONTENT;
   if(/inert-link/.test(id))return SIGNALS.UX_REVIEW;
-  if(/uncaught-error|script-failed/.test(id))return SIGNALS.RUNTIME;
+  if(/uncaught-error|script-failed|unhandled-rejection|font-failed|resource-failed/.test(id))return SIGNALS.RUNTIME;
   if(/horizontal-overflow|viewport-overflow/.test(id))return SIGNALS.OVERFLOW;
   if(/security/.test(id))return SIGNALS.SECURITY;
   if(/h1|heading|duplicate-id|viewport|charset|meta-refresh|stylesheet-failed/.test(id))return SIGNALS.PAGE_STRUCTURE;

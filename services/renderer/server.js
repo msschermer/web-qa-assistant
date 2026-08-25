@@ -116,7 +116,9 @@ app.post('/scan', async (req, res) => {
     await page.addScriptTag({ path: path.resolve(__dirname, '../../packages/rules/browser-rules.js') });
     const errorCount = Math.max(0, Math.min(20, Number(runtimeErrors?.count || 0)));
     const errorSamples = Array.isArray(runtimeErrors?.samples) ? runtimeErrors.samples.slice(0, 20) : [];
-    const report = await page.evaluate(async ({ runtimeErrorCount, samples }) => {
+    const httpStatus = response?.status() || null;
+    const report = await page.evaluate(async ({ runtimeErrorCount, samples, httpStatus }) => {
+      try { globalThis.__WEBQA_HTTP_STATUS__ = httpStatus; } catch {}
       try { window.WebQARules.recordRuntimeErrors?.({ count: runtimeErrorCount, samples }); } catch {}
       try { await window.WebQARules.preparePerformanceSignals?.(); } catch {}
       const local = window.WebQARules.run(); let axe = null; let links = { findings: [], checked: 0 };
@@ -124,7 +126,7 @@ app.post('/scan', async (req, res) => {
       try { links = await window.WebQARules.auditLinks({ limit: 30, concurrency: 6, timeoutMs: 3000, retryTimeoutMs: 6000, budgetMs: 10000 }); } catch {}
       if (runtimeErrorCount >= 0) local.coverage = { ...local.coverage, runtime: 'renderer' };
       return { local, axe, links };
-    }, { runtimeErrorCount: errorCount, samples: errorSamples });
+    }, { runtimeErrorCount: errorCount, samples: errorSamples, httpStatus });
     const { local, axe, links } = report;
     // Gateway-authoritative privileged probes (SSRF+DNS per hop). No browser host permissions.
     const externalCandidates = Array.isArray(links?.externalCandidates) ? links.externalCandidates.slice(0, 12) : [];

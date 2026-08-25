@@ -1085,6 +1085,13 @@ chrome.runtime.onMessage.addListener(msg => {
   }
   if (msg?.type === 'FRANK_STEP_CHANGED' && frank) renderFrankStep(msg.index);
   if (msg?.type === 'FRANK_CLOSED' && frank) { leaveFrankLocal(); notice('Frank session closed.'); }
+  if (msg?.type === 'OPEN_REPORT_BUG') {
+    runtimeTrace.record('report-bug-opened', { fromFrank: true });
+    $('#bug-include-context').checked = false;
+    $('#bug-note').value = '';
+    refreshBugPrivacyCopy();
+    $('#bug-dialog')?.showModal();
+  }
 });
 
 loadSettings().finally(() => restoreWorkspaceOrRescan({ preferRestore: true }));

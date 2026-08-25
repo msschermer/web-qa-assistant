@@ -31,7 +31,7 @@ const HIGH_SIGNAL_TRACE = new Set([
   'local-ai:session-create-failed','local-ai:prompt-rejected','local-ai:prompt-accepted','local-ai:prompt-start'
 ]);
 const PAGE_ERROR_RULES = new Set(['runtime.uncaught-error']);
-const RESOURCE_RULES = new Set(['runtime.script-failed','web.stylesheet-failed','web.image-broken']);
+const RESOURCE_RULES = new Set(['runtime.script-failed','web.stylesheet-failed','web.image-broken','runtime.font-failed','runtime.resource-failed']);
 const CANNED_FALLBACK = {
   LOCAL_AI_REMEDIATION_DRIFT: 'The on-device remediation changed the type of fix instead of improving the verified recommendation.',
   LOCAL_AI_UNAVAILABLE: 'On-device reasoning was not available, so verified guidance was used.',

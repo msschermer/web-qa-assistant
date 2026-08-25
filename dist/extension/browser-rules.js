@@ -269,7 +269,7 @@
     const canonicalEl=document.querySelector('link[rel~="canonical"]'),descEl=document.querySelector('meta[name="description" i]'),robotsEl=document.querySelector('meta[name="robots" i]'),viewportEl=document.querySelector('meta[name="viewport" i]'),generatorEl=document.querySelector('meta[name="generator" i]'),h1s=[...document.querySelectorAll('h1')],schema=schemaState();
     let canonical='';try{canonical=canonicalEl?.href||''}catch{}
     const resourceHints=[...document.querySelectorAll('script[src],link[href],img[src]')].slice(0,80).map(el=>attr(el,'src')||attr(el,'href')).filter(Boolean);
-    return{url:location.href,origin:location.origin,hostname:location.hostname,pathname:location.pathname,title:document.title||'',description:attr(descEl,'content'),canonical,robots:attr(robotsEl,'content'),lang:attr(document.documentElement,'lang'),viewport:attr(viewportEl,'content'),generator:attr(generatorEl,'content'),resourceHints,h1s:h1s.map(h=>clip(h.textContent,160)),schemaTypes:schema.types,schemaBlockCount:schema.blockCount,formCount:document.forms.length,imageCount:document.images.length,linkCount:document.links.length,interactiveCount:document.querySelectorAll('a,button,input,select,textarea,[role="button"],[tabindex]').length};
+    return{url:location.href,origin:location.origin,hostname:location.hostname,pathname:location.pathname,title:document.title||'',description:attr(descEl,'content'),canonical,robots:attr(robotsEl,'content'),lang:attr(document.documentElement,'lang'),viewport:attr(viewportEl,'content'),generator:attr(generatorEl,'content'),resourceHints,h1s:h1s.map(h=>clip(h.textContent,160)),schemaTypes:schema.types,schemaBlockCount:schema.blockCount,formCount:document.forms.length,imageCount:document.images.length,linkCount:document.links.length,interactiveCount:document.querySelectorAll('a,button,input,select,textarea,[role="button"],[tabindex]').length,embeddedCoverage:collectEmbeddedCoverage(),httpStatus:Number(globalThis.__WEBQA_HTTP_STATUS__)||null};
   }
 
   function run(){
@@ -341,15 +341,20 @@
     findings.push(...overflowFindings());
     findings.push(...resourceFailureFindings());
     findings.push(...runtimeErrorFindings());
+    findings.push(...pageDiagnosticRuntimeFindings());
 
     const browserPerformance=performanceSignals();
     findings.push(...performanceFindings(browserPerformance));
     findings.push(...imageResourceFindings(browserPerformance));
     findings.push(...fragmentFindings());
     findings.push(...malformedLinkFindings());
+    findings.push(...embeddedFindings());
+    findings.push(...interactionFindings());
+    findings.push(...soft404Findings(page));
+    findings.push(...schemaSemanticFindings(schemaState()));
 
     findings.sort((a,b)=>(CATEGORY_RANK[b.category]-CATEGORY_RANK[a.category])||(SEVERITY_RANK[b.severity]-SEVERITY_RANK[a.severity]));
-    return{scannedAt:new Date().toISOString(),page,findings,browserPerformance,diagnostics:{failedResources:diagnosticFailedResources()},pageDiagnostics:{errors:(globalThis.__WEBQA_RUNTIME_ERRORS__?.samples||[]).slice(0,20)},coverage:{browser:'complete',links:'pending',axe:'pending',published:'pending',performance:browserPerformance.available?'current-page':'pending',wcag:'pending',ai:'pending',runtime:globalThis.__WEBQA_RUNTIME_ERRORS__?'renderer':'not applicable'}};
+    return{scannedAt:new Date().toISOString(),page,findings,browserPerformance,diagnostics:{failedResources:diagnosticFailedResources()},pageDiagnostics:{errors:(globalThis.__WEBQA_PAGE_DIAGNOSTICS__?.errors||globalThis.__WEBQA_RUNTIME_ERRORS__?.samples||[]).slice(0,20)},coverage:{browser:'complete',links:'pending',axe:'pending',published:'pending',performance:browserPerformance.available?'current-page':'pending',wcag:'pending',ai:'pending',runtime:globalThis.__WEBQA_RUNTIME_ERRORS__?.source==='renderer'?'renderer':globalThis.__WEBQA_PAGE_DIAGNOSTICS__?.errors?.length?'extension-partial':globalThis.__WEBQA_RUNTIME_ERRORS__?'extension-partial':'not applicable'}};
   }
 
   // Semantic context is what lets Frank reason about the correct implementation
@@ -604,6 +609,35 @@
         evidence:name?`type=hidden; required; name=${name}`:'type=hidden; required'
       }));
     });
+    document.querySelectorAll('form input, form select, form textarea').forEach(field=>{
+      const type=attr(field,'type').toLowerCase();
+      if(type==='hidden'||type==='submit'||type==='button'||type==='image'||type==='reset')return;
+      const name=attr(field,'name');
+      const labelled=field.id&&document.querySelector(`label[for="${CSS.escape(field.id)}"]`);
+      const aria=attr(field,'aria-label')||attr(field,'aria-labelledby');
+      const placeholder=attr(field,'placeholder');
+      if(!labelled&&!aria&&placeholder){
+        out.push(finding({
+          ruleId:'ux.placeholder-only-label',
+          title:'Form control relies on placeholder text alone',
+          detail:'A visible form control uses placeholder text without an associated label or aria-label. Placeholders disappear on input and are weak accessible names.',
+          category:'review',severity:'medium',confidence:'inferred',element:field,
+          evidence:`placeholder=${clip(placeholder,80)}`,extra:{worthChecking:true}
+        }));
+      }
+      if(!name&&field.closest('form[action]')){
+        const rect=field.getBoundingClientRect?.();
+        if(rect&&rect.width>0&&rect.height>0){
+          out.push(finding({
+            ruleId:'ux.form-control-missing-name',
+            title:'Submittable control has no name attribute',
+            detail:'A visible form control inside a form with an HTTP(S) action has no name attribute, so submitted data may omit this field.',
+            category:'review',severity:'low',confidence:'inferred',element:field,
+            evidence:`type=${type||field.localName}`,extra:{worthChecking:true}
+          }));
+        }
+      }
+    });
     document.querySelectorAll('input[autocomplete]').forEach(input=>{
       const type=attr(input,'type').toLowerCase()||'text';
       const auto=attr(input,'autocomplete').toLowerCase();
@@ -653,6 +687,23 @@
         const key=`parse:${href}`;if(seen.has(key))continue;seen.add(key);
         out.push(finding({ruleId:'seo.hreflang-invalid',title:'hreflang URL is invalid',detail:`hreflang "${clip(lang,80)}" href could not be parsed as a URL.`,category:'fix',severity:'medium',confidence:'confirmed',element:link,targetType:'document',evidence:'unparseable-href'}));
       }
+    }
+    const targets=new Map();
+    for(const link of document.querySelectorAll('link[rel~="alternate"][hreflang][href]')){
+      let resolved='';try{resolved=new URL(attr(link,'href'),location.href).href.split('#')[0]}catch{continue}
+      const list=targets.get(resolved)||[];list.push(link);targets.set(resolved,list);
+    }
+    for(const[resolved,links]of targets){
+      if(links.length<2)continue;
+      const langs=[...new Set(links.map(l=>attr(l,'hreflang').toLowerCase()).filter(l=>l&&l!=='x-default'))];
+      if(langs.length<2)continue;
+      out.push(finding({
+        ruleId:'seo.hreflang-duplicate-target',
+        title:'Multiple hreflang tags point to the same URL',
+        detail:`Alternate hreflang links reuse ${sanitizeHttpUrl(resolved)||'the same URL'} for more than one language tag. Search engines expect distinct URLs per language variant.`,
+        category:'review',severity:'medium',confidence:'inferred',element:links[1],targetType:'document',
+        evidence:`target=${sanitizeHttpUrl(resolved)||resolved}; langs=${langs.slice(0,4).join(',')}`,extra:{worthChecking:true}
+      }));
     }
     return out;
   }
@@ -708,21 +759,31 @@
           if([...document.querySelectorAll('link[rel~="stylesheet"]')].some(node=>sanitizeHttpUrl(attr(node,'href'))===url))kind='stylesheet';
         }catch{}
       }
+      else if(initiator==='img'||/\.(png|jpe?g|gif|webp|avif|svg)$/i.test(path))kind='image';
+      else if(initiator==='font'||/\.(woff2?|ttf|otf|eot)$/i.test(path))kind='font';
       if(!kind)continue;
       if(!failed.has(url))failed.set(url,{url,kind,status});
     }
     for(const row of failed.values()){
-      const selector=row.kind==='script'?'script[src]':'link[rel~="stylesheet"]';
+      const selector=row.kind==='script'?'script[src]':row.kind==='stylesheet'?'link[rel~="stylesheet"]':row.kind==='font'?'link[rel="preload"][as="font"],link[href*=".woff"]':row.kind==='image'?'img[src]':null;
       let el=null;
-      try{
-        el=[...document.querySelectorAll(selector)].find(node=>sanitizeHttpUrl(attr(node,row.kind==='script'?'src':'href'))===row.url)||null;
-      }catch{}
+      if(selector){
+        try{
+          el=[...document.querySelectorAll(selector)].find(node=>{
+            const attrName=row.kind==='script'?'src':'href';
+            const nodeUrl=sanitizeHttpUrl(attr(node,attrName)||attr(node,'src'));
+            return nodeUrl===row.url;
+          })||null;
+        }catch{}
+      }
       const inHead=el&&document.head?.contains(el);
+      const ruleId=row.kind==='script'?'runtime.script-failed':row.kind==='stylesheet'?'web.stylesheet-failed':row.kind==='font'?'runtime.font-failed':row.kind==='image'?'web.image-broken':'runtime.resource-failed';
+      const title=row.kind==='script'?'Script failed to load':row.kind==='stylesheet'?'Stylesheet failed to load':row.kind==='font'?'Font failed to load':row.kind==='image'?'Image resource failed to load':'Resource failed to load';
       out.push(finding({
-        ruleId:row.kind==='script'?'runtime.script-failed':'web.stylesheet-failed',
-        title:row.kind==='script'?'Script failed to load':'Stylesheet failed to load',
+        ruleId,
+        title,
         detail:`A same-origin ${row.kind} request for ${row.url} completed with HTTP ${row.status}. Restore the asset or remove the unused reference.`,
-        category:'fix',severity:'high',confidence:'confirmed',
+        category:'fix',severity:row.kind==='font'?'medium':'high',confidence:'confirmed',
         element:inHead?null:el,targetType:inHead||!el?'document':'visual',
         evidence:`http-${row.status} ${row.url}`,extra:{resourceUrl:row.url}
       }));
@@ -787,6 +848,204 @@
     return out;
   }
 
+  function resolveFragmentTarget(id){
+    if(!id)return false;
+    try{
+      if(document.getElementById(id))return true;
+      if(document.querySelector(`[name="${CSS.escape(id)}"]`))return true;
+    }catch{}
+    for(const root of shadowRoots()){
+      try{
+        if(root.getElementById?.(id))return true;
+        if(root.querySelector(`[name="${CSS.escape(id)}"]`))return true;
+      }catch{}
+    }
+    for(const frame of document.querySelectorAll('iframe')){
+      try{
+        const doc=frame.contentDocument;
+        if(!doc)continue;
+        if(doc.getElementById(id)||doc.querySelector(`[name="${CSS.escape(id)}"]`))return true;
+      }catch{}
+    }
+    return false;
+  }
+  function collectEmbeddedCoverage(){
+    const iframes=[...document.querySelectorAll('iframe')];
+    let sameOrigin=0,crossOrigin=0,accessible=0,openShadowRoots=shadowRoots().length;
+    for(const frame of iframes){
+      const src=attr(frame,'src');
+      if(!src){crossOrigin++;continue}
+      try{
+        const u=new URL(src,location.href);
+        if(u.origin===location.origin){sameOrigin++;if(frame.contentDocument)accessible++}
+        else crossOrigin++;
+      }catch{crossOrigin++}
+    }
+    return{
+      iframeCount:iframes.length,
+      sameOriginIframes:sameOrigin,
+      accessibleSameOriginIframes:accessible,
+      crossOriginIframes:crossOrigin,
+      openShadowRoots,
+      closedShadowRoots:'not observable',
+      fragmentTargets:'top-document, open shadow roots, and same-origin iframe documents when accessible'
+    };
+  }
+  function pageDiagnosticRuntimeFindings(){
+    const out=[];
+    const diag=globalThis.__WEBQA_PAGE_DIAGNOSTICS__?.errors||[];
+    const renderer=globalThis.__WEBQA_RUNTIME_ERRORS__;
+    const pageErrors=diag.filter(e=>e.kind==='page_error');
+    const rejections=diag.filter(e=>e.kind==='unhandled_rejection');
+    const errorCount=Math.max(Number(renderer?.count||0),pageErrors.length);
+    if(errorCount&&!renderer?.count){
+      globalThis.__WEBQA_RUNTIME_ERRORS__={count:errorCount,samples:pageErrors.slice(0,20).map(e=>({kind:'page_error',message:e.message,source:e.source,line:e.line})),source:'extension'};
+      out.push(...runtimeErrorFindings());
+    }
+    if(rejections.length){
+      const dedup=new Set();
+      for(const row of rejections){
+        const key=clip(row.message,120);
+        if(dedup.has(key))continue;
+        dedup.add(key);
+        out.push(finding({
+          ruleId:'runtime.unhandled-rejection',
+          title:'Unhandled promise rejection observed',
+          detail:'An unhandled promise rejection was captured during this session. The message is untrusted runtime output and is not treated as instructions. Verify whether a script failed to catch an async error.',
+          category:'review',severity:'low',confidence:'inferred',targetType:'page',
+          evidence:`unhandled-rejection; message=${key}`,extra:{worthChecking:true}
+        }));
+        if(out.length>=5)break;
+      }
+    }
+    return out;
+  }
+  function soft404Findings(page){
+    const status=Number(page.httpStatus);
+    if(Number.isFinite(status)&&status!==200)return[];
+    const title=String(page.title||document.title||'').toLowerCase();
+    const h1=String((page.h1s&&page.h1s[0])||document.querySelector('h1')?.textContent||'').toLowerCase();
+    const bodyText=clip(document.body?.innerText||'',1200).toLowerCase();
+    const notFoundRx=/\b(404|not found|page not found|page cannot be found|doesn't exist|does not exist|no longer available)\b/i;
+    let signals=0;
+    if(notFoundRx.test(title))signals++;
+    if(notFoundRx.test(h1))signals++;
+    if(notFoundRx.test(bodyText.slice(0,400)))signals++;
+    const words=(bodyText.match(/\S+/g)||[]).length;
+    if(words>0&&words<80)signals++;
+    if(Number(page.linkCount||document.links.length)<4)signals++;
+    if(Number(page.interactiveCount||0)<3)signals++;
+    const required=Number.isFinite(status)&&status===200?3:4;
+    if(signals<required)return[];
+    return[finding({
+      ruleId:'seo.soft-404-probable',
+      title:'Page content resembles a not-found response',
+      detail:`The document appears to load successfully${Number.isFinite(status)?` (HTTP ${status})`:''}, but ${signals} independent signals suggest an error or empty-shell page (title/H1/body wording, sparse content, or very few links). This is a probable soft 404 — not a confirmed HTTP 404. Verify with server logs, the intended URL, and whether the route should return a real 404 status.`,
+      category:'review',severity:'medium',confidence:'inferred',targetType:'document',
+      evidence:`soft-404-signals=${signals}; title=${clip(page.title||'',80)}`,extra:{worthChecking:true,soft404Signals:signals}
+    })];
+  }
+  function embeddedFindings(){
+    const out=[],seen=new Set();
+    for(const frame of document.querySelectorAll('iframe[src]')){
+      const src=attr(frame,'src');
+      if(!src||seen.has(src))continue;
+      seen.add(src);
+      let parsed;try{parsed=new URL(src,location.href)}catch{continue}
+      const title=attr(frame,'title');
+      const meaningful=parsed.pathname.length>1||parsed.search;
+      if(meaningful&&!title.trim()&&Number(frame.clientWidth||0)>=120&&Number(frame.clientHeight||0)>=80){
+        out.push(finding({
+          ruleId:'ux.iframe-missing-title',
+          title:'Embedded frame has no title',
+          detail:'A visible iframe lacks a title attribute. Accessible names help screen-reader users understand embedded content.',
+          category:'review',severity:'low',confidence:'inferred',element:frame,
+          evidence:sanitizeHttpUrl(parsed.href)||src,extra:{worthChecking:true}
+        }));
+      }
+      try{
+        if(parsed.origin===location.origin&&frame.contentDocument){
+          const doc=frame.contentDocument;
+          const broken=[...doc.querySelectorAll('img[src]')].filter(img=>img.complete&&Number(img.naturalWidth)===0&&Number(img.naturalHeight)===0).slice(0,2);
+          for(const img of broken){
+            out.push(finding({
+              ruleId:'web.image-broken',
+              title:'Image failed to load inside same-origin iframe',
+              detail:'An image inside an accessible same-origin iframe completed loading with naturalWidth 0.',
+              category:'fix',severity:'medium',confidence:'confirmed',element:img,
+              evidence:sanitizeResourceUrl(img.currentSrc||img.src||''),extra:{resourceUrl:sanitizeResourceUrl(img.currentSrc||img.src||''),embeddedContext:'same-origin-iframe'}
+            }));
+          }
+        }
+      }catch{}
+    }
+    return out;
+  }
+  function interactionFindings(){
+    const out=[],seen=new Set();
+    for(const el of document.querySelectorAll('[aria-controls]')){
+      const controls=attr(el,'aria-controls').split(/\s+/).filter(Boolean)[0];
+      if(!controls||seen.has(`${controls}|${selectorFor(el)}`))continue;
+      seen.add(`${controls}|${selectorFor(el)}`);
+      if(resolveFragmentTarget(controls))continue;
+      out.push(finding({
+        ruleId:'ux.controls-target-missing',
+        title:'Control references a missing panel or region',
+        detail:`An element declares aria-controls="${controls}", but no matching id was found in the top document, open shadow roots, or accessible same-origin iframe documents.`,
+        category:'review',severity:'medium',confidence:'inferred',element:el,
+        evidence:`aria-controls=${controls}`,extra:{worthChecking:true}
+      }));
+    }
+    for(const btn of document.querySelectorAll('button[aria-expanded], [role="button"][aria-expanded]')){
+      const expanded=attr(btn,'aria-expanded');
+      const controls=attr(btn,'aria-controls');
+      const panelId=controls||'';
+      if(!panelId||expanded!=='false')continue;
+      if(resolveFragmentTarget(panelId))continue;
+      const key=selectorFor(btn);if(seen.has(key))continue;seen.add(key);
+      out.push(finding({
+        ruleId:'ux.disclosure-target-missing',
+        title:'Collapsed control points at a missing panel',
+        detail:'A disclosure control is collapsed (aria-expanded=false) but its aria-controls target was not found. Accordion and menu toggles may be broken for keyboard and assistive-tech users if the panel id is wrong.',
+        category:'review',severity:'medium',confidence:'inferred',element:btn,
+        evidence:`aria-controls=${panelId}`,extra:{worthChecking:true}
+      }));
+    }
+    for(const a of document.querySelectorAll('a[href^="#"].skip-link, a.skip-link[href^="#"], a[class*="skip" i][href^="#"]')){
+      const raw=attr(a,'href');
+      if(!raw||raw==='#')continue;
+      let id='';try{id=decodeURIComponent(raw.slice(1))}catch{id=raw.slice(1)}
+      if(!id||resolveFragmentTarget(id))continue;
+      out.push(finding({
+        ruleId:'navigation.skip-link-target-missing',
+        title:'Skip link target is missing',
+        detail:`A skip link points to #${id}, but no matching target exists in observable document, shadow, or same-origin iframe contexts.`,
+        category:'fix',severity:'medium',confidence:'confirmed',element:a,evidence:`#${id}`
+      }));
+    }
+    return out;
+  }
+  function schemaSemanticFindings(schema){
+    const out=[];
+    for(const block of document.querySelectorAll('script[type="application/ld+json"]')){
+      let data;try{data=JSON.parse(block.textContent||'null')}catch{continue}
+      const items=Array.isArray(data)?data:(data?.['@graph']||[data]);
+      items.forEach((item,index)=>{
+        if(!item||typeof item!=='object')return;
+        const type=item['@type'];
+        if(type)return;
+        out.push(finding({
+          ruleId:'schema.jsonld-missing-type',
+          title:'JSON-LD item lacks an @type',
+          detail:`Structured data block ${index+1} contains an object without @type, so consumers cannot classify the entity.`,
+          category:'review',severity:'low',confidence:'inferred',element:block,targetType:'document',
+          evidence:'missing-@type',extra:{worthChecking:true}
+        }));
+      });
+    }
+    return out.slice(0,3);
+  }
+
   function fragmentFindings(){
     const groups=new Map();
     for(const a of document.querySelectorAll('a[href^="#"]')){
@@ -796,7 +1055,7 @@
       try{id=decodeURIComponent(raw.slice(1))}catch{id=raw.slice(1)}
       if(!id||/^\/?$/.test(id))continue;
       let exists=false;
-      try{exists=!!(document.getElementById(id)||document.querySelector(`[name="${CSS.escape(id)}"]`))}catch{exists=!!document.getElementById(id)}
+      try{exists=resolveFragmentTarget(id)}catch{exists=!!document.getElementById(id)}
       if(exists)continue;
       if(!groups.has(id))groups.set(id,[]);
       groups.get(id).push(a);
@@ -1138,7 +1397,9 @@
     const findings=[...local.findings,...axeFindings(axeResults),...(linkResult.findings||[])],seen=new Map();
     for(const f of findings){const key=`${f.ruleId}|${f.selector}|${f.evidence}`;if(!seen.has(key))seen.set(key,f)}
     const linksStatus=linkResult.status==='partial'?'partial':linkResult.status==='unavailable'?'unavailable':Number(linkResult.checked||0)===0?'none_checked':'complete';
-    const runtimeStatus=globalThis.__WEBQA_RUNTIME_ERRORS__||local.coverage?.runtime==='renderer'?'renderer':(local.coverage?.runtime||'not applicable');
+    const diagCount=globalThis.__WEBQA_PAGE_DIAGNOSTICS__?.errors?.length||0;
+    const bucket=globalThis.__WEBQA_RUNTIME_ERRORS__;
+    const runtimeStatus=bucket?.source==='renderer'?'renderer':(bucket||diagCount)?'extension-partial':(local.coverage?.runtime||'not applicable');
     return{...local,browserPerformance:local.browserPerformance||null,findings:[...seen.values()],linkAudit:{checked:linkResult.checked||0,verifiedHealthy:linkResult.verifiedHealthy||0,confirmedIssues:linkResult.confirmedIssues||0,inconclusive:linkResult.inconclusive||0,incompleteChecks:linkResult.incompleteChecks||[],reachedLimit:!!linkResult.reachedLimit,degraded:!!linkResult.degraded,cached:linkResult.cached||0},coverage:{...local.coverage,links:linksStatus,axe:axeResults?'complete':'unavailable',runtime:runtimeStatus},diagnostics:local.diagnostics||null,pageDiagnostics:local.pageDiagnostics||null};
   }
 
@@ -1150,7 +1411,7 @@
       source:sanitizeResourceUrl(s?.source||'',220),
       line:Number(s?.line)||0
     })):[];
-    globalThis.__WEBQA_RUNTIME_ERRORS__={count,samples};
+    globalThis.__WEBQA_RUNTIME_ERRORS__={count,samples,source:'renderer'};
   }
 
   globalThis.WebQARules={run,axeFindings,resolvedTargetState,auditLinks,recheckLink,applyExternalProbeResults,merge,recordRuntimeErrors,selectorFor,resolveTarget,performanceSignals,preparePerformanceSignals,semanticContextFor,targetContextFor(targetId,selector='',ruleId=''){

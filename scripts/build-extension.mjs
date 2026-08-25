@@ -5,7 +5,7 @@ const installedAxe=path.join(root,'node_modules/axe-core/axe.min.js'),vendoredAx
 const axeBytes=fs.existsSync(installedAxe)?fs.readFileSync(installedAxe):fs.existsSync(vendoredAxe)?fs.readFileSync(vendoredAxe):null;
 if(!axeBytes)throw new Error('axe-core runtime is unavailable. Run npm ci, or start from a release source package that includes dist/extension/vendor/axe.min.js.');
 fs.rmSync(out,{recursive:true,force:true});fs.mkdirSync(out,{recursive:true});
-for(const name of ['manifest.json','background.js','content.js','sidepanel.html','sidepanel.css','sidepanel.js','local-ai.js'])fs.copyFileSync(path.join(src,name),path.join(out,name));
+for(const name of ['manifest.json','background.js','content.js','page-diagnostics.js','sidepanel.html','sidepanel.css','sidepanel.js','local-ai.js'])fs.copyFileSync(path.join(src,name),path.join(out,name));
 const presentationSource=fs.readFileSync(path.join(root,'packages/presentation/present.js'),'utf8').replace("../frank/guidance.js","./guidance.js");fs.writeFileSync(path.join(out,'presentation.js'),presentationSource);
 fs.copyFileSync(path.join(root,'packages/findings/coverage.js'),path.join(out,'coverage.js'));
 const bugReportSource=fs.readFileSync(path.join(root,'packages/support/bug-report.js'),'utf8')
