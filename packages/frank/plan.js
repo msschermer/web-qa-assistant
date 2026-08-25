@@ -1,5 +1,6 @@
 import { targetIdForFinding } from './evidence.js';
 import { guidanceFor } from './guidance.js';
+import { sanitizeMarkupSnippet } from '../findings/correlation.js';
 
 export const FRANK_STEP_TYPES=['spotlight','evidence','interpretation','comparison','trend','impact','remediation','verification','summary'];
 export const FRANK_PREVIEW_PROPERTIES=['color','background-color','font-size','line-height','outline','border-color'];
@@ -9,7 +10,13 @@ function evidenceBy(graph,fn){return(graph.evidence||[]).filter(fn)}
 function refs(items){return items.map(x=>x.id)}
 function labels(items){return[...new Set(items.map(x=>sourceLabel(x.source)))]}
 function step(id,type,headline,body,{targetId='',evidence=[],code='',metrics=[],preview=null}={}){return{id,type,headline,body,targetId,evidenceRefs:refs(evidence),sourceLabels:labels(evidence),code:String(code||''),metrics:metrics.map(x=>({label:String(x.label),value:String(x.value)})),preview:preview||{enabled:false,property:'',value:''}}}
-function safeCode(graph){const markup=evidenceBy(graph,e=>e.kind==='markup'||(e.kind==='evidence'&&String(e.value||'').trim().startsWith('<')))[0]?.value;return typeof markup==='string'?markup:''}
+function safeCode(graph){
+  const snippet=graph.finding?.markupSnippet||evidenceBy(graph,e=>e.kind==='markup-snippet')[0]?.value;
+  if(typeof snippet==='string'&&snippet.trim())return sanitizeMarkupSnippet(snippet);
+  const markup=evidenceBy(graph,e=>e.kind==='markup'||(e.kind==='evidence'&&String(e.value||'').trim().startsWith('<')))[0]?.value;
+  if(typeof markup==='string'&&markup.trim())return sanitizeMarkupSnippet(markup);
+  return'';
+}
 function comparisonMetrics(graph){return evidenceBy(graph,e=>['canonical','title','description','robots'].includes(e.kind)).slice(0,4).map(e=>({label:e.label,value:e.value}))}
 function trendMetrics(graph){return evidenceBy(graph,e=>e.source==='performance-monitor'&&['mobile-score','desktop-score','threshold','mobile-change','desktop-change'].includes(e.kind)).slice(0,6).map(e=>({label:e.label,value:e.value}))}
 function issueMetrics(graph){return evidenceBy(graph,e=>['link-url','http-status','link-occurrences','link-location','link-prominence','environment','confidence'].includes(e.kind)).slice(0,8).map(e=>({label:e.label,value:e.value}))}
@@ -45,12 +52,25 @@ function trimSteps(steps,max=8){
   return steps.filter(s=>keep.has(s)).slice(0,max);
 }
 export function deterministicFrankPlan(graph){const f=graph.finding,targetId=targetIdForFinding(f),targetText=evidenceBy(graph,e=>e.kind==='text')[0]?.value||'',g=guidanceFor({...f,targetText},graph.environment||{}),steps=[];
-  steps.push(step('read','interpretation',targetId?'What is happening here':'What this finding means',g.interpretation,{targetId,evidence:stepEvidence(graph,'interpretation'),metrics:interpretationMetrics(graph)}));
+  const presentation=String(f.targetability||'');
+  const markupMode=presentation==='markup';
+  const documentMode=markupMode||presentation==='document'||presentation==='none'||f.targetType==='historical';
+  const unresolvedSpotlight=!targetId&&(presentation==='spotlight'||presentation==='multiple-elements'||f.targetType==='visual');
+  const readHeadline=markupMode?'Page configuration':documentMode?'What this finding means':targetId?'What is happening here':'What this finding means';
+  const readBody=markupMode
+    ? `${g.interpretation} No on-page spotlight is required; the relevant markup is shown below.`
+    : documentMode
+      ? `${g.interpretation} This is a document-level observation, so Frank does not fake a visual highlight.`
+      : unresolvedSpotlight
+        ? `${g.interpretation} The recorded element could not be re-anchored on the live page, so Frank will not guess a spotlight.`
+        : g.interpretation;
+  const stepTarget=documentMode||unresolvedSpotlight||markupMode?'':targetId;
+  steps.push(step('read','interpretation',readHeadline,readBody,{targetId:stepTarget,evidence:stepEvidence(graph,'interpretation'),metrics:interpretationMetrics(graph),code:markupMode?safeCode(graph):''}));
   const comparisons=comparisonMetrics(graph);if(comparisons.length>=2)steps.push(step('compare','comparison','The observation points disagree','Browser and connected published-state values were gathered independently. The disagreement is the evidence.',{evidence:evidenceBy(graph,e=>['browser','meta-state'].includes(e.source)),metrics:comparisons}));const trends=trendMetrics(graph);if(trends.length&&f.targetType!=='historical')steps.push(step('trend','trend','History changes the priority','Performance Monitor adds recent history so a current value can be separated from a sustained regression.',{evidence:evidenceBy(graph,e=>e.source==='performance-monitor'),metrics:trends}));
-  steps.push(step('impact','impact','Why this matters here',g.impact,{targetId,evidence:stepEvidence(graph,'impact')}));
-  steps.push(step('fix','remediation','What I would change',[g.recommendation,g.remediation].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).join(' '),{targetId,evidence:stepEvidence(graph,'remediation'),code:safeCode(graph)}));
-  if(g.alternatives)steps.push(step('alternatives','evidence','What I ruled out',g.alternatives,{targetId,evidence:graph.evidence.slice(0,4)}));
-  steps.push(step('verify','verification','Verify the correction',g.verify,{targetId,evidence:stepEvidence(graph,'verification')}));
+  steps.push(step('impact','impact','Why this matters here',g.impact,{targetId:stepTarget,evidence:stepEvidence(graph,'impact')}));
+  steps.push(step('fix','remediation','What I would change',[g.recommendation,g.remediation].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).join(' '),{targetId:stepTarget,evidence:stepEvidence(graph,'remediation'),code:safeCode(graph)}));
+  if(g.alternatives)steps.push(step('alternatives','evidence','What I ruled out',g.alternatives,{targetId:stepTarget,evidence:graph.evidence.slice(0,4)}));
+  steps.push(step('verify','verification','Verify the correction',g.verify,{targetId:stepTarget,evidence:stepEvidence(graph,'verification')}));
   const sourceText=graph.sources.map(sourceLabel).join(', ')||'the current scan';
   return{version:3,title:f.title,summary:`Frank is using ${sourceText}. Environment: ${graph.environment?.type||'unknown'} (${graph.environment?.confidenceLabel||'unconfirmed'}).`,mode:'deterministic',findingId:graph.findingId,sources:graph.sources,assessment:assessmentFor(f),steps:trimSteps(steps)}}
 export function validateFrankPlan(plan,graph){if(!plan||plan.version!==3||!plan.assessment||!Array.isArray(plan.steps)||plan.steps.length<3||plan.steps.length>8)return false;const validTargets=new Set(Object.keys(graph.targets||{})),validEvidence=new Set((graph.evidence||[]).map(e=>e.id));let hasVerification=false;for(const s of plan.steps){if(!FRANK_STEP_TYPES.includes(s.type)||!s.headline||!s.body)return false;if(s.targetId&&!validTargets.has(s.targetId))return false;if((s.evidenceRefs||[]).some(id=>!validEvidence.has(id)))return false;if(s.preview?.enabled&&(!s.targetId||!FRANK_PREVIEW_PROPERTIES.includes(s.preview.property)||!s.preview.value))return false;if(s.type==='verification')hasVerification=true}return hasVerification}
