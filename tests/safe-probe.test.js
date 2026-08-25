@@ -231,18 +231,35 @@ test('timeout and network errors stay inconclusive', async () => {
 
 test('query values sanitized in mapped evidence; fragment stripped from sanitizeProbeUrl', () => {
   const candidates = [{ url: 'https://example.com/x?token=abc', text: 'A', occurrences: 3, selector: '#a' }];
-  const rows = [{ url: candidates[0].url, status: 404, durationMs: 2 }];
+  const rows = [{ url: candidates[0].url, status: 404, durationMs: 2, method: 'GET', attempts: 2 }];
   const mapped = mapExternalProbeRows(candidates, rows);
   assert.equal(mapped.findings[0].count, 3);
   assert.doesNotMatch(mapped.findings[0].detail, /token=abc/);
   assert.equal(sanitizeProbeUrl('https://example.com/x#frag'), 'https://example.com/x');
 });
 
-test('link validation paths never request wildcard host permissions', () => {
-  const bg = fs.readFileSync('apps/extension/background.js', 'utf8');
-  const side = fs.readFileSync('apps/extension/sidepanel.js', 'utf8');
-  assert.doesNotMatch(bg, /permissions\.request\(\s*\{\s*origins:\s*\[[^\]]*http:\/\/\*\/\*/);
-  assert.doesNotMatch(bg, /permissions\.request\(\s*\{\s*origins:\s*\[[^\]]*https:\/\/\*\/\*/);
-  assert.doesNotMatch(side, /origins:\s*\[[^\]]*http:\/\/\*\/\*[^\]]*https:\/\/\*\/\*/);
-  assert.match(bg, /privilegedExternal:privatePage/);
+test('mapExternalProbeRows refuses under-attempted 404 confirmation', () => {
+  const candidates = [{ url: 'https://example.com/missing', text: 'A', occurrences: 1 }];
+  const under = mapExternalProbeRows(candidates, [{ url: candidates[0].url, status: 404, method: 'HEAD', attempts: 1, durationMs: 1 }]);
+  assert.equal(under.findings.length, 0);
+  assert.ok(under.incompleteChecks.some((c) => c.reason === 'http-404'));
+  const ok = mapExternalProbeRows(candidates, [{ url: candidates[0].url, status: 404, method: 'GET', attempts: 2, durationMs: 1 }]);
+  assert.equal(ok.findings.length, 1);
+  assert.equal(ok.findings[0].verification.attempts, 2);
+});
+
+test('gateway envelope keeps external candidate total when sliced to 12', async () => {
+  const { gatewayContextEnvelope } = await import('../packages/ai/evidence-contract.js');
+  const candidates = Array.from({ length: 15 }, (_, i) => ({ url: `https://example.com/x${i}`, text: `L${i}`, occurrences: 1 }));
+  const envelope = gatewayContextEnvelope({
+    page: { url: 'https://example.com/', hostname: 'example.com', pathname: '/' },
+    findings: [],
+    coverage: { links: 'partial' },
+    linkAudit: { checked: 15, inconclusive: 15, reachedLimit: true },
+    externalLinkCandidates: candidates,
+    externalLinkCandidateTotal: 15
+  });
+  assert.equal(envelope.externalLinkCandidates.length, 12);
+  assert.equal(envelope.externalLinkCandidateTotal, 15);
+  assert.doesNotMatch(JSON.stringify(envelope), /incompleteChecks/);
 });

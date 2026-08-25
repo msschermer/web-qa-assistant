@@ -277,12 +277,22 @@ async function addLinkAudit(report,tabId,{privilegedExternal=true}={}){
       for(const candidate of externalCandidates){
         const started=Date.now();
         const probeUrl=sanitizeExternalProbeUrl(candidate.url);
-        if(!probeUrl){probeRows.push({url:candidate.url,status:0,error:'destination-not-allowed',durationMs:0});continue}
+        if(!probeUrl){probeRows.push({url:candidate.url,status:0,error:'destination-not-allowed',durationMs:0,method:'GET',attempts:0});continue}
         try{
-          const res=await fetch(probeUrl,{method:'GET',redirect:'follow',credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(4500)});
-          probeRows.push({url:candidate.url,status:res.status,finalUrl:res.url||probeUrl,redirected:Boolean(res.redirected),durationMs:Date.now()-started});
+          const first=await fetch(probeUrl,{method:'GET',redirect:'follow',credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(4500)});
+          const status=first.status;
+          if(status===404||status===410||status>=500){
+            const second=await fetch(probeUrl,{method:'GET',redirect:'follow',credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(4500)});
+            if(second.status!==status){
+              probeRows.push({url:candidate.url,status:0,error:'inconclusive-mismatch',finalUrl:first.url||probeUrl,redirected:Boolean(first.redirected),durationMs:Date.now()-started,method:'GET',attempts:2});
+              continue;
+            }
+            probeRows.push({url:candidate.url,status,finalUrl:second.url||first.url||probeUrl,redirected:Boolean(first.redirected||second.redirected),durationMs:Date.now()-started,method:'GET',attempts:2});
+            continue;
+          }
+          probeRows.push({url:candidate.url,status,finalUrl:first.url||probeUrl,redirected:Boolean(first.redirected),durationMs:Date.now()-started,method:'GET',attempts:1});
         }catch(error){
-          probeRows.push({url:candidate.url,status:0,error:String(error?.message||error),durationMs:Date.now()-started});
+          probeRows.push({url:candidate.url,status:0,error:String(error?.message||error),durationMs:Date.now()-started,method:'GET',attempts:1});
         }
       }
       try{

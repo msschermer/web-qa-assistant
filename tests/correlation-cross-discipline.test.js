@@ -109,7 +109,7 @@ test('external confirmed 404 via privileged probe becomes external finding', () 
   const h = harness([anchor('https://cdn.example.com/missing', 'Offsite')], {});
   const applied = h.rules.applyExternalProbeResults(
     [{ url: 'https://cdn.example.com/missing', text: 'Offsite', occurrences: 2, prominence: 'normal', location: 'body' }],
-    [{ url: 'https://cdn.example.com/missing', status: 404, finalUrl: 'https://cdn.example.com/missing' }]
+    [{ url: 'https://cdn.example.com/missing', status: 404, finalUrl: 'https://cdn.example.com/missing', method: 'GET', attempts: 2 }]
   );
   assert.equal(applied.findings.length, 1);
   assert.equal(applied.findings[0].ruleId, 'navigation.link-404-external');

@@ -761,6 +761,8 @@
       const row=byUrl.get(candidate.url);
       if(!row)continue;
       const status=Number(row.status||0);
+      const method=String(row.method||'GET').toUpperCase()==='HEAD'?'HEAD':'GET';
+      const attemptsCount=Math.max(1,Number(row.attempts||1));
       let liveAnchors=[...document.querySelectorAll('a[href]')].filter(a=>{
         try{const c=classifyLink(a);return c&&c.url===candidate.url}catch{return false}
       });
@@ -769,14 +771,15 @@
       }
       const first=liveAnchors[0],ctx={text:candidate.text||'',location:candidate.location||'body',prominence:candidate.prominence||'normal',...linkContext(first)};
       const sources=candidate.sources||[{...ctx,selector:candidate.selector||selectorFor(first)}];
-      const attempt={attempt:1,state:status?'complete':'unavailable',status,durationMs:Number(row.durationMs||0),finalUrl:row.finalUrl||candidate.url};
-      const extra={link:{url:candidate.url,internal:false,sourceUrl:location.href,status,state:status?'complete':'unavailable',finalUrl:row.finalUrl||candidate.url,redirected:!!row.redirected,occurrences:Number(candidate.occurrences||liveAnchors.length||1),sources,...ctx},verification:{state:'confirmed',method:'privileged external GET',attempts:1,evidence:[attempt]}};
-      if(status===404||status===410){
-        findings.push(finding({ruleId:`navigation.link-${status===410?410:404}-external`,title:'External link points to a missing page',detail:`${ctx.text?`"${ctx.text}" `:''}points to ${candidate.url}. A privileged request confirmed HTTP ${status}.`,category:'fix',severity:'high',element:first,evidence:`confirmed ${status} ${candidate.url}`,count:Number(candidate.occurrences||liveAnchors.length||1),confidence:'confirmed',verification:extra.verification,extra}));
+      const attempt={attempt:attemptsCount,state:status?'complete':'unavailable',status,method,durationMs:Number(row.durationMs||0),finalUrl:row.finalUrl||candidate.url};
+      const confirmationOk=(status===404||status===410||status>=500)?(method==='GET'&&attemptsCount>=2):true;
+      const extra={link:{url:candidate.url,internal:false,sourceUrl:location.href,status,state:status?'complete':'unavailable',finalUrl:row.finalUrl||candidate.url,redirected:!!row.redirected,occurrences:Number(candidate.occurrences||liveAnchors.length||1),sources,...ctx},verification:{state:'confirmed',method:method==='HEAD'?'privileged external HEAD':'privileged external GET',attempts:attemptsCount,evidence:[attempt]}};
+      if((status===404||status===410)&&confirmationOk){
+        findings.push(finding({ruleId:`navigation.link-${status===410?410:404}-external`,title:'External link points to a missing page',detail:`${ctx.text?`"${ctx.text}" `:''}points to ${candidate.url}. Privileged GET requests confirmed HTTP ${status}.`,category:'fix',severity:'high',element:first,evidence:`confirmed ${status} ${candidate.url}`,count:Number(candidate.occurrences||liveAnchors.length||1),confidence:'confirmed',verification:{...extra.verification,method:'privileged external GET'},extra}));
         resolvedUrls.add(candidate.url);continue;
       }
-      if(status>=500){
-        findings.push(finding({ruleId:'navigation.link-5xx-external',title:'External link points to a server error',detail:`${ctx.text?`"${ctx.text}" `:''}points to ${candidate.url}. A privileged request confirmed a server error.`,category:'fix',severity:'critical',element:first,evidence:`confirmed ${status} ${candidate.url}`,count:Number(candidate.occurrences||1),confidence:'confirmed',verification:extra.verification,extra}));
+      if(status>=500&&confirmationOk){
+        findings.push(finding({ruleId:'navigation.link-5xx-external',title:'External link points to a server error',detail:`${ctx.text?`"${ctx.text}" `:''}points to ${candidate.url}. Privileged GET requests confirmed a server error.`,category:'fix',severity:'critical',element:first,evidence:`confirmed ${status} ${candidate.url}`,count:Number(candidate.occurrences||1),confidence:'confirmed',verification:{...extra.verification,method:'privileged external GET'},extra}));
         resolvedUrls.add(candidate.url);continue;
       }
       if(status>=200&&status<400){resolvedUrls.add(candidate.url);continue}

@@ -471,6 +471,9 @@ export function mapExternalProbeRows(candidates = [], probeRows = []) {
       prominence: candidate.prominence || '',
       location: candidate.location || ''
     };
+    const confirmationOk = (status === 404 || status === 410 || status >= 500)
+      ? (method === 'GET' && attemptsCount >= 2)
+      : true;
     const verification = {
       state: 'confirmed',
       method: method === 'HEAD' ? 'privileged external HEAD' : 'privileged external GET',
@@ -478,7 +481,7 @@ export function mapExternalProbeRows(candidates = [], probeRows = []) {
       evidence: [attempt]
     };
 
-    if (status === 404 || status === 410) {
+    if ((status === 404 || status === 410) && confirmationOk) {
       findings.push({
         id: `navigation.link-${status}-external:${hash(candidate.url)}`,
         ruleId: `navigation.link-${status === 410 ? 410 : 404}-external`,
@@ -499,7 +502,7 @@ export function mapExternalProbeRows(candidates = [], probeRows = []) {
       resolvedUrls.add(candidate.url);
       continue;
     }
-    if (status >= 500) {
+    if (status >= 500 && confirmationOk) {
       findings.push({
         id: `navigation.link-5xx-external:${hash(candidate.url)}`,
         ruleId: 'navigation.link-5xx-external',

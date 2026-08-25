@@ -1,9 +1,18 @@
-import { sanitizeUrl } from '../ai/evidence-contract.js';
 import { signalForFinding, SIGNALS } from './signals.js';
 
 function text(value){return String(value??'').trim()}
 function clip(value,max=900){const s=text(value).replace(/\s+/g,' ');return s.length>max?s.slice(0,max-1)+'…':s}
-function safeLinkUrl(value){return sanitizeUrl(value)}
+function safeLinkUrl(value){
+  try{
+    const url=new URL(String(value||''));
+    for(const key of [...url.searchParams.keys()]){
+      if(/(token|secret|password|passwd|authorization|auth|session|cookie|jwt|key|credential|nonce|csrf|xsrf)/i.test(key))url.searchParams.set(key,'[redacted]');
+      else url.searchParams.set(key,'[value]');
+    }
+    url.hash='';
+    return url.toString();
+  }catch{return clip(value,600)}
+}
 function hash(input){let h=2166136261;for(let i=0;i<input.length;i++){h^=input.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36)}
 function contrastRatioText(value){const raw=String(value??'').trim();if(!raw)return'';return raw.includes(':')?raw:`${raw}:1`}
 function push(list,{source,kind,label,value,scope='finding',confidence='deterministic',targetId=''}){
