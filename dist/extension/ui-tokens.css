@@ -1,44 +1,49 @@
 :root{
-  --wqa-canvas:#F3F6FA;
+  --wqa-canvas:#F5F7FA;
   --wqa-surface:#FFFFFF;
   --wqa-surface-raised:#FFFFFF;
-  --wqa-sunken:#F7F9FC;
-  --wqa-ink:#102133;
-  --wqa-ink-soft:#45566B;
-  --wqa-ink-faint:#78879A;
-  --wqa-line:#E2E8F0;
-  --wqa-line-strong:#CAD4E0;
+  --wqa-sunken:#EEF2F6;
+  --wqa-ink:#0F1B2A;
+  --wqa-ink-soft:#3A4A5C;
+  --wqa-ink-faint:#5B6B7C;
+  --wqa-line:#E4E9F0;
+  --wqa-line-strong:#C9D3DF;
 
   /* Product identity: deep engineering blue with a restrained cyan signal. */
   --wqa-brand:#143E63;
   --wqa-brand-strong:#0B2B48;
   --wqa-brand-soft:#EAF1F7;
-  --wqa-accent:#087C89;
-  --wqa-accent-strong:#05636D;
-  --wqa-accent-soft:#E6F5F5;
+  --wqa-accent:#0A6F7A;
+  --wqa-accent-strong:#055A63;
+  --wqa-accent-soft:#E4F3F4;
   --wqa-violet:#5557A7;
   --wqa-violet-soft:#F0F0FB;
 
   --wqa-critical:#B42318;
   --wqa-critical-soft:#FEF3F2;
-  --wqa-warn:#B54708;
+  --wqa-warn:#9A6700;
   --wqa-warn-soft:#FFF7E8;
   --wqa-ok:#067647;
   --wqa-ok-soft:#ECFDF3;
   --wqa-info:#155B87;
   --wqa-info-soft:#EBF5FA;
-  --wqa-muted:#667085;
+  --wqa-muted:#5B6B7C;
 
-  --wqa-focus:#087C89;
+  --wqa-focus:#0A6F7A;
   --wqa-r-xs:6px;
   --wqa-r-sm:8px;
-  --wqa-r:12px;
-  --wqa-r-lg:16px;
+  --wqa-r:10px;
+  --wqa-r-lg:14px;
   --wqa-r-pill:999px;
-  --wqa-shadow:0 1px 2px rgba(16,33,51,.04),0 6px 20px rgba(16,33,51,.035);
-  --wqa-shadow-lg:0 18px 45px rgba(16,33,51,.18),0 4px 12px rgba(16,33,51,.08);
-  --wqa-sans:'IBM Plex Sans',Inter,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-  --wqa-mono:'IBM Plex Mono','SFMono-Regular',Consolas,monospace;
+  --wqa-shadow:0 1px 2px rgba(15,27,42,.04);
+  --wqa-shadow-lg:0 16px 40px rgba(15,27,42,.16),0 2px 8px rgba(15,27,42,.06);
+  --wqa-space-1:4px;
+  --wqa-space-2:8px;
+  --wqa-space-3:12px;
+  --wqa-space-4:16px;
+  --wqa-space-5:24px;
+  --wqa-sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --wqa-mono:ui-monospace,'SFMono-Regular',Consolas,monospace;
 
   --wqa-paper:var(--wqa-canvas);--wqa-surface-strong:var(--wqa-surface);--wqa-rule:var(--wqa-line-strong);--wqa-rule-soft:var(--wqa-line);--wqa-blue:var(--wqa-brand);--wqa-blue-wash:var(--wqa-brand-soft);--wqa-live:var(--wqa-ok);--wqa-danger:var(--wqa-critical);--wqa-warning:var(--wqa-warn);--wqa-radius:var(--wqa-r);
 }

@@ -13,14 +13,13 @@
     <span class="brand-mark" aria-hidden="true">WQ</span>
     <div class="app-id">
       <h1 id="app-name">Web QA Assistant</h1>
-      <p id="host">Current page</p>
+      <p id="host">Ready to scan this page</p>
     </div>
   </div>
-  <button id="scan" class="btn btn-primary">Rescan</button>
+  <button id="scan" class="btn btn-primary">Scan page</button>
 </header>
 
-<div class="contextbar" aria-label="Page context">
-  <span class="context-label">Page context</span>
+<div class="contextbar" role="region" aria-label="Page context">
   <span id="environment-state" class="chip"></span>
   <span id="new-count" class="chip chip-quiet"></span>
   <label class="env-control">
@@ -38,12 +37,19 @@
 <main>
   <div id="notice" role="status" aria-live="polite"></div>
 
+  <section id="idle-state" class="idle-state" aria-labelledby="idle-heading">
+    <h2 id="idle-heading">Inspect this page</h2>
+    <p>Run a scan to get a page-level judgment, a recommended order of work across QA areas, and Frank’s guided fixes.</p>
+    <p class="idle-hint">Navigation, discoverability, performance, accessibility, security, and web quality are weighed together — volume from one scanner does not own the queue.</p>
+  </section>
+
   <div id="scanner-view">
     <section id="summary" hidden class="workspace">
       <section class="workspace-section assessment-section" aria-labelledby="assessment-heading">
         <div class="workspace-section-head">
-          <div><span class="section-kicker">Current page</span><h2 id="assessment-heading">Page assessment</h2></div>
-          <span class="help-dot" tabindex="0" role="note" aria-label="Page assessment explanation" data-tooltip="Frank’s prioritized summary is built from verified scanner evidence. AI does not decide whether a finding exists.">?</span>
+          <div><h2 id="assessment-heading">Page assessment</h2></div>
+          <button type="button" class="help-dot" aria-expanded="false" aria-controls="assessment-help" aria-label="About page assessment (?)">?</button>
+          <p id="assessment-help" class="help-panel" hidden>This page judgment is composed from verified scanner evidence. Frank explains that evidence; AI does not decide whether a finding exists.</p>
         </div>
         <article id="frank-overview" class="brief" data-state="loading">
           <div class="brief-top">
@@ -61,27 +67,28 @@
         </article>
       </section>
 
-      <section class="workspace-section qa-section" aria-labelledby="qa-areas-heading">
-        <div class="workspace-section-head">
-          <div><span class="section-kicker">Coverage by discipline</span><h2 id="qa-areas-heading">QA areas</h2></div>
-          <span class="help-dot" tabindex="0" role="note" aria-label="QA areas explanation" data-tooltip="Repeat instances of the same underlying problem are combined here so one noisy scanner cannot dominate the page assessment. Select an area to filter the recommended work.">?</span>
-        </div>
-        <div id="ledger" class="ledger" aria-label="Issues by QA area"></div>
-      </section>
-
       <section class="workspace-section recommendations-section" aria-labelledby="priority-heading">
         <div class="workspace-section-head priority-head">
-          <div><span class="section-kicker">Action queue</span><h2 id="priority-heading">Recommended order</h2></div>
+          <div><h2 id="priority-heading">Recommended order</h2></div>
           <button id="show-all" class="btn btn-text">Show all checks</button>
         </div>
-        <p class="section-intro">Start with confirmed, higher-impact problems. Lower-confidence observations stay available without crowding the queue.</p>
+        <p class="section-intro">Start with confirmed, higher-impact problems across disciplines. Lower-confidence observations stay available without crowding the queue.</p>
         <div id="findings"></div>
       </section>
 
+      <section class="workspace-section qa-section" aria-labelledby="qa-areas-heading">
+        <div class="workspace-section-head">
+          <div><h2 id="qa-areas-heading">Filter by QA area</h2></div>
+          <button type="button" class="help-dot" aria-expanded="false" aria-controls="qa-help" aria-label="About QA area filters (?)">?</button>
+          <p id="qa-help" class="help-panel" hidden>Select an area to filter the recommended work. Only areas with material findings appear. Coverage gaps are listed separately under Scan coverage.</p>
+        </div>
+        <div id="ledger" class="ledger" aria-label="Filter issues by QA area"></div>
+      </section>
+
       <section class="workspace-section tools-section" aria-labelledby="workspace-tools-heading">
-        <div class="workspace-section-head"><div><span class="section-kicker">Review, export & support</span><h2 id="workspace-tools-heading">Workspace tools</h2></div></div>
+        <div class="workspace-section-head"><div><h2 id="workspace-tools-heading">Workspace tools</h2></div></div>
         <div class="tool-grid" role="group" aria-label="Workspace tools">
-          <button id="report-bug" class="tool-button"><span class="tool-icon" aria-hidden="true">!</span><span><b>Report bug</b><small>Create a privacy-safe support report</small></span></button>
+          <button id="report-bug" class="tool-button"><span class="tool-icon" aria-hidden="true">!</span><span><b>Report bug</b><small>Privacy-safe support report</small></span></button>
           <button id="copy-md" class="tool-button"><span class="tool-icon" aria-hidden="true">↗</span><span><b>Copy report</b><small>Plain-language handoff</small></span></button>
           <button id="copy-json" class="tool-button"><span class="tool-icon" aria-hidden="true">{ }</span><span><b>Copy data</b><small>Structured scan JSON</small></span></button>
           <button id="watch" class="tool-button"><span class="tool-icon" aria-hidden="true">◎</span><span><b>Watch this site</b><small>Keep a local site session</small></span></button>
@@ -116,7 +123,7 @@
   <section id="frank-view" hidden aria-labelledby="frank-ledger-title">
     <div class="frank-sticky-summary">
       <div class="frank-ledger-head">
-        <div><span class="eyebrow">Evidence ledger</span><h2 id="frank-ledger-title" tabindex="-1">What the tools observed</h2></div>
+        <div><h2 id="frank-ledger-title" tabindex="-1">Evidence ledger</h2></div>
         <button id="frank-exit" class="btn btn-quiet">Exit</button>
       </div>
       <div class="frank-ledger-status">
@@ -125,13 +132,12 @@
       </div>
       <h3 id="frank-title" class="ledger-finding-title"></h3>
     </div>
-    <p class="ledger-help">This panel keeps the scanner facts. Frank’s interpretation and fix stay in the focused card on the page.</p>
     <p id="frank-finding-detail" class="ledger-finding-detail"></p>
     <div id="frank-assessment" class="ledger-verification"><b id="frank-assessment-status"></b><small id="frank-assessment-limitations"></small></div>
-    <nav class="frank-progress" aria-label="Frank walkthrough progress"><span class="sr-only">Walkthrough progress</span><div><span id="frank-progress-bar"></span></div></nav>
+    <nav class="frank-progress" aria-label="Frank walkthrough progress"><span class="sr-only">Walkthrough progress</span><div role="progressbar" id="frank-progress-track" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="frank-progress-bar"></span></div></nav>
 
     <section class="evidence-block" aria-labelledby="frank-facts-heading">
-      <div class="evidence-block-head"><span id="frank-facts-heading">Key facts</span><span class="help-dot help-dot-dark" tabindex="0" data-tooltip="Measured and extracted values stay separate from Frank’s interpretation so you can audit the recommendation.">?</span></div>
+      <div class="evidence-block-head"><span id="frank-facts-heading">Key facts</span></div>
       <dl id="frank-facts" class="evidence-facts"></dl>
     </section>
 
@@ -172,14 +178,14 @@
     <div class="finding-top">
       <span class="chips">
         <span class="chip chip-class"></span>
-        <span class="chip chip-priority"></span>
-        <span class="chip chip-confidence"></span>
+        <span class="chip chip-priority chip-meta"></span>
+        <span class="chip chip-confidence chip-meta"></span>
         <span class="chip chip-instances" hidden></span>
       </span>
     </div>
     <h3></h3>
     <p class="detail"></p>
-    <div class="finding-next" hidden><span>Recommended next step</span><p></p></div>
+    <div class="finding-next" hidden><span>Next step</span><p></p></div>
     <p class="finding-context"></p>
     <div class="finding-actions">
       <button class="ask-frank btn btn-brand" title="Frank explains this verified finding using the evidence collected for it.">Ask Frank</button>
