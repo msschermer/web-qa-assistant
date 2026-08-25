@@ -13,7 +13,16 @@ function safeCode(graph){const markup=evidenceBy(graph,e=>e.kind==='markup'||(e.
 function comparisonMetrics(graph){return evidenceBy(graph,e=>['canonical','title','description','robots'].includes(e.kind)).slice(0,4).map(e=>({label:e.label,value:e.value}))}
 function trendMetrics(graph){return evidenceBy(graph,e=>e.source==='performance-monitor'&&['mobile-score','desktop-score','threshold','mobile-change','desktop-change'].includes(e.kind)).slice(0,6).map(e=>({label:e.label,value:e.value}))}
 function issueMetrics(graph){return evidenceBy(graph,e=>['link-url','http-status','link-occurrences','link-location','link-prominence','environment','confidence'].includes(e.kind)).slice(0,8).map(e=>({label:e.label,value:e.value}))}
-function assessmentFor(f){const c=String(f.confidence||'confirmed');if(c==='confirmed'||c==='corroborated')return{status:'verified',statement:'Verified by the available deterministic evidence.',limitations:''};if(c==='inferred')return{status:'review',statement:'Observed, but implementation intent is not proven.',limitations:'Confirm intent before changing production behavior.'};return{status:'context',statement:'Context only; this is not a verified defect.',limitations:'Frank should not present inconclusive evidence as an issue.'}}
+function assessmentFor(f){
+  const purpose=f.semantics?.imagePurpose||null;
+  if(purpose?.purpose==='uncertain'){
+    return{status:'review',statement:'The accessibility violation is confirmed, but the correct remediation depends on unresolved image purpose.',limitations:'Confirm whether the image is informative or decorative before choosing alt text.'};
+  }
+  const c=String(f.confidence||'confirmed');
+  if(c==='confirmed'||c==='corroborated')return{status:'verified',statement:'Verified by the available deterministic evidence.',limitations:''};
+  if(c==='inferred')return{status:'review',statement:'Observed, but implementation intent is not proven.',limitations:'Confirm intent before changing production behavior.'};
+  return{status:'context',statement:'Context only; this is not a verified defect.',limitations:'Frank should not present inconclusive evidence as an issue.'};
+}
 const INTERPRETATION_KINDS=new Set(['finding','rule','text','naming.aria-label','image-purpose','image-purpose-confidence','nearby-text','interactive-ancestor','element-size','target-width','target-height','target-minimum','target-spacing','target-spacing-required','contrast-ratio','contrast-required','foreground-color','background-color','font-size','font-weight','link-url','http-status','robots','canonical','measurement-type','lcp','ttfb','transfer','lcp-element','redirect-chain']);
 const IMPACT_KINDS=new Set(['finding','rule','wcag','impact','target-minimum','target-spacing-required','contrast-required','confidence','link-prominence','http-status','robots','canonical','measurement-type','lcp','ttfb','transfer','mobile-change','desktop-change']);
 const REMEDIATION_KINDS=new Set(['rule','text','naming.aria-label','element-size','target-width','target-height','target-minimum','target-spacing','target-spacing-required','contrast-ratio','contrast-required','foreground-color','background-color','failure-summary','link-url','http-status','canonical','robots','measurement-type','lcp','ttfb','transfer','lcp-element','heaviest-resource','redirect-chain','image-purpose','image-purpose-confidence','nearby-text','image-purpose-signal']);
