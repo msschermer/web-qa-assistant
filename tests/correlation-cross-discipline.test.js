@@ -6,6 +6,7 @@ import {
   attachCorrelationMetadata,
   applyLocalDiscoverabilityCorrelations,
   applyPerformanceCorrelations,
+  applyResponsiveCorrelations,
   composeWorthChecking,
   detectPlatform,
   sanitizeMarkupSnippet,
@@ -356,6 +357,18 @@ test('unrelated same-rule findings without shared root cause stay separate', () 
   assert.notEqual(findings[0].rootCauseKey, findings[1].rootCauseKey);
   const attention = composeAttention(findings);
   assert.ok(attention.groups.length >= 2);
+});
+
+test('viewport overflow correlation shares one root cause and supersedes twins', () => {
+  const next = applyResponsiveCorrelations([
+    { id: 'v', ruleId: 'web.viewport-fixed', title: 'Viewport uses a fixed pixel width', detail: '980', category: 'review', severity: 'medium', confidence: 'confirmed', evidence: 'width=980' },
+    { id: 'o', ruleId: 'web.horizontal-overflow', title: 'Page content overflows the scanned viewport', detail: 'overflow', category: 'review', severity: 'low', confidence: 'inferred', evidence: 'viewport=390; overflow=200', overflowMetrics: { viewportWidth: 390, scrollWidth: 590, overflowPx: 200 } }
+  ]);
+  const correlated = next.find(f => f.ruleId === 'correlation.viewport-overflow');
+  assert.ok(correlated);
+  assert.equal(correlated.rootCauseKey, 'viewport-layout');
+  assert.equal(next.find(f => f.ruleId === 'web.viewport-fixed').supersededBy, 'correlation.viewport-overflow');
+  assert.equal(next.find(f => f.ruleId === 'web.horizontal-overflow').supersededBy, 'correlation.viewport-overflow');
 });
 
 test('PSI key never appears in correlation or frank packages', () => {

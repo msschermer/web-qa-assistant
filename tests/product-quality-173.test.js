@@ -110,12 +110,18 @@ test('overlapping title and lang axe/browser pairs collapse to one attention lea
     { ruleId: 'seo.title-missing', title: 'Page title is missing', detail: 'no title', category: 'fix', severity: 'high', confidence: 'confirmed' },
     { ruleId: 'axe.document-title', title: 'Documents must have title', detail: 'axe title', category: 'fix', severity: 'high', confidence: 'confirmed', axe: { impact: 'serious' } },
     { ruleId: 'a11y.lang-missing', title: 'Document language is missing', detail: 'no lang', category: 'fix', severity: 'medium', confidence: 'confirmed' },
-    { ruleId: 'axe.html-has-lang', title: 'html must have lang', detail: 'axe lang', category: 'fix', severity: 'high', confidence: 'confirmed', axe: { impact: 'serious' } }
+    { ruleId: 'axe.html-has-lang', title: 'html must have lang', detail: 'axe lang', category: 'fix', severity: 'high', confidence: 'confirmed', axe: { impact: 'serious' } },
+    { ruleId: 'web.duplicate-id', title: 'Duplicate element ID', detail: 'id x', category: 'fix', severity: 'medium', confidence: 'confirmed' },
+    { ruleId: 'axe.duplicate-id', title: 'IDs must be unique', detail: 'axe dup', category: 'fix', severity: 'high', confidence: 'confirmed', axe: { impact: 'serious' } },
+    { ruleId: 'axe.duplicate-id-aria', title: 'ARIA IDs must be unique', detail: 'axe aria dup', category: 'fix', severity: 'high', confidence: 'confirmed', axe: { impact: 'serious' } }
   ], { type: 'production' });
   assert.equal(rows.find(f => f.ruleId === 'seo.title-missing').frankVisible, true);
   assert.equal(rows.find(f => f.ruleId === 'axe.document-title').frankVisible, false);
   assert.equal(rows.find(f => f.ruleId === 'a11y.lang-missing').frankVisible, true);
   assert.equal(rows.find(f => f.ruleId === 'axe.html-has-lang').frankVisible, false);
+  assert.equal(rows.find(f => f.ruleId === 'web.duplicate-id').frankVisible, true);
+  assert.equal(rows.find(f => f.ruleId === 'axe.duplicate-id').frankVisible, false);
+  assert.equal(rows.find(f => f.ruleId === 'axe.duplicate-id-aria').frankVisible, false);
   const composition = composeAttention(rows);
   assert.equal(composition.groups.filter(g => /title/i.test(g.title)).length, 1);
   assert.equal(composition.groups.filter(g => /lang/i.test(g.title)).length, 1);

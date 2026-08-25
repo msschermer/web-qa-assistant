@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=980">
+  <title>Synthetic problem matrix</title>
+  <meta name="description" content="Synthetic page with intentional QA issues.">
+  <link rel="canonical" href="https://example.com/problems">
+  <meta name="robots" content="index,follow">
+  <meta name="googlebot" content="noindex">
+  <link rel="alternate" hreflang="en-us-bogus" href="https://example.com/en">
+  <link rel="alternate" hreflang="fr" href="">
+  <script src="http://cdn.example.com/widget.js"></script>
+  <link rel="stylesheet" href="/missing.css">
+</head>
+<body>
+  <header>
+    <a href="javascript:void(0)">Open menu</a>
+    <a href="">Empty destination</a>
+  </header>
+  <main>
+    <h1>Problem matrix</h1>
+    <img src="http://cdn.example.com/pixel.gif" width="1" height="1" alt="">
+    <iframe src="http://cdn.example.com/frame.html" title="Insecure frame"></iframe>
+    <form action="https://example.com/contact" method="post">
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="text" autocomplete="email">
+      <input type="hidden" name="source" required>
+    </form>
+    <div id="dup">First</div>
+    <div id="dup">Second</div>
+    <label for="dup">Duplicate target</label>
+    <div style="width:2200px">Wide synthetic layout box that forces horizontal overflow.</div>
+  </main>
+</body>
+</html>

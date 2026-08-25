@@ -14,3 +14,12 @@ test('synthetic known-answer fixture covers cross-discipline acceptance cases',(
   const hrefHosts=[...html.matchAll(/href=\"https?:\/\/([^/\"]+)/gi)].map(m=>m[1]);
   assert.deepEqual(hrefHosts.sort(),['example.com','example.org']);
 });
+
+test('QA matrix fixtures exist for clean-page and problem-page contracts',()=>{
+  const clean=fs.readFileSync('fixtures/qa-matrix/clean.html','utf8');
+  const problems=fs.readFileSync('fixtures/qa-matrix/problems.html','utf8');
+  assert.match(clean,/Clean synthetic workspace page/);
+  assert.match(clean,/hreflang="x-default"/);
+  assert.match(problems,/javascript:void\(0\)/);
+  assert.match(problems,/type="hidden"[^>]*required|required/);
+});
