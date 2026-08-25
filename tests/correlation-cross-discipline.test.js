@@ -265,6 +265,20 @@ test('WordPress high-confidence remediation appends implementation context after
   assert.match(g.remediation, /Smush|ShortPixel|Imagify/);
 });
 
+test('background linkAudit confirmedIssues ignores inconclusive link-review rows', () => {
+  const background = fs.readFileSync('apps/extension/background.js', 'utf8');
+  assert.match(background, /confirmedLinkFindings/);
+  assert.match(background, /navigation\\.link-\(404\|410\|5xx\)/);
+  assert.doesNotMatch(background, /confirmedIssues:Number\(result\?\.confirmedIssues\|\|linkFindings\.length\)/);
+});
+
+test('sidepanel Worth Checking can start Frank without a finding card', () => {
+  const panel = fs.readFileSync('apps/extension/sidepanel.js', 'utf8');
+  assert.match(panel, /async function startFrank\(finding, card, triggerButton/);
+  assert.match(panel, /startFrank\(f, null, button\)/);
+  assert.match(panel, /if \(!card\?\.querySelector\)/);
+});
+
 test('link-review guidance stays inconclusive and never claims broken', () => {
   const g = guidanceFor({
     ruleId: 'navigation.link-review-external',

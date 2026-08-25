@@ -308,8 +308,9 @@ async function addLinkAudit(report,tabId,{privilegedExternal=true}={}){
     if(externalBudgetLimited&&!incompleteChecks.some(c=>c.reason==='candidate-budget')){
       incompleteChecks=[...incompleteChecks,{kind:'external-link',url:'',path:'',text:'',reason:'candidate-budget',status:0,attempts:[]}];
     }
+    const confirmedLinkFindings=linkFindings.filter(f=>f?.confidence==='confirmed'&&/navigation\.link-(404|410|5xx)/.test(String(f.ruleId||'')));
     const status=result?.status==='unavailable'?'unavailable':incompleteChecks.length?'partial':'complete';
-    return{...report,findings:[...(report.findings||[]),...linkFindings],externalLinkCandidates:externalCandidates,externalLinkCandidateTotal:externalCandidateTotal,linkAudit:{checked:Number(result?.checked||0),verifiedHealthy:Number(result?.verifiedHealthy||0),confirmedIssues:Number(result?.confirmedIssues||linkFindings.length),inconclusive:incompleteChecks.length,incompleteChecks,limit:Number(result?.limit||0),reachedLimit:Boolean(result?.reachedLimit)||externalBudgetLimited,degraded:Boolean(result?.degraded),cached:Number(result?.cached||0)},coverage:{...report.coverage,links:status}};
+    return{...report,findings:[...(report.findings||[]),...linkFindings],externalLinkCandidates:externalCandidates,externalLinkCandidateTotal:externalCandidateTotal,linkAudit:{checked:Number(result?.checked||0),verifiedHealthy:Number(result?.verifiedHealthy||0),confirmedIssues:confirmedLinkFindings.length,inconclusive:incompleteChecks.length,incompleteChecks,limit:Number(result?.limit||0),reachedLimit:Boolean(result?.reachedLimit)||externalBudgetLimited,degraded:Boolean(result?.degraded),cached:Number(result?.cached||0)},coverage:{...report.coverage,links:status}};
   }catch{return{...report,linkAudit:{checked:0,verifiedHealthy:0,confirmedIssues:0,inconclusive:0,incompleteChecks:[]},coverage:{...report.coverage,links:'unavailable'}}}
 }
 
