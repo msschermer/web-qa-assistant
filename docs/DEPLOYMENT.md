@@ -22,6 +22,32 @@ internal renderer --> internal egress proxy --> public internet only
 
 Only the API is bound to host loopback. The renderer and egress proxy stay on internal Docker networks.
 
+## Production SSH access
+
+WebQA production deployment uses the configured local SSH alias **`portfolio`**. The public application hostname **`assistant.msschermer.us`** is the HTTPS endpoint only — **not** the SSH target.
+
+| Role | Value |
+|------|-------|
+| SSH host | `portfolio` (local SSH alias to the droplet) |
+| Remote repository | `~/web-qa-assistant` |
+| Public application | `https://assistant.msschermer.us` |
+
+Connect and enter the repo:
+
+```bash
+ssh portfolio
+cd ~/web-qa-assistant
+```
+
+Do **not** run `ssh assistant.msschermer.us` unless future repo configuration explicitly documents a different SSH host.
+
+Health checks use the public URL or loopback on the droplet:
+
+```bash
+curl -s https://assistant.msschermer.us/api/health
+curl -s http://127.0.0.1:8787/api/health
+```
+
 ## 1. Prepare the server
 
 On the Linux host:
@@ -204,16 +230,24 @@ docker compose logs -f egress-proxy
 
 ## 8. Upgrade
 
-After a tested release tag is published:
+After a tested release tag is published, on the production droplet:
 
 ```bash
-git fetch --tags
-git checkout v1.7.4
+ssh portfolio
+cd ~/web-qa-assistant
+git fetch origin --tags
+git switch --detach v1.7.4
+git describe --tags --exact-match
+docker network ls | grep portfolio-infra_web
+docker compose -f docker-compose.yml -f docker-compose.portfolio.yml config --quiet
 docker compose -f docker-compose.yml -f docker-compose.portfolio.yml up -d --build
-curl http://127.0.0.1:8787/api/health
+curl -s http://127.0.0.1:8787/api/health
+curl -s https://assistant.msschermer.us/api/health
 ```
 
-Drop the `-f` flags if you are not using the shared portfolio network.
+Replace `v1.7.4` with the exact release tag being deployed. Use `git switch --detach vX.Y.Z` so production tracks the tag, not a moving branch.
+
+Drop the `-f docker-compose.portfolio.yml` flags if you are not using the shared portfolio network.
 
 Confirm the upgrade landed:
 

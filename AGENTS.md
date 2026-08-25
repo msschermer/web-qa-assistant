@@ -83,6 +83,10 @@ RELEASE_TAG=vX.Y.Z npm run release:validate
 
 On PowerShell use `$env:RELEASE_TAG="vX.Y.Z"` before `npm run release:validate` and remove it afterward.
 
+## Production deployment
+
+WebQA production SSH uses the configured local alias **`portfolio`**. The public hostname **`assistant.msschermer.us`** is the HTTPS application endpoint only — not the SSH target. Remote repo path: `~/web-qa-assistant`. See `docs/DEPLOYMENT.md`.
+
 ## Git / release safety
 
 - Do not force-push unless explicitly required and reviewed.
