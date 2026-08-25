@@ -97,7 +97,7 @@ async function currentTabStillMatches(pageUrl, tabId) {
   return Boolean(active.ok && active.tab?.id === tabId && active.tab?.url === pageUrl);
 }
 
-const CLASS_TONE = { availability: 'critical', discoverability: 'warn', accessibility: 'info', performance: 'warn', security: 'critical', implementation: 'info', coverage: 'muted' };
+const CLASS_TONE = { availability: 'critical', discoverability: 'warn', accessibility: 'warn', performance: 'warn', security: 'critical', implementation: 'info', coverage: 'muted' };
 const LEDGER_ORDER = QA_AREA_ORDER;
 
 function findingById(id) { return (report?.findings || []).find(f => f.id === id) || null; }
@@ -106,7 +106,11 @@ function incompleteCoverage() {
   const statuses = Object.values(report?.coverage || {}).filter(v => /partial|unavailable/i.test(String(v))).length;
   return statuses + Number(report?.linkAudit?.inconclusive || 0);
 }
+function targetBlocked() {
+  return Boolean(report?.targetIntegrityBlocked || report?.page?.targetIntegrity === 'blocked' || report?.priorityMode === 'target-integrity');
+}
 function judgment() {
+  if (targetBlocked()) return { state: 'blocker', title: 'Page could not be reached' };
   const groups = report?.attention?.materialGroupCount || 0;
   const blockers = materialFindings().filter(f => f.frankPriority === 'blocker').length;
   if (blockers) return { state: 'blocker', title: `${groups} issue${groups === 1 ? '' : 's'} need attention` };
@@ -132,16 +136,22 @@ function visibleGroups() {
 
 function renderLedger() {
   const box = $('#ledger'); box.innerHTML = '';
+  const section = document.querySelector('.qa-section');
   const counts = report?.attention?.classCounts || {};
   const leadClass = (report?.attention?.groups || [])[0]?.impactClass || '';
   const present = LEDGER_ORDER.filter(id => counts[id]);
-  if (!present.length) return;
+  if (!present.length) {
+    if (section) section.hidden = true;
+    return;
+  }
+  if (section) section.hidden = false;
   for (const id of present) {
     const item = presentArea(id, counts[id], { lead: id === leadClass, active: classFilter === id });
     const cell = document.createElement('button');
     cell.type = 'button'; cell.className = 'ledger-cell'; cell.dataset.lead = String(item.lead); cell.dataset.tone = item.tone;
     cell.setAttribute('aria-pressed', String(item.active)); cell.title = item.description;
-    cell.innerHTML = `<span class="ledger-dot" aria-hidden="true"></span><span class="ledger-copy"><b>${esc(item.label)}</b><small>${esc(item.description)}</small></span><span class="ledger-count">${esc(item.count)}</span>`;
+    cell.innerHTML = `<span class="ledger-dot" aria-hidden="true"></span><span class="ledger-label">${esc(item.label)}</span><span class="ledger-count">${esc(item.count)}</span>`;
+    cell.setAttribute('aria-label', `${item.label}: ${item.count}${item.lead ? ', first in recommended order' : ''}`);
     cell.onclick = () => { classFilter = classFilter === id ? '' : id; render(); };
     box.appendChild(cell);
   }
@@ -263,23 +273,30 @@ async function recheck(f, card) {
 function renderOverviewOnly() {
   if (!report) return;
   const j = judgment();
+  const blocked = targetBlocked();
   $('#frank-overview').dataset.state = j.state;
   $('#judgment-title').textContent = j.title;
   $('#brief').textContent = report.priorityBrief || '';
   const groups = report.attention?.materialGroupCount || 0;
   const findings = report.attention?.materialFindingCount || 0;
-  $('#material-count').textContent = groups === findings
-    ? `${groups} prioritized issue${groups === 1 ? '' : 's'}`
-    : `${groups} prioritized issue${groups === 1 ? '' : 's'} · ${findings} checks grouped`;
-  $('#coverage-state').textContent = incompleteCoverage() ? `${incompleteCoverage()} coverage gap${incompleteCoverage() === 1 ? '' : 's'}` : 'Primary coverage available';
-  const mode = report.priorityMode === 'ai' ? 'ai' : 'deterministic';
-  $('#reasoning-mode').textContent = mode === 'ai' ? 'Cloud-enhanced assessment' : 'Evidence-backed assessment';
+  $('#material-count').textContent = blocked
+    ? 'Page QA withheld'
+    : groups === findings
+      ? `${groups} prioritized issue${groups === 1 ? '' : 's'}`
+      : `${groups} prioritized issue${groups === 1 ? '' : 's'} · ${findings} checks grouped`;
+  $('#coverage-state').textContent = blocked
+    ? 'Coverage: blocked'
+    : incompleteCoverage() ? `${incompleteCoverage()} coverage gap${incompleteCoverage() === 1 ? '' : 's'}` : 'Primary coverage available';
+  const mode = blocked ? 'integrity' : report.priorityMode === 'ai' ? 'ai' : 'deterministic';
+  $('#reasoning-mode').textContent = blocked ? 'Target integrity' : mode === 'ai' ? 'Cloud-enhanced assessment' : 'Evidence-backed assessment';
   $('#reasoning-mode').dataset.mode = mode;
 }
 
 function render() {
   if (!report) return;
+  document.body.dataset.hasReport = 'true';
   $('#summary').hidden = false;
+  $('#idle-state').hidden = true;
   $('#host').textContent = report.page.hostname || report.page.url;
   const env = report.environment || report.page?.environment || { type: 'unknown', confidenceLabel: 'low', source: 'inferred' };
   $('#environment').value = env.source === 'user' ? env.type : 'auto';
@@ -288,7 +305,7 @@ function render() {
   envChip.dataset.tone = /high|certain/i.test(env.confidenceLabel || '') ? 'ok' : 'info';
   envChip.title = (env.signals || []).join(' · ') || 'Environment context';
   const quiet = report.findings.filter(f => f.lifecycle !== 'ignored' && f.frankVisible === false).length;
-  $('#show-all').textContent = showAllChecks ? 'Show Frank only' : `Show all checks${quiet ? ` (${quiet})` : ''}`;
+  $('#show-all').textContent = showAllChecks ? 'Recommended only' : `Show all checks${quiet ? ` (${quiet})` : ''}`;
 
   renderOverviewOnly();
   renderLedger();
@@ -302,6 +319,7 @@ function render() {
     const presentation = presentFinding({ ...f, impactClass: g.impactClass }, env);
     const node = $('#card').content.cloneNode(true), card = node.querySelector('.finding');
     card.dataset.tone = f.frankPriority === 'blocker' || f.severity === 'critical' ? 'critical' : f.category === 'fix' ? 'warn' : 'info';
+    card.dataset.findingId = f.id || '';
 
     const classChip = card.querySelector('.chip-class');
     classChip.textContent = presentation.areaLabel;
@@ -375,10 +393,11 @@ function render() {
   if (!wrap.children.length) {
     const empty = document.createElement('div');
     empty.className = 'empty-findings';
-    empty.innerHTML = classFilter ? '<b>Nothing in this area.</b>Select the area again to clear the filter.'
-      : showAllChecks ? '<b>No findings in this filter.</b>The current scan did not return matching observations.'
-      : incompleteCoverage() ? '<b>No confirmed issues in the current evidence.</b>Some checks were incomplete. That uncertainty is recorded in Scan coverage rather than turned into defects.'
-      : '<b>No priority issues need attention.</b>Use Show all checks to inspect lower-priority observations.';
+    empty.innerHTML = classFilter ? '<b>Nothing in this area.</b> Select the area again to clear the filter.'
+      : showAllChecks ? '<b>No findings in this filter.</b> The current scan did not return matching observations.'
+      : targetBlocked() ? '<b>No page findings to prioritize.</b> Target integrity blocked the scan before page QA ran.'
+      : incompleteCoverage() ? '<b>No confirmed issues in the current evidence.</b> Some checks were incomplete. That uncertainty is recorded in Scan coverage rather than turned into defects.'
+      : '<b>No priority issues need attention.</b> Use Show all checks to inspect lower-priority observations.';
     wrap.appendChild(empty);
   }
 }
@@ -445,9 +464,13 @@ function renderFrankStep(index) {
   const total = frank.plan.steps.length;
   frank.index = Math.max(0, Math.min(total - 1, Number(index) || 0));
   const step = frank.plan.steps[frank.index];
-  $('#frank-step-count').textContent = `${frank.index + 1} of ${total} · ${step.headline}`;
-  $('#frank-progress-bar').style.width = `${((frank.index + 1) / total) * 100}%`;
-  $('#frank-step-type').textContent = step.type;
+  $('#frank-step-count').textContent = `Step ${frank.index + 1} of ${total}`;
+  const progressPct = Math.round(((frank.index + 1) / total) * 100);
+  $('#frank-progress-bar').style.width = `${progressPct}%`;
+  const track = $('#frank-progress-track');
+  if (track) { track.setAttribute('aria-valuenow', String(progressPct)); track.setAttribute('aria-valuetext', `Step ${frank.index + 1} of ${total}`); }
+  const STEP_ROLE = { spotlight: 'Locate', evidence: 'Checks', interpretation: 'Meaning', comparison: 'Compare', trend: 'History', impact: 'Impact', remediation: 'Fix', verification: 'Verify', summary: 'Summary' };
+  $('#frank-step-type').textContent = STEP_ROLE[step.type] || step.type;
 
   const current = $('#frank-current-evidence'); current.innerHTML = '';
   const used = evidenceForStep(step);
@@ -595,17 +618,49 @@ async function startFrank(finding, card) {
 
   frank = { plan, graph: prepared.graph, tabId: prepared.tabId || tabId, index: 0, finding, reasoning };
   runtimeTrace.record('frank-started', { mode: plan.mode, provider: reasoning.provider, status: reasoning.status, code: reasoning.code || '', stepCount: plan.steps?.length || 0 });
-  enterFrank();
-  renderFrankEvidenceLedger();
+
+  const windowInfo = await chrome.windows.getCurrent().catch(() => null);
+  const windowId = tab?.windowId || windowInfo?.id;
+  const snapshot = await send({
+    type: 'SAVE_WORKSPACE_SNAPSHOT',
+    workspace: {
+      tabId: prepared.tabId || tabId,
+      windowId,
+      pageUrl,
+      report,
+      classFilter,
+      showAllChecks,
+      filter,
+      findingId: finding.id || '',
+      stepIndex: 0,
+      frankFocus: true
+    }
+  }, 8000);
+
+  if (!snapshot.ok) {
+    // Keep the side panel as the sole surface: tear down the page coach to avoid an orphaned overlay.
+    await send({ type: 'FRANK_END', tabId: prepared.tabId || tabId }, 4000).catch(() => {});
+    frank = { plan, graph: prepared.graph, tabId: prepared.tabId || tabId, index: 0, finding, reasoning };
+    enterFrank();
+    renderFrankEvidenceLedger();
+    const aiOperationalFail = frank.plan.mode === 'ai' && frank.reasoning?.status === 'operational';
+    const onDeviceFail = aiOperationalFail && frank.reasoning?.provider === 'chrome-built-in';
+    $('#frank-mode').textContent = onDeviceFail ? 'On-device reasoning' : aiOperationalFail ? 'Cloud reasoning' : 'Verified guidance';
+    $('#frank-mode').dataset.mode = aiOperationalFail ? 'ai' : 'deterministic';
+    renderFrankStep(0);
+    notice(snapshot.error || 'Frank started in the side panel because the QA workspace could not be saved for focus mode.', 'warn');
+    return;
+  }
+
+  frank = { plan, graph: prepared.graph, tabId: prepared.tabId || tabId, index: 0, finding, reasoning };
   const aiOperational = frank.plan.mode === 'ai' && frank.reasoning?.status === 'operational';
   const onDevice = aiOperational && frank.reasoning?.provider === 'chrome-built-in';
-  $('#frank-mode').textContent = onDevice ? 'On-device reasoning' : aiOperational ? 'Cloud reasoning' : 'Verified guidance';
-  $('#frank-mode').dataset.mode = aiOperational ? 'ai' : 'deterministic';
-  $('#frank-mode').title = onDevice ? 'Frank used Chrome built-in AI on this device. The finding evidence was not sent to an AI provider.' : aiOperational ? 'Frank used the optional cloud AI fallback.' : (frank.reasoning?.message || 'Frank is using deterministic evidence-grounded guidance.');
-  renderFrankStep(0);
-  if (onDevice) notice('Frank is reasoning on this device. No metered AI request was used.', 'ok');
-  else if (aiOperational) notice('Frank is using the optional metered cloud fallback.', 'warn');
-  else notice(`Frank is using verified deterministic guidance${frank.reasoning?.message ? `: ${frank.reasoning.message}` : '.'}`, 'warn');
+  // Cost-control / mode notice is recorded in the runtime trace; the panel closes immediately after.
+  if (onDevice) runtimeTrace.record('frank-focus-mode', { message: 'No metered AI request was used' });
+  else if (aiOperational) runtimeTrace.record('frank-focus-mode', { message: 'Optional metered cloud fallback' });
+  // Preferred UX: coach owns the page; close the global side panel to restore horizontal space.
+  try { window.close(); } catch {}
+  if (windowId) send({ type: 'CLOSE_SIDE_PANEL', windowId }, 3000).catch(() => {});
 }
 
 async function gotoFrank(index) {
@@ -636,6 +691,21 @@ async function rescan() {
   if (frank) await endFrank();
   scanInFlight = true; classFilter = '';
   const button = $('#scan'); button.disabled = true; button.textContent = 'Scanning';
+  document.body.dataset.scanning = 'true';
+  $('#idle-state').hidden = true;
+  $('#summary').hidden = false;
+  const qaSection = document.querySelector('.qa-section');
+  if (qaSection) qaSection.hidden = true;
+  $('#ledger').innerHTML = '';
+  $('#findings').innerHTML = '<div class="empty-findings"><b>Scan in progress.</b> Findings appear when verified evidence is ready.</div>';
+  const overview = $('#frank-overview');
+  if (overview) {
+    overview.dataset.state = 'loading';
+    $('#judgment-title').textContent = 'Inspecting this page…';
+    $('#brief').textContent = 'Gathering verified evidence across QA areas…';
+    $('#material-count').textContent = '';
+    $('#coverage-state').textContent = '';
+  }
   clearDiagnostic(); notice('Inspecting the current page…');
   try {
     const r = await send(tab?.id ? { type: 'SCAN_TAB', tabId: tab.id } : { type: 'SCAN_ACTIVE' }, 20000);
@@ -665,7 +735,16 @@ async function rescan() {
       else notice(unavailable.length ? `Scan complete with limited coverage: ${unavailable.join(', ')}.` : `Scan complete at ${scanned}.`, unavailable.length ? 'warn' : 'ok');
     } else { runtimeTrace.record('scan-enrichment-failed', { code: enriched?.diagnostic?.id || '', error: enriched?.error || '' }); showFailure(enriched, 'Local scan completed, but connected context could not finish.'); }
     await updateWatch();
-  } finally { scanInFlight = false; button.disabled = false; button.textContent = 'Rescan'; }
+  } finally {
+    scanInFlight = false;
+    delete document.body.dataset.scanning;
+    button.disabled = false;
+    button.textContent = report ? 'Rescan' : 'Scan page';
+    if (!report) {
+      $('#summary').hidden = true;
+      $('#idle-state').hidden = false;
+    }
+  }
 }
 
 async function updateWatch() {
@@ -717,6 +796,18 @@ $('#bug-include-context').onchange = refreshBugPrivacyCopy;
 $('#bug-copy').onclick = async () => { try { const artifact=currentBugArtifact(); await navigator.clipboard.writeText(JSON.stringify(artifact,null,2)); runtimeTrace.record('report-bug-copied',{includeContext:$('#bug-include-context').checked===true}); notice('Bug report copied. Nothing was sent automatically.','ok'); } catch { notice('Clipboard access was not available.','error'); } };
 $('#bug-download').onclick = () => { const artifact=currentBugArtifact(),blob=new Blob([JSON.stringify(artifact,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`web-qa-assistant-bug-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);runtimeTrace.record('report-bug-downloaded',{includeContext:$('#bug-include-context').checked===true});notice('Bug report downloaded. Review it before sharing with support.','ok'); };
 
+function bindHelpDots() {
+  for (const btn of document.querySelectorAll('.help-dot[aria-controls]')) {
+    btn.addEventListener('click', () => {
+      const panel = document.getElementById(btn.getAttribute('aria-controls'));
+      if (!panel) return;
+      const open = panel.hidden;
+      panel.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+    });
+  }
+}
+bindHelpDots();
 $('#scan').onclick = rescan;
 $('#show-all').onclick = () => { showAllChecks = !showAllChecks; filter = 'all'; classFilter = ''; render(); };
 $('#copy-md').onclick = async () => { if (!report) return; try { await navigator.clipboard.writeText(markdown()); notice('Report copied.', 'ok'); } catch { notice('Clipboard access was not available.', 'error'); } };
@@ -847,14 +938,67 @@ $('#frank-copy-selector').onclick = async () => {
 };
 $('#frank-recheck').onclick = () => { if (frank?.finding) recheck(frank.finding, null); };
 
+function focusFindingCard(findingId) {
+  if (!findingId) return;
+  const cards = [...document.querySelectorAll('#findings .finding')];
+  const card = cards.find(node => node.dataset.findingId === findingId) || cards[0];
+  if (!card) return;
+  try { card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch { try { card.scrollIntoView(); } catch {} }
+  const ask = card.querySelector('.ask-frank');
+  setTimeout(() => ask?.focus?.(), 0);
+}
+
+function applyWorkspaceSnapshot(workspace, { fromFrankFocus = false } = {}) {
+  if (!workspace?.report) return false;
+  report = workspace.report;
+  classFilter = workspace.classFilter || '';
+  showAllChecks = Boolean(workspace.showAllChecks);
+  filter = workspace.filter || 'all';
+  if (workspace.tabId) tab = { ...(tab || {}), id: workspace.tabId, windowId: workspace.windowId || tab?.windowId, url: workspace.pageUrl || tab?.url };
+  leaveFrankLocal();
+  render();
+  focusFindingCard(workspace.findingId || '');
+  notice(fromFrankFocus ? 'Returned to QA with your previous scan.' : 'Restored your previous scan.', 'ok');
+  return true;
+}
+
+async function restoreWorkspaceOrRescan({ tabId = null, pageUrl = '', preferRestore = true } = {}) {
+  await loadSettings();
+  await localFrankRuntime.probe().catch(() => {});
+  localFrankRuntime.prewarmIfAvailable().catch(() => {});
+  const active = await send({ type: 'GET_ACTIVE' }, 5000);
+  if (active.ok && active.tab?.id) tab = { id: active.tab.id, windowId: active.tab.windowId, url: active.tab.url };
+  const useTabId = tabId || tab?.id;
+  const useUrl = pageUrl || tab?.url || '';
+  if (preferRestore && useTabId) {
+    const snap = await send({ type: 'GET_WORKSPACE_SNAPSHOT', tabId: useTabId }, 5000);
+    const workspace = snap.ok ? snap.workspace : null;
+    if (workspace?.report && (!useUrl || workspace.pageUrl === useUrl || (tab?.url && workspace.pageUrl === tab.url))) {
+      const shouldRestore = Boolean(workspace.frankFocus || workspace.pendingReturn);
+      if (!shouldRestore) {
+        await rescan();
+        return { restored: false };
+      }
+      const fromFrank = Boolean(workspace.frankFocus || workspace.pendingReturn);
+      if (workspace.frankFocus && useTabId) await send({ type: 'FRANK_END', tabId: useTabId }, 4000).catch(() => {});
+      applyWorkspaceSnapshot(workspace, { fromFrankFocus: fromFrank });
+      await send({ type: 'PATCH_WORKSPACE_SNAPSHOT', tabId: useTabId, patch: { frankFocus: false, pendingReturn: false } }, 4000).catch(() => {});
+      await loadSession();
+      await updateWatch();
+      return { restored: true };
+    }
+  }
+  await rescan();
+  return { restored: false };
+}
+
 chrome.runtime.onMessage.addListener(msg => {
-  if (msg?.type === 'ACTION_INVOKED') { if (msg.tabId) tab = { ...(tab || {}), id: msg.tabId }; rescan(); }
+  if (msg?.type === 'ACTION_INVOKED') {
+    if (msg.tabId) tab = { ...(tab || {}), id: msg.tabId, windowId: msg.windowId || tab?.windowId, url: msg.pageUrl || tab?.url };
+    restoreWorkspaceOrRescan({ tabId: msg.tabId, pageUrl: msg.pageUrl || '', preferRestore: true });
+  }
   if (msg?.type === 'FRANK_STEP_CHANGED' && frank) renderFrankStep(msg.index);
   if (msg?.type === 'FRANK_CLOSED' && frank) { leaveFrankLocal(); notice('Frank session closed.'); }
 });
 
-loadSettings().finally(async () => {
-  await localFrankRuntime.probe().catch(() => {});
-  localFrankRuntime.prewarmIfAvailable().catch(() => {});
-  rescan();
-});
+loadSettings().finally(() => restoreWorkspaceOrRescan({ preferRestore: true }));

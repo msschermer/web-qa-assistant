@@ -13,7 +13,103 @@ const LOCAL_APIS = ['http://localhost:3000', 'http://localhost:8787'];
 const GATEWAY_TIMEOUT_MS = 10000;
 const FRANK_TIMEOUT_MS = 16000;
 const dirtyTimers = new Map();
+const workspaceHot = new Map();
 const RELEASE_VERSION = '1.7.3';
+const WORKSPACE_SESSION_KEY = 'qaWorkspaceByTab';
+
+async function readWorkspaceStore() {
+  try {
+    if (!chrome.storage?.session) return {};
+    const data = await chrome.storage.session.get({ [WORKSPACE_SESSION_KEY]: {} });
+    return data[WORKSPACE_SESSION_KEY] || {};
+  } catch { return {}; }
+}
+async function writeWorkspaceStore(store) {
+  if (!chrome.storage?.session) return { ok: false, error: 'Session storage is unavailable.' };
+  try {
+    await chrome.storage.session.set({ [WORKSPACE_SESSION_KEY]: store });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: String(error?.message || error || 'Could not save workspace snapshot.') };
+  }
+}
+function workspaceKey(tabId) { return String(tabId || ''); }
+async function saveWorkspaceSnapshot(workspace) {
+  const tabId = workspaceKey(workspace?.tabId);
+  if (!tabId || !workspace?.report || !workspace?.pageUrl) throw new Error('A tab, page URL, and scan report are required to keep the QA workspace.');
+  const entry = {
+    tabId: Number(workspace.tabId),
+    windowId: Number(workspace.windowId) || 0,
+    pageUrl: String(workspace.pageUrl),
+    report: workspace.report,
+    classFilter: workspace.classFilter || '',
+    showAllChecks: Boolean(workspace.showAllChecks),
+    filter: workspace.filter || 'all',
+    findingId: workspace.findingId || '',
+    stepIndex: Number(workspace.stepIndex) || 0,
+    frankFocus: Boolean(workspace.frankFocus),
+    pendingReturn: Boolean(workspace.pendingReturn),
+    savedAt: new Date().toISOString()
+  };
+  workspaceHot.set(tabId, entry);
+  const store = await readWorkspaceStore();
+  store[tabId] = entry;
+  const written = await writeWorkspaceStore(store);
+  if (!written.ok) {
+    workspaceHot.delete(tabId);
+    throw Object.assign(new Error(written.error || 'Workspace snapshot could not be saved.'), { code: 'WORKSPACE_SNAPSHOT_FAILED' });
+  }
+  return { saved: true, frankFocus: entry.frankFocus };
+}
+async function getWorkspaceSnapshot(tabId) {
+  const key = workspaceKey(tabId);
+  if (!key) return { workspace: null };
+  if (workspaceHot.has(key)) return { workspace: workspaceHot.get(key) };
+  const store = await readWorkspaceStore();
+  const entry = store[key] || null;
+  if (entry) workspaceHot.set(key, entry);
+  return { workspace: entry };
+}
+async function patchWorkspaceSnapshot(tabId, patch = {}) {
+  const current = (await getWorkspaceSnapshot(tabId)).workspace;
+  if (!current) return { patched: false };
+  return saveWorkspaceSnapshot({ ...current, ...patch, tabId: current.tabId, pageUrl: current.pageUrl, report: current.report });
+}
+async function clearWorkspaceSnapshot(tabId) {
+  const key = workspaceKey(tabId);
+  if (!key) return { cleared: false };
+  workspaceHot.delete(key);
+  const store = await readWorkspaceStore();
+  if (store[key]) {
+    delete store[key];
+    await writeWorkspaceStore(store);
+  }
+  return { cleared: true };
+}
+
+/** Presentation-only: promote bounded step evidence into coach metrics when a step has none. Does not change plan logic. */
+function withCoachMetrics(plan, graph) {
+  const byId = Object.fromEntries((graph?.evidence || []).map(e => [e.id, e]));
+  const skip = /^(rule|selector|finding|verification-attempts|verification-evidence|signal|url|environment)$/i;
+  const steps = (plan?.steps || []).map(step => {
+    const existing = Array.isArray(step.metrics) ? step.metrics.filter(m => m?.label && m?.value !== '') : [];
+    if (existing.length >= 4) return step;
+    const added = [];
+    for (const id of step.evidenceRefs || []) {
+      const e = byId[id];
+      if (!e || e.value == null || e.value === '') continue;
+      if (skip.test(String(e.kind || ''))) continue;
+      const label = String(e.label || e.kind || 'Evidence').slice(0, 48);
+      const value = typeof e.value === 'object' ? JSON.stringify(e.value).slice(0, 96) : String(e.value).slice(0, 120);
+      if (!label || !value) continue;
+      if (existing.some(m => m.label === label) || added.some(m => m.label === label)) continue;
+      added.push({ label, value });
+      if (existing.length + added.length >= 6) break;
+    }
+    return added.length ? { ...step, metrics: [...existing, ...added] } : step;
+  });
+  return { ...plan, steps };
+}
 
 function diagnosticHash(input){let h=2166136261;for(let i=0;i<input.length;i++){h^=input.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36).toUpperCase()}
 function requestId(operation='REQ'){return `WQA-${operation}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,7).toUpperCase()}`}
@@ -30,7 +126,75 @@ function failurePayload(error, operation='UNKNOWN'){
 chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:false}).catch(()=>{});
 chrome.runtime.onInstalled.addListener(()=>chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:false}).catch(()=>{}));
 chrome.runtime.onStartup.addListener(()=>chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:false}).catch(()=>{}));
-chrome.action.onClicked.addListener(tab=>{if(!tab?.windowId)return;chrome.sidePanel.open({windowId:tab.windowId}).catch(()=>{});chrome.runtime.sendMessage({type:'ACTION_INVOKED',tabId:tab.id}).catch(()=>{})});
+chrome.action.onClicked.addListener(tab=>{if(!tab?.windowId)return;chrome.sidePanel.open({windowId:tab.windowId}).catch(()=>{});chrome.runtime.sendMessage({type:'ACTION_INVOKED',tabId:tab.id,windowId:tab.windowId,pageUrl:tab.url||''}).catch(()=>{})});
+
+chrome.runtime.onMessage.addListener((msg,sender,send)=>{
+  // Return to QA must call sidePanel.open synchronously to preserve the content-script user gesture.
+  if(msg?.type==='RETURN_TO_QA'){
+    const tabId=msg.tabId||sender.tab?.id;
+    const windowId=msg.windowId||sender.tab?.windowId;
+    if(!windowId){send({ok:false,error:'Frank could not identify the browser window to reopen QA.'});return false}
+    let openPromise;
+    try{openPromise=chrome.sidePanel.open({windowId})}
+    catch(error){openPromise=Promise.reject(error)}
+    (async()=>{
+      let opened=false,openError='';
+      try{await openPromise;opened=true}
+      catch(error){openError=String(error?.message||error||'Could not reopen the side panel.')}
+      try{
+        if(tabId)await patchWorkspaceSnapshot(tabId,{frankFocus:true,pendingReturn:true,findingId:msg.findingId||'',stepIndex:Number(msg.stepIndex)||0});
+        if(tabId)await frankMessage(tabId,{type:'FRANK_END'});
+      }catch{}
+      if(opened)send({ok:true,opened:true});
+      else send({ok:false,opened:false,endedCoach:true,error:openError||'Could not reopen the side panel. Use the Web QA Assistant toolbar icon.'});
+    })();
+    return true;
+  }
+
+  (async()=>{
+  if(msg.type==='SCAN_ACTIVE'){const current=await activeTab(),report=await localScan(current);return{tab:{id:current.id,windowId:current.windowId,url:report.page.url},report}}
+  if(msg.type==='SCAN_TAB'){const report=await scanExistingTab(msg.tabId);const current=await chrome.tabs.get(msg.tabId).catch(()=>null);return{tab:{id:msg.tabId,windowId:current?.windowId,url:report.page.url},report}}
+  if(msg.type==='ENRICH'){const enriched=await enrich(msg.report,msg.tabId||null);if(msg.tabId&&enriched?.page?.url)await updateState({id:msg.tabId,url:enriched.page.url},enriched);return{report:enriched}}
+  if(msg.type==='PREPARE_FRANK')return prepareFrank(msg);
+  if(msg.type==='CLOUD_FRANK_PLAN')return cloudFrankPlan(msg);
+  if(msg.type==='FRANK_START_PLAN')return startFrankPlan(msg);
+  if(msg.type==='ASK_FRANK')return askFrank(msg);
+  if(msg.type==='RECHECK_FINDING')return recheckFinding(msg);
+  if(msg.type==='FRANK_GOTO')return frankMessage(msg.tabId,{type:'FRANK_GOTO',index:msg.index});
+  if(msg.type==='FRANK_END')return frankMessage(msg.tabId,{type:'FRANK_END'});
+  if(msg.type==='FRANK_PREVIEW')return frankMessage(msg.tabId,{type:'FRANK_PREVIEW',targetId:msg.targetId,preview:msg.preview});
+  if(msg.type==='FRANK_RESET_PREVIEW')return frankMessage(msg.tabId,{type:'FRANK_RESET_PREVIEW'});
+  if(msg.type==='HIGHLIGHT'){const tabId=msg.tabId||(await activeTab())?.id;if(!tabId)throw new Error('No inspected browser tab was found.');try{await chrome.tabs.sendMessage(tabId,{type:'PING'})}catch{try{await ensureInjected(tabId)}catch{throw new Error('Page access expired. Click the toolbar icon on this page and try Highlight again.')}}return chrome.tabs.sendMessage(tabId,{type:'HIGHLIGHT',targetId:msg.targetId,selector:msg.selector})}
+  if(msg.type==='GET_ACTIVE'){const s=await settings();return{tab:await activeTab(),settings:{apiBase:s.apiBase,apiKey:s.apiKey,cloudAiFallback:Boolean(s.cloudAiFallback),managedAccess:Boolean(s.installToken),managedAccessExpiresAt:Number(s.installTokenExpiresAt||0)}}}
+  if(msg.type==='SAVE_WORKSPACE_SNAPSHOT')return saveWorkspaceSnapshot(msg.workspace||msg);
+  if(msg.type==='GET_WORKSPACE_SNAPSHOT')return getWorkspaceSnapshot(msg.tabId);
+  if(msg.type==='PATCH_WORKSPACE_SNAPSHOT')return patchWorkspaceSnapshot(msg.tabId,msg.patch||{});
+  if(msg.type==='CLEAR_WORKSPACE_SNAPSHOT')return clearWorkspaceSnapshot(msg.tabId);
+  if(msg.type==='CLOSE_SIDE_PANEL'){
+    const windowId=msg.windowId||sender.tab?.windowId;
+    if(!windowId)throw new Error('No browser window was available to close the side panel.');
+    if(typeof chrome.sidePanel.close!=='function')return{closed:false,unsupported:true};
+    await chrome.sidePanel.close({windowId});
+    return{closed:true};
+  }
+  if(msg.type==='GET_SITE_SESSION'){const s=await settings(),url=msg.pageUrl||(await activeTab())?.url;if(!url)return{session:null};return{session:s.siteSessions[new URL(url).origin]||null}}
+  if(msg.type==='CLEAR_SITE_SESSION'){const s=await settings(),url=msg.pageUrl||(await activeTab())?.url;if(url){delete s.siteSessions[new URL(url).origin];await chrome.storage.local.set({siteSessions:s.siteSessions})}return{cleared:true}}
+  if(msg.type==='SAVE_GATEWAY_SETTINGS'){const apiBase=String(msg.apiBase||'').trim().replace(/\/$/,''),apiKey=String(msg.apiKey||'').trim(),cloudAiFallback=Boolean(msg.cloudAiFallback);if(apiBase&&!/^https?:\/\//i.test(apiBase))throw new Error('Gateway URL must use HTTP or HTTPS.');await chrome.storage.local.set({apiBase,apiKey,cloudAiFallback});return{saved:true}}
+  if(msg.type==='TEST_GATEWAY')return testGateway({apiBase:msg.apiBase,apiKey:msg.apiKey,cloudAiFallback:Boolean(msg.cloudAiFallback)});
+  if(msg.type==='IGNORE_RULE'){const current=await activeTab(),s=await settings(),url=msg.pageUrl||current?.url;if(!url)throw new Error('Page context is unavailable.');const origin=new URL(url).origin,list=s.ignoredRulesByOrigin[origin]||[];s.ignoredRulesByOrigin[origin]=[...new Set([...list,msg.ruleId])];await chrome.storage.local.set({ignoredRulesByOrigin:s.ignoredRulesByOrigin});return{ignored:true}}
+  if(msg.type==='SET_ENVIRONMENT'){const url=msg.pageUrl||(await activeTab())?.url;if(!url)throw new Error('Page context is unavailable.');const origin=new URL(url).origin,allowed=new Set(['production','staging','preview','local','auto']);if(!allowed.has(msg.environment))throw new Error('Unsupported environment value.');const s=await settings();if(msg.environment==='auto')delete s.environmentOverridesByOrigin[origin];else s.environmentOverridesByOrigin[origin]=msg.environment;await chrome.storage.local.set({environmentOverridesByOrigin:s.environmentOverridesByOrigin});return{saved:true}}
+  if(msg.type==='WATCH_DIRTY'&&sender.tab){const s=await settings(),origin=new URL(sender.tab.url).origin;if(s.watchedOrigins.includes(origin))scheduleWatched(sender.tab);return{scheduled:true}}
+  return null;
+})().then(x=>send({ok:true,...x})).catch(error=>{console.error(`[Web QA Assistant ${RELEASE_VERSION}] ${msg?.type||'UNKNOWN'} failed`,error);send({ok:false,...failurePayload(error,msg?.type||'UNKNOWN')})});return true});
+
+chrome.tabs.onRemoved.addListener(tabId=>{clearWorkspaceSnapshot(tabId).catch(()=>{})});
+chrome.tabs.onUpdated.addListener(async(tabId,change,updatedTab)=>{
+  if(change.url){
+    const snap=(await getWorkspaceSnapshot(tabId)).workspace;
+    if(snap?.pageUrl&&snap.pageUrl!==change.url)await clearWorkspaceSnapshot(tabId).catch(()=>{});
+  }
+  if(change.status!=='complete'||!/^https?:/i.test(updatedTab.url||''))return;const s=await settings();let origin;try{origin=new URL(updatedTab.url).origin}catch{return}if(s.watchedOrigins.includes(origin))await scanWatched(updatedTab);
+});
 
 async function settings(){return chrome.storage.local.get({apiBase:'',apiKey:'',cloudAiFallback:false,installationId:'',installToken:'',installTokenExpiresAt:0,watchedOrigins:[],scanState:{},siteSessions:{},ignoredRulesByOrigin:{},environmentOverridesByOrigin:{}})}
 async function ensureInjected(tabId){try{await chrome.tabs.sendMessage(tabId,{type:'PING'});return}catch{}await chrome.scripting.executeScript({target:{tabId},files:['vendor/axe.min.js','image-purpose.js','target-integrity.browser.js','browser-rules.js','content.js']})}
@@ -183,7 +347,8 @@ async function cloudFrankPlan({graph}){
 async function startFrankPlan({plan,graph,tabId,reasoning=null}){
   if(!plan||!graph||!validateFrankPlan(plan,graph))throw new Error('Frank refused to start an invalid walkthrough plan.');
   const inspectedTabId=tabId||(await activeTab())?.id;if(!inspectedTabId)throw new Error('The inspected browser tab is no longer available.');
-  const start=await chrome.tabs.sendMessage(inspectedTabId,{type:'FRANK_START',plan,targets:graph.targets,reasoning});if(!start?.started)throw new Error('Frank could not start on the inspected page.');
+  const coachPlan=withCoachMetrics(plan,graph);
+  const start=await chrome.tabs.sendMessage(inspectedTabId,{type:'FRANK_START',plan:coachPlan,targets:graph.targets,reasoning});if(!start?.started)throw new Error('Frank could not start on the inspected page.');
   return{started:true,tabId:inspectedTabId};
 }
 // Backwards-compatible message for older side panels: deterministic only. New
@@ -205,30 +370,3 @@ async function recheckFinding({finding,tabId}){
 async function frankMessage(tabId,message){if(!tabId)throw new Error('The inspected browser tab is no longer available.');return chrome.tabs.sendMessage(tabId,message)}
 async function scanWatched(tab){try{const local=await localScan(tab);await chrome.tabs.sendMessage(tab.id,{type:'ENABLE_WATCH'}).catch(()=>{});const report=await enrich(local,tab.id);await updateState({id:tab.id,url:report.page.url},report)}catch{}}
 function scheduleWatched(tab){clearTimeout(dirtyTimers.get(tab.id));dirtyTimers.set(tab.id,setTimeout(()=>scanWatched(tab),900))}
-
-chrome.runtime.onMessage.addListener((msg,sender,send)=>{(async()=>{
-  if(msg.type==='SCAN_ACTIVE'){const current=await activeTab(),report=await localScan(current);return{tab:{id:current.id,windowId:current.windowId,url:report.page.url},report}}
-  if(msg.type==='SCAN_TAB'){const report=await scanExistingTab(msg.tabId);return{tab:{id:msg.tabId,url:report.page.url},report}}
-  if(msg.type==='ENRICH'){const enriched=await enrich(msg.report,msg.tabId||null);if(msg.tabId&&enriched?.page?.url)await updateState({id:msg.tabId,url:enriched.page.url},enriched);return{report:enriched}}
-  if(msg.type==='PREPARE_FRANK')return prepareFrank(msg);
-  if(msg.type==='CLOUD_FRANK_PLAN')return cloudFrankPlan(msg);
-  if(msg.type==='FRANK_START_PLAN')return startFrankPlan(msg);
-  if(msg.type==='ASK_FRANK')return askFrank(msg);
-  if(msg.type==='RECHECK_FINDING')return recheckFinding(msg);
-  if(msg.type==='FRANK_GOTO')return frankMessage(msg.tabId,{type:'FRANK_GOTO',index:msg.index});
-  if(msg.type==='FRANK_END')return frankMessage(msg.tabId,{type:'FRANK_END'});
-  if(msg.type==='FRANK_PREVIEW')return frankMessage(msg.tabId,{type:'FRANK_PREVIEW',targetId:msg.targetId,preview:msg.preview});
-  if(msg.type==='FRANK_RESET_PREVIEW')return frankMessage(msg.tabId,{type:'FRANK_RESET_PREVIEW'});
-  if(msg.type==='HIGHLIGHT'){const tabId=msg.tabId||(await activeTab())?.id;if(!tabId)throw new Error('No inspected browser tab was found.');try{await chrome.tabs.sendMessage(tabId,{type:'PING'})}catch{try{await ensureInjected(tabId)}catch{throw new Error('Page access expired. Click the toolbar icon on this page and try Highlight again.')}}return chrome.tabs.sendMessage(tabId,{type:'HIGHLIGHT',targetId:msg.targetId,selector:msg.selector})}
-  if(msg.type==='GET_ACTIVE'){const s=await settings();return{tab:await activeTab(),settings:{apiBase:s.apiBase,apiKey:s.apiKey,cloudAiFallback:Boolean(s.cloudAiFallback),managedAccess:Boolean(s.installToken),managedAccessExpiresAt:Number(s.installTokenExpiresAt||0)}}}
-  if(msg.type==='GET_SITE_SESSION'){const s=await settings(),url=msg.pageUrl||(await activeTab())?.url;if(!url)return{session:null};return{session:s.siteSessions[new URL(url).origin]||null}}
-  if(msg.type==='CLEAR_SITE_SESSION'){const s=await settings(),url=msg.pageUrl||(await activeTab())?.url;if(url){delete s.siteSessions[new URL(url).origin];await chrome.storage.local.set({siteSessions:s.siteSessions})}return{cleared:true}}
-  if(msg.type==='SAVE_GATEWAY_SETTINGS'){const apiBase=String(msg.apiBase||'').trim().replace(/\/$/,''),apiKey=String(msg.apiKey||'').trim(),cloudAiFallback=Boolean(msg.cloudAiFallback);if(apiBase&&!/^https?:\/\//i.test(apiBase))throw new Error('Gateway URL must use HTTP or HTTPS.');await chrome.storage.local.set({apiBase,apiKey,cloudAiFallback});return{saved:true}}
-  if(msg.type==='TEST_GATEWAY')return testGateway({apiBase:msg.apiBase,apiKey:msg.apiKey,cloudAiFallback:Boolean(msg.cloudAiFallback)});
-  if(msg.type==='IGNORE_RULE'){const current=await activeTab(),s=await settings(),url=msg.pageUrl||current?.url;if(!url)throw new Error('Page context is unavailable.');const origin=new URL(url).origin,list=s.ignoredRulesByOrigin[origin]||[];s.ignoredRulesByOrigin[origin]=[...new Set([...list,msg.ruleId])];await chrome.storage.local.set({ignoredRulesByOrigin:s.ignoredRulesByOrigin});return{ignored:true}}
-  if(msg.type==='SET_ENVIRONMENT'){const url=msg.pageUrl||(await activeTab())?.url;if(!url)throw new Error('Page context is unavailable.');const origin=new URL(url).origin,allowed=new Set(['production','staging','preview','local','auto']);if(!allowed.has(msg.environment))throw new Error('Unsupported environment value.');const s=await settings();if(msg.environment==='auto')delete s.environmentOverridesByOrigin[origin];else s.environmentOverridesByOrigin[origin]=msg.environment;await chrome.storage.local.set({environmentOverridesByOrigin:s.environmentOverridesByOrigin});return{saved:true}}
-  if(msg.type==='WATCH_DIRTY'&&sender.tab){const s=await settings(),origin=new URL(sender.tab.url).origin;if(s.watchedOrigins.includes(origin))scheduleWatched(sender.tab);return{scheduled:true}}
-  return null;
-})().then(x=>send({ok:true,...x})).catch(error=>{console.error(`[Web QA Assistant ${RELEASE_VERSION}] ${msg?.type||'UNKNOWN'} failed`,error);send({ok:false,...failurePayload(error,msg?.type||'UNKNOWN')})});return true});
-
-chrome.tabs.onUpdated.addListener(async(tabId,change,updatedTab)=>{if(change.status!=='complete'||!/^https?:/i.test(updatedTab.url||''))return;const s=await settings();let origin;try{origin=new URL(updatedTab.url).origin}catch{return}if(s.watchedOrigins.includes(origin))await scanWatched(updatedTab)});

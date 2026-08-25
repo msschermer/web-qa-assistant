@@ -138,15 +138,15 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     return { watching: true };
   }
 
-  const STEP_LABELS = { spotlight: 'Locate', evidence: 'Ruled out', interpretation: 'Interpretation', comparison: 'Comparison', trend: 'History', impact: 'Impact', remediation: 'Remediation', verification: 'Verification', summary: 'Summary' };
-  const STEP_SHORT = { spotlight: 'Locate', evidence: 'Ruled out', interpretation: 'Read', comparison: 'Compare', trend: 'History', impact: 'Impact', remediation: 'Fix', verification: 'Verify', summary: 'Summary' };
+  const STEP_LABELS = { spotlight: 'Locate', evidence: 'Checks', interpretation: 'Meaning', comparison: 'Comparison', trend: 'History', impact: 'Impact', remediation: 'Remediation', verification: 'Verification', summary: 'Summary' };
+  const STEP_SHORT = { spotlight: 'Locate', evidence: 'Checks', interpretation: 'Meaning', comparison: 'Compare', trend: 'History', impact: 'Impact', remediation: 'Fix', verification: 'Verify', summary: 'Summary' };
   const VERDICTS = { verified: 'Verified finding', review: 'Needs review', context: 'Context only' };
 
   function frankCss() {
     return `
       :host{all:initial;
         --f-brand:#12395E;--f-brand-ink:#0C2A46;--f-accent:#1F647D;--f-accent-soft:#E8F3F5;
-        --f-ink:#101828;--f-ink-soft:#475467;--f-ink-faint:#8A94A6;
+        --f-ink:#101828;--f-ink-soft:#475467;--f-ink-faint:#5B6B7C;
         --f-line:#E7ECF3;--f-line-strong:#D3DAE4;--f-surface:#fff;--f-sunken:#F7F9FB;
         --f-ok:#067647;--f-ok-soft:#ECFDF3;--f-warn:#B54708;--f-warn-soft:#FFFAEB;--f-critical:#B42318;--f-critical-soft:#FEF3F2;
         --f-sans:'IBM Plex Sans',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
@@ -168,19 +168,18 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .verdict[data-status="review"]{background:var(--f-warn-soft);color:var(--f-warn)}
       .verdict[data-status="context"]{background:var(--f-sunken);color:var(--f-ink-faint)}
       .verdict::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
-      .progress{font:550 11px/1 var(--f-sans);color:var(--f-ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+      .progress{font:550 11px/1 var(--f-sans);color:var(--f-ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap;margin-left:auto}
       .verdict[hidden]+.progress{margin-left:auto}
-      .close{border:0;background:transparent;color:var(--f-ink-faint);font:400 19px/1 var(--f-sans);cursor:pointer;padding:4px 6px;margin-right:-6px;border-radius:7px;flex:none}
-      .close:hover{background:#F1F4F8;color:var(--f-ink-soft)}
 
       .rail{display:flex;gap:4px;padding:9px 16px 10px;flex:none;border-bottom:1px solid var(--f-line);background:var(--f-surface);overflow-x:auto;scrollbar-width:none}
       .rail::-webkit-scrollbar{display:none}
       .rail button{flex:1 1 0;min-width:56px;border:0;background:transparent;padding:0;cursor:pointer;text-align:left;font:inherit}
       .rail button i{display:block;height:3px;border-radius:999px;background:var(--f-line-strong);transition:background .15s ease}
-      .rail button b{display:block;margin-top:5px;font:550 10px/1.2 var(--f-sans);letter-spacing:.03em;color:var(--f-ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .rail button b{display:block;margin-top:5px;font:550 11px/1.2 var(--f-sans);letter-spacing:.02em;color:var(--f-ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .rail button[data-state="done"] i{background:var(--f-accent)}
-      .rail button[data-state="current"] i{background:linear-gradient(90deg,var(--f-brand),var(--f-accent))}
+      .rail button[data-state="current"] i{background:var(--f-brand);height:4px}
       .rail button[data-state="current"] b{color:var(--f-brand);font-weight:650}
+      .rail button[data-role="remediation"] b,.rail button[data-role="verification"] b{font-weight:650}
       .rail button:hover b{color:var(--f-ink-soft)}
 
       .scroll{overflow:auto;overscroll-behavior:contain;padding:0 0 2px}
@@ -202,23 +201,23 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .mini{border:1px solid var(--f-line-strong);border-radius:7px;background:var(--f-surface);color:var(--f-ink-soft);padding:4px 9px;font:550 11.5px/1.3 var(--f-sans);cursor:pointer}
       .mini:hover{background:var(--f-sunken);color:var(--f-ink)}
 
-      .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:7px;margin:13px 17px 0;padding:0}
-      .metric{border:1px solid var(--f-line);border-radius:10px;background:var(--f-surface);padding:8px 10px;min-width:0}
-      .metric dt{margin:0;font:550 10.5px/1.3 var(--f-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--f-ink-faint);overflow-wrap:anywhere}
-      .metric dd{margin:3px 0 0;font:600 13px/1.35 var(--f-mono);color:var(--f-ink);overflow-wrap:anywhere}
+      .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:6px;margin:10px 17px 0;padding:0}
+      .metric{border:1px solid var(--f-line);border-radius:8px;background:var(--f-sunken);padding:7px 9px;min-width:0}
+      .metric dt{margin:0;font:550 11px/1.3 var(--f-sans);color:var(--f-ink-faint);overflow-wrap:anywhere}
+      .metric dd{margin:2px 0 0;font:600 12.5px/1.35 var(--f-mono);color:var(--f-ink);overflow-wrap:anywhere}
 
-      .code{margin:13px 17px 0}
-      .code-head{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:7px 11px;border:1px solid var(--f-line);border-bottom:0;border-radius:10px 10px 0 0;background:var(--f-sunken);font:650 10.5px/1.3 var(--f-sans);letter-spacing:.07em;text-transform:uppercase;color:var(--f-ink-faint)}
-      .code pre{margin:0;padding:10px 11px;border:1px solid var(--f-line);border-radius:0 0 10px 10px;background:#0E1B2A;color:#D7E3F0;font:11.5px/1.6 var(--f-mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:168px;overflow:auto}
+      .code{margin:10px 17px 0}
+      .code-head{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:6px 10px;border:1px solid var(--f-line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--f-sunken);font:650 11px/1.3 var(--f-sans);color:var(--f-ink-faint)}
+      .code pre{margin:0;padding:9px 10px;border:1px solid var(--f-line);border-radius:0 0 8px 8px;background:#0E1B2A;color:#D7E3F0;font:11px/1.55 var(--f-mono);white-space:pre-wrap;overflow-wrap:anywhere;max-height:140px;overflow:auto}
 
-      .sources{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:13px 17px 0;padding-top:11px;border-top:1px solid var(--f-line)}
-      .sources span{border-radius:999px;background:var(--f-sunken);color:var(--f-ink-soft);padding:3px 9px;font:550 11px/1.5 var(--f-sans)}
+      .sources{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:10px 17px 0;padding-top:9px;border-top:1px solid var(--f-line)}
+      .sources span{border-radius:999px;background:var(--f-sunken);color:var(--f-ink-soft);padding:2px 8px;font:550 11px/1.5 var(--f-sans)}
       .sources em{font-style:normal;color:var(--f-ink-faint);font:11px/1.5 var(--f-sans)}
 
       .state{margin:11px 17px 0;font:12.5px/1.5 var(--f-sans);color:var(--f-accent)}
       .state[data-kind="error"]{color:var(--f-critical)}
 
-      .foot{display:flex;align-items:center;gap:8px;padding:12px 17px 14px;flex:none;border-top:1px solid var(--f-line);background:linear-gradient(180deg,#fff 0%,#FBFCFE 100%)}
+      .foot{display:flex;align-items:center;gap:8px;padding:12px 17px 14px;flex:none;border-top:1px solid var(--f-line);background:linear-gradient(180deg,#fff 0%,#FBFCFE 100%);flex-wrap:wrap}
       .nav{border:1px solid var(--f-line-strong);border-radius:9px;background:var(--f-surface);color:var(--f-ink);padding:8px 14px;font:550 12.5px/1.2 var(--f-sans);cursor:pointer;transition:background .12s ease,border-color .12s ease}
       .nav:hover:not(:disabled){background:var(--f-sunken);border-color:var(--f-ink-faint)}
       .nav:disabled{opacity:.42;cursor:default}
@@ -226,7 +225,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .ghost:hover:not(:disabled){background:#DCEEF1;border-color:var(--f-accent)}
       .next{margin-left:auto;background:linear-gradient(180deg,#194B77 0%,#12395E 100%);border-color:var(--f-brand-ink);color:#fff;box-shadow:0 1px 2px rgba(12,42,70,.32)}
       .next:hover:not(:disabled){background:linear-gradient(180deg,#12395E 0%,#0C2A46 100%)}
-      .nav:focus-visible,.close:focus-visible,.mini:focus-visible,.rail button:focus-visible{outline:2px solid var(--f-accent);outline-offset:2px}
+      .return-qa{width:100%;order:3;background:var(--f-brand);border-color:var(--f-brand-ink);color:#fff;font-weight:650}
+      .return-qa:hover:not(:disabled){background:var(--f-brand-ink);border-color:var(--f-brand-ink);color:#fff}
+      .nav:focus-visible,.mini:focus-visible,.rail button:focus-visible{outline:2px solid var(--f-accent);outline-offset:2px}
 
       @media(max-width:560px){.coach{width:calc(100vw - 20px);border-radius:14px;max-height:82vh}.body{padding:13px 14px 4px}.anchor,.metrics,.code,.sources,.state{margin-left:14px;margin-right:14px}.foot{padding:11px 14px 12px}h2{font-size:17.5px}}
       @media(prefers-reduced-motion:reduce){.spotlight,.backdrop,.nav,.rail button i{transition:none}}
@@ -241,7 +242,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:auto;';
     document.documentElement.appendChild(host);
     const shadow = host.attachShadow({ mode: 'open' });
-    shadow.innerHTML = `<style>${frankCss()}</style><div class="backdrop"></div><div class="spotlight" hidden></div><section class="coach" role="dialog" aria-modal="true" aria-labelledby="frank-coach-title" aria-describedby="frank-coach-body" tabindex="-1"><div class="accent"></div><div class="top"><span class="mark" aria-hidden="true">F</span><span class="identity"><span class="name">Frank</span><span class="device">Web QA Assistant</span></span><span class="verdict" hidden></span><span class="progress"></span><button type="button" class="close" aria-label="Exit Frank">\u00d7</button></div><nav class="rail" aria-label="Walkthrough steps"></nav><div class="scroll"><div class="body" aria-live="polite" aria-atomic="true"><span class="eyebrow"></span><h2 id="frank-coach-title"></h2><p id="frank-coach-body"></p></div><section class="anchor" hidden aria-label="Element status"><span class="anchor-head"></span><p class="anchor-note"></p><code class="anchor-selector" hidden></code><div class="anchor-actions"></div></section><dl class="metrics" hidden></dl><figure class="code" hidden><figcaption class="code-head"><span>Observed markup</span><button type="button" class="mini copy-code">Copy</button></figcaption><pre></pre></figure><div class="sources" hidden></div><p class="state" hidden role="status" aria-live="polite"></p></div><div class="foot"><button type="button" class="nav back">Back</button><button type="button" class="nav ghost preview" hidden>Preview change</button><button type="button" class="nav ghost reset" hidden>Reset preview</button><button type="button" class="nav next">Next</button></div></section>`;
+    shadow.innerHTML = `<style>${frankCss()}</style><div class="backdrop"></div><div class="spotlight" hidden></div><section class="coach" role="dialog" aria-modal="true" aria-labelledby="frank-coach-title" aria-describedby="frank-coach-body" tabindex="-1"><div class="accent"></div><div class="top"><span class="mark" aria-hidden="true">F</span><span class="identity"><span class="name">Frank</span><span class="device">Web QA Assistant</span></span><span class="verdict" hidden></span><span class="progress"></span></div><nav class="rail" aria-label="Walkthrough steps"></nav><div class="scroll"><div class="body" aria-live="polite" aria-atomic="true"><span class="eyebrow"></span><h2 id="frank-coach-title"></h2><p id="frank-coach-body"></p></div><section class="anchor" hidden aria-label="Element status"><span class="anchor-head"></span><p class="anchor-note"></p><code class="anchor-selector" hidden></code><div class="anchor-actions"></div></section><dl class="metrics" hidden></dl><figure class="code" hidden><figcaption class="code-head"><span>Observed markup</span><button type="button" class="mini copy-code">Copy</button></figcaption><pre></pre></figure><div class="sources" hidden></div><p class="state" hidden role="status" aria-live="polite"></p></div><div class="foot"><button type="button" class="nav back">Back</button><button type="button" class="nav ghost preview" hidden>Preview change</button><button type="button" class="nav ghost reset" hidden>Reset preview</button><button type="button" class="nav next">Next</button><button type="button" class="nav return-qa">Return to QA</button></div></section>`;
     return { host, shadow };
   }
 
@@ -359,7 +360,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.state = i === index ? 'current' : i < index ? 'done' : 'todo';
+      button.dataset.role = step.type || '';
       button.title = step.headline || stepLabel(step);
+      button.setAttribute('aria-label', `${STEP_SHORT[step.type] || stepLabel(step)}: ${step.headline || stepLabel(step)} (step ${i + 1} of ${plan.steps.length})`);
       if (i === index) button.setAttribute('aria-current', 'step');
       const bar = document.createElement('i'), label = document.createElement('b');
       label.textContent = STEP_SHORT[step.type] || stepLabel(step);
@@ -453,7 +456,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const count = (step.evidenceRefs || []).length;
     if (count) {
       const note = document.createElement('em');
-      note.textContent = `${count} evidence ${count === 1 ? 'record' : 'records'} in the sidebar`;
+      note.textContent = `${count} supporting evidence ${count === 1 ? 'item' : 'items'} for this step`;
       wrap.appendChild(note);
     }
     wrap.hidden = !labels.length && !count;
@@ -481,7 +484,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     shadow.querySelector('p').textContent = step.body || '';
     shadow.querySelector('.progress').textContent = `${frankSession.index + 1} / ${steps.length}`;
     shadow.querySelector('.back').disabled = frankSession.index === 0;
-    shadow.querySelector('.next').textContent = frankSession.index === steps.length - 1 ? 'Done' : 'Next';
+    shadow.querySelector('.next').textContent = frankSession.index === steps.length - 1 ? 'Return to QA' : 'Next';
+    shadow.querySelector('.return-qa').hidden = frankSession.index === steps.length - 1;
     coachState('');
     renderVerdict();
     renderRail();
@@ -534,12 +538,35 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     frankSession.previewRestore = null;
   }
 
+  function returnToQa() {
+    if (!frankSession || frankSession.returning) return;
+    frankSession.returning = true;
+    const findingId = frankSession.plan?.findingId || '';
+    const stepIndex = frankSession.index || 0;
+    coachState('Returning to QA…', 'ok');
+    // Synchronous sendMessage from the click/Escape path preserves the user gesture for sidePanel.open in the service worker.
+    chrome.runtime.sendMessage({
+      type: 'RETURN_TO_QA',
+      findingId,
+      stepIndex
+    }, response => {
+      const err = chrome.runtime.lastError;
+      if (err || !response?.ok || !response?.opened) {
+        frankSession.returning = false;
+        coachState(response?.error || err?.message || 'Could not reopen QA. Keep this card, or use the Web QA Assistant toolbar icon.', 'error');
+        return;
+      }
+      if (frankSession) endFrank(false);
+    });
+  }
+
   function endFrank(notify = true) {
     if (!frankSession) return { ended: true };
     resetPreview();
     clearTimeout(frankSession.retryTimer);
+    clearTimeout(frankSession.reflowTimer);
     removeEventListener('scroll', updateSpotlight, true);
-    removeEventListener('resize', updateSpotlight, true);
+    removeEventListener('resize', onFrankViewportChange, true);
     document.removeEventListener('keydown', frankSession.keyHandler, true);
     const returnFocus = frankSession.returnFocus;
     frankSession.host.remove();
@@ -549,35 +576,46 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     return { ended: true };
   }
 
+  function onFrankViewportChange() {
+    if (!frankSession) return;
+    updateSpotlight();
+    clearTimeout(frankSession.reflowTimer);
+    frankSession.reflowTimer = setTimeout(() => updateSpotlight(), 180);
+  }
+
   function startFrank(plan, targets = {}, reasoning = {}) {
     endFrank(false);
     const { host, shadow } = createFrankRoot();
     const returnFocus = document.activeElement;
     const keyHandler = event => {
-      if (event.key === 'Escape') { event.preventDefault(); endFrank(true); }
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); returnToQa(); }
       else if (event.key === 'Tab') {
-        const focusable = [...shadow.querySelectorAll('button:not(:disabled):not([hidden]),[tabindex]:not([tabindex="-1"])')];
+        const focusable = [...shadow.querySelectorAll('button:not(:disabled)')].filter(el => !el.hidden && el.getAttribute('aria-hidden') !== 'true' && !el.closest('[hidden]'));
         if (!focusable.length) return;
         const first = focusable[0], last = focusable[focusable.length - 1], active = shadow.activeElement;
-        if (event.shiftKey && active === first) { event.preventDefault(); last.focus(); }
-        else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
+        const outside = !focusable.includes(active);
+        if (event.shiftKey && (active === first || outside)) { event.preventDefault(); event.stopPropagation(); last.focus(); }
+        else if (!event.shiftKey && (active === last || outside)) { event.preventDefault(); event.stopPropagation(); first.focus(); }
       }
       else if (event.key === 'ArrowRight' && !event.target?.matches?.('input,textarea,select,[contenteditable=true]')) renderFrank((frankSession?.index || 0) + 1, true);
       else if (event.key === 'ArrowLeft' && !event.target?.matches?.('input,textarea,select,[contenteditable=true]')) renderFrank((frankSession?.index || 0) - 1, true);
     };
-    frankSession = { plan, targets, reasoning, host, shadow, index: 0, keyHandler, previewRestore: null, returnFocus, retryTimer: null };
+    frankSession = { plan, targets, reasoning, host, shadow, index: 0, keyHandler, previewRestore: null, returnFocus, retryTimer: null, reflowTimer: null, returning: false, tabId: null, windowId: null };
     shadow.querySelector('.device').textContent = reasoningLabel(plan, reasoning);
-    shadow.querySelector('.close').addEventListener('click', () => endFrank(true));
+    shadow.querySelector('.return-qa').addEventListener('click', () => returnToQa());
     shadow.querySelector('.back').addEventListener('click', () => renderFrank(frankSession.index - 1, true));
     shadow.querySelector('.next').addEventListener('click', () => {
-      if (frankSession.index >= plan.steps.length - 1) endFrank(true);
+      if (frankSession.index >= plan.steps.length - 1) returnToQa();
       else renderFrank(frankSession.index + 1, true);
     });
     addEventListener('scroll', updateSpotlight, true);
-    addEventListener('resize', updateSpotlight, true);
+    addEventListener('resize', onFrankViewportChange, true);
     document.addEventListener('keydown', keyHandler, true);
     renderFrank(0, true);
     setTimeout(() => shadow.querySelector('.coach')?.focus(), 0);
+    setTimeout(() => updateSpotlight(), 80);
+    setTimeout(() => updateSpotlight(), 320);
+    setTimeout(() => updateSpotlight(), 700);
     return { started: true, stepCount: plan.steps.length };
   }
 
