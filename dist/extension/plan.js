@@ -1,6 +1,6 @@
 import { targetIdForFinding } from './evidence.js';
 import { guidanceFor } from './guidance.js';
-import { sanitizeMarkupSnippet } from './correlation.js';
+import { sanitizeMarkupSnippet, suggestedMarkupFor } from './correlation.js';
 
 export const FRANK_STEP_TYPES=['spotlight','evidence','interpretation','comparison','trend','impact','remediation','verification','summary'];
 export const FRANK_PREVIEW_PROPERTIES=['color','background-color','font-size','line-height','outline','border-color'];
@@ -15,6 +15,8 @@ function safeCode(graph){
   if(typeof snippet==='string'&&snippet.trim())return sanitizeMarkupSnippet(snippet);
   const markup=evidenceBy(graph,e=>e.kind==='markup'||(e.kind==='evidence'&&String(e.value||'').trim().startsWith('<')))[0]?.value;
   if(typeof markup==='string'&&markup.trim())return sanitizeMarkupSnippet(markup);
+  const suggested=suggestedMarkupFor(graph.finding?.ruleId||'');
+  if(suggested)return suggested;
   return'';
 }
 function comparisonMetrics(graph){return evidenceBy(graph,e=>['canonical','title','description','robots'].includes(e.kind)).slice(0,4).map(e=>({label:e.label,value:e.value}))}

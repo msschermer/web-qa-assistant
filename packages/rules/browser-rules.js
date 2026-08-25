@@ -726,7 +726,9 @@
       if(verified.verificationState==='inconclusive'){
         const kind=entry.internal?'internal-link':'external-link';
         let path='';try{path=new URL(entry.url).pathname}catch{path=entry.url}
-        incompleteChecks.push({kind,url:entry.url,path,text:ctx.text||'',reason:result.state||'unavailable',status:result.status||0,attempts:attemptEvidence,prominence:ctx.prominence||'',location:ctx.location||''});
+        // Prefer HTTP status over probe-transport state so 403/429 never surface as reason "complete".
+        const inconclusiveReason=result.status?`http-${result.status}`:(result.state&&result.state!=='complete'?result.state:'unavailable');
+        incompleteChecks.push({kind,url:entry.url,path,text:ctx.text||'',reason:inconclusiveReason,status:result.status||0,attempts:attemptEvidence,prominence:ctx.prominence||'',location:ctx.location||''});
         if(!entry.internal&&(result.state==='unavailable'||result.status===0||result.state==='timeout')){
           externalCandidates.push({url:entry.url,text:ctx.text||'',occurrences:entry.anchors.length,sources,prominence:ctx.prominence||'',location:ctx.location||'',selector:selectorFor(first)});
         }

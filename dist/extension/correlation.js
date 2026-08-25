@@ -66,6 +66,17 @@ export function sanitizeMarkupSnippet(html = '', { max = 280 } = {}) {
   return text.slice(0, max);
 }
 
+/** Suggested document markup for missing-configuration findings (not page-derived). */
+export function suggestedMarkupFor(ruleId = '') {
+  const id = String(ruleId || '');
+  if (/viewport-missing/i.test(id)) return '<meta name="viewport" content="width=device-width, initial-scale=1">';
+  if (/title-missing/i.test(id)) return '<title>Descriptive page title</title>';
+  if (/lang-missing/i.test(id)) return '<html lang="en">';
+  if (/charset-missing/i.test(id)) return '<meta charset="utf-8">';
+  if (/description-missing/i.test(id)) return '<meta name="description" content="…">';
+  return '';
+}
+
 export function targetabilityFor(finding = {}) {
   if (finding.targetability && Object.values(TARGETABILITY).includes(finding.targetability)) {
     return finding.targetability;
@@ -163,6 +174,10 @@ export function attachCorrelationMetadata(findings = [], { platform = null } = {
     }
     if (next.targetability === TARGETABILITY.markup && next.evidence && /<[^>]+>/.test(String(next.evidence))) {
       next.markupSnippet = sanitizeMarkupSnippet(next.evidence);
+    }
+    if (!next.markupSnippet && next.targetability === TARGETABILITY.markup) {
+      const suggested = suggestedMarkupFor(next.ruleId);
+      if (suggested) next.markupSnippet = suggested;
     }
     return next;
   });

@@ -102,7 +102,7 @@ test('external 403 stays inconclusive and is never called broken', async () => {
   assert.equal(result.findings.length, 0);
   assert.equal(result.inconclusive, 1);
   assert.equal(result.incompleteChecks[0].kind, 'external-link');
-  assert.match(String(result.incompleteChecks[0].reason), /complete|http|unavailable|403/i);
+  assert.match(String(result.incompleteChecks[0].reason), /http-403|403/i);
 });
 
 test('external confirmed 404 via privileged probe becomes external finding', () => {
@@ -257,6 +257,18 @@ test('blocked target integrity suppresses page-derived correlations', () => {
   ], { page: { url: 'https://example.com/a', canonical: 'https://example.com/b' } });
   const kept = suppressFindingsForTargetIntegrity(findings, { state: 'blocked' });
   assert.equal(kept.length, 0);
+});
+
+test('missing markup findings get suggested remediation snippets', () => {
+  const [viewport] = attachCorrelationMetadata([
+    { id: 'v', ruleId: 'web.viewport-missing', title: 'Viewport metadata is missing', detail: 'none', category: 'fix', severity: 'medium', confidence: 'confirmed', targetType: 'document', count: 1 }
+  ]);
+  assert.equal(viewport.targetability, 'markup');
+  assert.match(String(viewport.markupSnippet), /name="viewport"/);
+  const [title] = attachCorrelationMetadata([
+    { id: 't', ruleId: 'seo.title-missing', title: 'Page title is missing', detail: 'none', category: 'fix', severity: 'high', confidence: 'confirmed', targetType: 'document', count: 1 }
+  ]);
+  assert.match(String(title.markupSnippet), /<title>/);
 });
 
 test('worth checking excludes recommended-order leads and policy-quieted rows', () => {
