@@ -7,7 +7,9 @@ import { chromium } from "playwright";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "../..");
 const extensionPath = path.resolve(root, "dist", "extension").replace(/\\/g, "/");
-const outPath = path.join(__dirname, "extension-accept-results.json");
+const outPath = process.env.WEBQA_ACCEPT_OUT
+  ? path.resolve(process.env.WEBQA_ACCEPT_OUT)
+  : path.join(__dirname, "extension-accept-results.json");
 const FIXTURE = process.env.WEBQA_ACCEPT_URL || "http://localhost:8787/links";
 
 function summarize(report) {
@@ -238,8 +240,14 @@ async function main() {
       hasFragmentMissing: summary.linkFindings.some(f => f.ruleId === "navigation.fragment-missing"),
       hasInternal404: summary.linkFindings.some(f => f.ruleId === "navigation.link-404"),
       hasMalformed: summary.linkFindings.some(f => f.ruleId === "navigation.link-malformed"),
-      noBrokenLabeled403: !summary.linkFindings.some(f => String(f.ruleId).includes("403") || Number(f.status) === 403),
-      inconclusiveHas403or429: (summary.linkAudit.incompleteSample || []).some(c => Number(c.status) === 403 || Number(c.status) === 429 || /403|429|destination-not-allowed/i.test(String(c.reason))),
+      noBrokenLabeled403: !(summary.linkFindings || []).some(f =>
+        Number(f.status) === 403 && /link-404|link-410|broken|5xx/i.test(`${f.ruleId || ''} ${f.title || ''}`)
+      ) && (summary.linkFindings || [])
+        .filter(f => Number(f.status) === 403 || Number(f.status) === 429)
+        .every(f => /link-review/i.test(f.ruleId || '') && f.confidence === 'inconclusive'),
+      inconclusiveHas403or429: (summary.linkAudit.incompleteSample || []).some(c => Number(c.status) === 403 || Number(c.status) === 429 || /403|429|destination-not-allowed|http-403|http-429/i.test(String(c.reason))),
+      worthCheckingHas403or429: (summary.attention.worthChecking || []).some(w => /forbidden|rate-limit|unauthorized|403|429|link-review/i.test(JSON.stringify(w)))
+        || (summary.findingRuleIds || []).includes("navigation.link-review-external"),
       hasViewportFixed: summary.markupFindings.some(f => f.ruleId === "web.viewport-fixed"),
       hasImageOversized: summary.perfFindings.some(f => /image-oversized|lcp-heavy|lcp-image/.test(f.ruleId)),
       wordpressPlatform: summary.platform?.id === "wordpress",
