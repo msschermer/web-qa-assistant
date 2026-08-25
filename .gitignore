@@ -9,3 +9,9 @@ Thumbs.db
 .cursor/webqa.env
 qa-runs/
 tools/cursor-webqa/node_modules/
+
+# Accept-dogfood generated state (keep *.mjs harness sources)
+tools/accept-dogfood/.chrome-profile*/
+tools/accept-dogfood/**/extension-accept-results.json
+tools/accept-dogfood/assets/
+tools/accept-dogfood/*.json
