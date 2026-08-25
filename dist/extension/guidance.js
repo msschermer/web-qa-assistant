@@ -161,6 +161,20 @@ function rawGuidanceFor(f,environment={type:'unknown'}){
     if(['staging','preview','local'].includes(environment.type))return{impact:'Index blocking is normally appropriate for this non-production environment.',remediation:'No production fix is recommended here. Keep the environment out of search indexes unless your deployment policy says otherwise.',verify:'Before or after publishing to production, scan the production URL and confirm no unintended noindex directive remains.'};
     return{interpretation:'This production page is publishing a noindex directive, which explicitly tells supporting search engines not to include the page in their index.',impact:'A noindex directive can prevent a production page from being included in search results.',recommendation:'Remove the noindex directive if this page is intended to be discoverable in search.',remediation:'Remove noindex from the source that publishes it. Check both the HTML robots meta tag and X-Robots-Tag response headers, then confirm templates or SEO plugins are not re-adding it.',verify:'Rescan the production URL and confirm Browser, Meta State, and response-header evidence no longer contain noindex.'};
   }
+  if(/link-review/.test(id)){
+    const external=/external/.test(id)||f.link?.internal===false;
+    const status=Number(f.link?.status||0);
+    const label=f.link?.text?`"${f.link.text}"`:(external?'An external link':'An internal link');
+    const statusNote=status?` Independent requests received HTTP ${status}.`:' The destination could not be fully verified.';
+    const kind=status===429?'rate limiting or temporary throttling':status===403||status===401?'access control, auth, or bot filtering':'an incomplete verification outcome';
+    return{
+      interpretation:`${label} was checked, but the result is inconclusive.${statusNote} Web QA Assistant is not treating this as a confirmed broken link.`,
+      impact:`Visitors may still reach the destination, or they may hit ${kind}. Without a confirmed missing-page or server-error response, Frank cannot claim the link is broken.`,
+      recommendation:'Review the destination manually and confirm whether the response is intentional before changing navigation.',
+      remediation:`Do not rewrite the link solely because of HTTP ${status||'an inconclusive status'}. Confirm whether the destination should be public, requires sign-in, is intentionally restricted, or needs a different healthy URL. Fix or replace the link only after that review.`,
+      verify:'Open the destination in a normal browser session (including signed-in state if relevant). If it should be publicly reachable and still fails as missing or server-error, rescan; only confirmed missing/server-error outcomes become broken-link findings.'
+    };
+  }
   if(/broken-link|link-404|link-410/.test(id)){
     const external=/external/.test(id)||f.link?.internal===false;
     const label=f.link?.text?`"${f.link.text}"`:(external?'The affected external link':'The affected internal link');

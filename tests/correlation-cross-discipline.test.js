@@ -265,6 +265,32 @@ test('WordPress high-confidence remediation appends implementation context after
   assert.match(g.remediation, /Smush|ShortPixel|Imagify/);
 });
 
+test('link-review guidance stays inconclusive and never claims broken', () => {
+  const g = guidanceFor({
+    ruleId: 'navigation.link-review-external',
+    title: 'External link returned a forbidden response',
+    detail: 'HTTP 403. This is not treated as a broken link.',
+    confidence: 'inconclusive',
+    link: { url: 'https://cdn.example.com/secret', status: 403, text: 'Secret', internal: false }
+  });
+  assert.match(g.interpretation, /inconclusive|not treating this as a confirmed broken/i);
+  assert.doesNotMatch(g.interpretation, /confirmed missing/i);
+  assert.match(g.remediation, /Do not rewrite the link solely/i);
+  const graph = buildEvidenceGraph({
+    finding: {
+      id: 'navigation.link-review-external:1', ruleId: 'navigation.link-review-external', title: 'External link returned a forbidden response',
+      detail: 'HTTP 403. This is not treated as a broken link.', confidence: 'inconclusive', category: 'review', severity: 'low',
+      link: { url: 'https://cdn.example.com/secret', status: 403, internal: false }, targetType: 'visual', count: 1
+    },
+    page: { url: 'https://example.com/' }, coverage: {}
+  });
+  assert.ok(graph.evidence.some(e => e.label === 'Observed finding'));
+  assert.ok(!graph.evidence.some(e => e.label === 'Verified finding'));
+  const plan = deterministicFrankPlan(graph);
+  assert.equal(plan.assessment.status, 'context');
+  assert.match(plan.steps.find(s => s.type === 'interpretation').body, /inconclusive|not treating/i);
+});
+
 test('platform detection requires strong WordPress signals', () => {
   assert.equal(detectPlatform({ generator: 'WordPress 6.4' }).confidence, 'medium');
   assert.equal(detectPlatform({ resourceHints: ['/wp-content/themes/x/style.css', '/wp-includes/js/x.js'] }).confidence, 'high');

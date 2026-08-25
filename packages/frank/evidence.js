@@ -48,7 +48,7 @@ export function targetIdForFinding(finding){return finding?.targetType==='visual
 
 export function buildEvidenceGraph({finding,page={},coverage={},context={},targetContext=null,environment=null}){
   const evidence=[],signal=finding.signal||signalForFinding(finding),requestedTargetId=targetIdForFinding(finding),targetId=requestedTargetId&&targetContext?.found?requestedTargetId:'',primarySource=(finding.sources||[])[0]||'browser';
-  push(evidence,{source:primarySource,kind:'finding',label:'Verified finding',value:finding.detail,scope:'current-page',targetId,confidence:finding.confidence||'confirmed'});
+  push(evidence,{source:primarySource,kind:'finding',label:finding.confidence==='inconclusive'?'Observed finding':'Verified finding',value:finding.detail,scope:'current-page',targetId,confidence:finding.confidence||'confirmed'});
   push(evidence,{source:primarySource,kind:'rule',label:'Rule',value:finding.ruleId,scope:'current-page',targetId});
   push(evidence,{source:primarySource,kind:'confidence',label:'Finding confidence',value:finding.confidence||'confirmed',scope:'verification',targetId});
   push(evidence,{source:primarySource,kind:'verification-method',label:'Verification method',value:finding.verification?.method,scope:'verification',targetId});

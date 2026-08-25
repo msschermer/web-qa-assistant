@@ -51,7 +51,15 @@ function showFailure(response, fallback = 'The extension could not complete this
   $('#diagnostic').hidden = false;
 }
 function actionState(card, message, kind = 'ok', { persistent = false, actionLabel = '', onAction = null } = {}) {
+  if (!card?.querySelector) {
+    notice(message, kind === 'error' ? 'error' : kind === 'warn' ? 'warn' : 'ok');
+    return;
+  }
   const el = card.querySelector('.action-state');
+  if (!el) {
+    notice(message, kind === 'error' ? 'error' : kind === 'warn' ? 'warn' : 'ok');
+    return;
+  }
   el.replaceChildren(); el.dataset.kind = kind; el.hidden = false;
   const text = document.createElement('span'); text.textContent = message; el.appendChild(text);
   if (actionLabel && typeof onAction === 'function') {
@@ -433,7 +441,7 @@ function renderWorthChecking(wrap) {
       button.type = 'button';
       button.className = 'linkish';
       button.textContent = f.title || f.ruleId;
-      button.onclick = () => startFrank(f);
+      button.onclick = () => startFrank(f, null, button);
       li.appendChild(button);
       list.appendChild(li);
     }
@@ -549,23 +557,29 @@ function leaveFrankLocal() {
   setTimeout(() => returnFocus?.isConnected && returnFocus.focus(), 0);
 }
 
-async function startFrank(finding, card) {
+async function startFrank(finding, card, triggerButton = null) {
   if (!report || !tab?.id) return actionState(card, 'Run a current scan before asking Frank.', 'error');
   pendingFrankCancel?.();
-  const button = card.querySelector('.ask-frank');
+  const button = triggerButton || card?.querySelector?.('.ask-frank') || null;
   const requestId = ++frankRequestSeq, pageUrl = report.page?.url || tab.url, tabId = tab.id;
   runtimeTrace.record('frank-request', { ruleId: finding.ruleId, impactClass: finding.impactClass, confidence: finding.confidence });
   frankReturnFocus = button;
-  button.disabled = true; button.textContent = 'Preparing Frank';
+  if (button) { button.disabled = true; button.textContent = button.classList.contains('linkish') ? 'Preparing…' : 'Preparing Frank'; }
 
   let cancelled = false, cancelResolve, verifiedResolve;
   const cancelPromise = new Promise(resolve => { cancelResolve = resolve; });
   const verifiedChoice = new Promise(resolve => { verifiedResolve = resolve; });
+  const resetButton = () => {
+    if (!button) return;
+    button.disabled = false;
+    button.textContent = button.classList.contains('linkish') ? (finding.title || finding.ruleId || 'Ask Frank') : 'Ask Frank';
+  };
   const cancelThisRequest = () => {
     if (cancelled) return;
     cancelled = true; cancelResolve({ type: 'cancelled' });
-    button.disabled = false; button.textContent = 'Ask Frank';
-    if (card.isConnected) actionState(card, 'Frank preparation was cancelled because the page or selected finding changed.', 'warn');
+    resetButton();
+    if (card?.isConnected) actionState(card, 'Frank preparation was cancelled because the page or selected finding changed.', 'warn');
+    else notice('Frank preparation was cancelled because the page or selected finding changed.', 'warn');
   };
   pendingFrankCancel = cancelThisRequest;
 
@@ -597,7 +611,7 @@ async function startFrank(finding, card) {
     unsubscribe(); if (pendingFrankCancel === cancelThisRequest) pendingFrankCancel = null; return;
   }
   if (!prepared.ok || !prepared.plan || !prepared.graph) {
-    unsubscribe(); button.disabled = false; button.textContent = 'Ask Frank'; frankReturnFocus = null;
+    unsubscribe(); resetButton(); frankReturnFocus = null;
     if (pendingFrankCancel === cancelThisRequest) pendingFrankCancel = null;
     actionState(card, prepared.error || 'Frank could not prepare this finding.', 'error');
     if (prepared.diagnostic) showFailure(prepared, 'Frank could not prepare this finding.');
@@ -650,7 +664,7 @@ async function startFrank(finding, card) {
   }
 
   const started = await send({ type: 'FRANK_START_PLAN', plan, graph: prepared.graph, reasoning, tabId: prepared.tabId || tabId }, 9000);
-  unsubscribe(); button.disabled = false; button.textContent = 'Ask Frank';
+  unsubscribe(); resetButton();
   if (pendingFrankCancel === cancelThisRequest) pendingFrankCancel = null;
   if (!started.ok) {
     frankReturnFocus = null;
