@@ -6,7 +6,7 @@ const scoreRank={blocker:5,high:4,medium:3,low:2,quiet:1};
 const UTILITY_PATH=/(^|\/)(thank-you|thanks|confirmation|confirmed|success|login|log-in|signin|sign-in|account|my-account|cart|checkout|search|wp-admin|admin)(\/|$)/i;
 const LOW_VALUE_PATH=/(^|\/)(privacy(?:-policy)?|terms(?:-of-service)?|cookie(?:-policy)?)(\/|$)/i;
 
-function clone(f){return {...f,sources:[...(f.sources||[])],wcag:[...(f.wcag||[])],verification:f.verification?{...f.verification,evidence:[...(f.verification.evidence||[])]}:undefined}}
+function clone(f){return {...f,sources:[...(f.sources||[])],wcag:[...(f.wcag||[])],verification:f.verification?{...f.verification,evidence:[...(f.verification.evidence||[])]}:undefined,worthChecking:Boolean(f.worthChecking),supersededBy:f.supersededBy||''}}
 function set(out,{visible=true,priority='medium',category,severity,title,detail,reason}={}){
   out.frankVisible=visible;out.frankPriority=priority;out.policyReason=reason||'';
   if(category)out.category=category;if(severity)out.severity=severity;if(title)out.title=title;if(detail)out.detail=detail;
@@ -49,6 +49,9 @@ function suppressAttentionDuplicates(rows){
   }
   if(visibleByRule(rows,'a11y.lang-missing').length&&visibleByRule(rows,'axe.html-has-lang').length){
     quiet(visibleByRule(rows,'axe.html-has-lang'),'duplicate of a11y.lang-missing; retained in full results');
+  }
+  if(visibleByRule(rows,'web.duplicate-id').length){
+    quiet(visibleByRule(rows,'axe.duplicate-id').concat(visibleByRule(rows,'axe.duplicate-id-active'),visibleByRule(rows,'axe.duplicate-id-aria')),'duplicate of web.duplicate-id; retained in full results');
   }
   return rows;
 }
@@ -97,6 +100,16 @@ export function applyFindingPolicy(findings=[],environment={type:'unknown'}){
     if(signal===SIGNALS.CANONICAL&&['staging','preview'].includes(env)&&/cross-host|mismatch/.test(f.ruleId||'')){
       if(environment?.canonicalRelationship==='same-site')return set(f,{visible:false,priority:'quiet',category:'context',severity:'info',reason:'same-site production canonical can be expected on staging or preview'});
       return set(f,{visible:true,priority:'medium',category:'review',severity:'medium',reason:'cross-site canonical is not automatically safe on a non-production host'});
+    }
+
+    if(f.supersededBy){
+      f.worthChecking=false;
+      return set(f,{visible:false,priority:'quiet',reason:`represented by ${f.supersededBy}`});
+    }
+
+    if(/^(ux\.inert-link|ux\.form-no-submit|ux\.input-type-mismatch|seo\.robots-googlebot-conflict|runtime\.uncaught-error|security\.mixed-content-passive|web\.horizontal-overflow)$/.test(f.ruleId||'')){
+      f.worthChecking=true;
+      return set(f,{visible:false,priority:'quiet',category:'review',severity:'low',reason:'review observation retained in Worth Checking rather than Recommended Order'});
     }
 
     if(/security\.blank-opener/.test(f.ruleId||'')){

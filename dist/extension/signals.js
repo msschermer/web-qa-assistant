@@ -4,11 +4,15 @@ export const SIGNALS={
   TITLE:'metadata.title',DESCRIPTION:'metadata.description',SCHEMA:'schema.invalid',
   A11Y_NAME:'a11y.name',A11Y_CONTRAST:'a11y.contrast',A11Y_STRUCTURE:'a11y.structure',A11Y_OTHER:'a11y.other',
   PERFORMANCE_MOBILE:'performance.mobile',PERFORMANCE_DESKTOP:'performance.desktop',
-  FORM_ACTION:'form.action',SECURITY:'security',PAGE_STRUCTURE:'page.structure',SOCIAL:'social.metadata',OTHER:'other'
+  FORM_ACTION:'form.action',FORM_STRUCTURE:'form.structure',SECURITY:'security',MIXED_CONTENT:'security.mixed-content',
+  PAGE_STRUCTURE:'page.structure',SOCIAL:'social.metadata',RUNTIME:'runtime.error',UX_REVIEW:'ux.review',
+  HREFLANG:'seo.hreflang',OVERFLOW:'layout.overflow',OTHER:'other'
 };
 export function signalForFinding(f={}){
   const id=String(f.ruleId||'').toLowerCase(), title=String(f.title||'').toLowerCase(), detail=String(f.detail||'').toLowerCase();
   const text=`${id} ${title} ${detail}`;
+  if(/hreflang/.test(id))return SIGNALS.HREFLANG;
+  if(/googlebot-conflict/.test(id))return SIGNALS.ROBOTS;
   if(/noindex/.test(text))return SIGNALS.NOINDEX;
   if(/robots/.test(text))return SIGNALS.ROBOTS;
   if(/canonical/.test(text))return SIGNALS.CANONICAL;
@@ -24,8 +28,13 @@ export function signalForFinding(f={}){
   if(/performance\.mobile/.test(id))return SIGNALS.PERFORMANCE_MOBILE;
   if(/performance\.desktop/.test(id))return SIGNALS.PERFORMANCE_DESKTOP;
   if(/form-action/.test(id))return SIGNALS.FORM_ACTION;
+  if(/nested-form|form-no-submit|hidden-required|input-type-mismatch/.test(id))return SIGNALS.FORM_STRUCTURE;
+  if(/mixed-content/.test(id))return SIGNALS.MIXED_CONTENT;
+  if(/inert-link/.test(id))return SIGNALS.UX_REVIEW;
+  if(/uncaught-error|script-failed/.test(id))return SIGNALS.RUNTIME;
+  if(/horizontal-overflow|viewport-overflow/.test(id))return SIGNALS.OVERFLOW;
   if(/security/.test(id))return SIGNALS.SECURITY;
-  if(/h1|heading|duplicate-id|viewport|charset|meta-refresh/.test(id))return SIGNALS.PAGE_STRUCTURE;
+  if(/h1|heading|duplicate-id|viewport|charset|meta-refresh|stylesheet-failed/.test(id))return SIGNALS.PAGE_STRUCTURE;
   if(/social|og-/.test(id))return SIGNALS.SOCIAL;
   return SIGNALS.OTHER;
 }

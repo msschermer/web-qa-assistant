@@ -4,6 +4,7 @@ import { composeAttention, composedBrief } from './compose.js';
 import {
   applyLocalDiscoverabilityCorrelations,
   applyPerformanceCorrelations,
+  applyResponsiveCorrelations,
   attachCorrelationMetadata,
   composeWorthChecking,
   detectPlatform
@@ -74,6 +75,7 @@ export function finalizeCorrelatedFindings(findings=[], local={}){
   const page=local.page||{};
   let next=applyLocalDiscoverabilityCorrelations(findings, page);
   next=applyPerformanceCorrelations(next, local.browserPerformance||page.browserPerformance||null);
+  next=applyResponsiveCorrelations(next);
   const platform=detectPlatform(page, page.documentHtmlSample||'');
   next=attachCorrelationMetadata(next, {platform});
   if(platform?.id){
@@ -105,5 +107,6 @@ export {
   composeWorthChecking,
   detectPlatform,
   sanitizeMarkupSnippet,
+  applyResponsiveCorrelations,
   TARGETABILITY
 } from './correlation.js';

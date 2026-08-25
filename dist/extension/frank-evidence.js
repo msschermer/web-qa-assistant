@@ -103,6 +103,7 @@ export function buildEvidenceGraph({finding,page={},coverage={},context={},targe
     push(evidence,{source:'browser-performance',kind:'measurement-type',label:'Measurement type',value:'lab observation in the inspecting browser',scope:'current-page'});
     push(evidence,{source:'browser-performance',kind:'ttfb',label:'Time to first byte',value:browserPerf.ttfbMs!=null?`${browserPerf.ttfbMs}ms`:'',scope:'current-page'});
     push(evidence,{source:'browser-performance',kind:'lcp',label:'Largest contentful paint',value:browserPerf.largestContentfulPaintMs!=null?`${browserPerf.largestContentfulPaintMs}ms`:'',scope:'current-page'});
+    if(browserPerf.cumulativeLayoutShift!=null)push(evidence,{source:'browser-performance',kind:'cls',label:'Cumulative layout shift',value:String(browserPerf.cumulativeLayoutShift),scope:'current-page'});
     push(evidence,{source:'browser-performance',kind:'transfer',label:browserPerf.transferIsLowerBound?'Known transfer lower bound':'Measured transfer',value:browserPerf.transferBytes?`${(browserPerf.transferBytes/1048576).toFixed(2)}MB; ${browserPerf.measuredTransferCount||0} measured entries; ${browserPerf.unknownTransferCount||0} unknown`:'',scope:'current-page'});
   if(browserPerf.lcpElement?.selector)push(evidence,{source:'browser-performance',kind:'lcp-element',label:'Observed LCP element',value:{selector:browserPerf.lcpElement.selector,tag:browserPerf.lcpElement.tag,url:browserPerf.lcpElement.url||'',size:browserPerf.lcpElement.size||0,intrinsic:browserPerf.lcpElement.intrinsic||null,rendered:browserPerf.lcpElement.rendered||null},scope:'current-page'});
     for(const row of (browserPerf.heaviest||[]).slice(0,3))push(evidence,{source:'browser-performance',kind:'heaviest-resource',label:`Heaviest ${row.type}`,value:{bytes:row.bytes,type:row.type,url:row.name,durationMs:row.durationMs},scope:'current-page'});
@@ -132,6 +133,12 @@ export function buildEvidenceGraph({finding,page={},coverage={},context={},targe
       push(evidence,{source:'axe',kind:'font-weight',label:'Font weight',value:contrast.fontWeight,scope:'computed-style',targetId});
     }
   }
+  if(finding.overflowMetrics){
+    push(evidence,{source:'browser',kind:'overflow-viewport',label:'Scanned viewport width',value:`${finding.overflowMetrics.viewportWidth}px`,scope:'current-page'});
+    push(evidence,{source:'browser',kind:'overflow-scroll',label:'Document scroll width',value:`${finding.overflowMetrics.scrollWidth}px`,scope:'current-page'});
+    push(evidence,{source:'browser',kind:'overflow-px',label:'Horizontal overflow',value:`${finding.overflowMetrics.overflowPx}px`,scope:'current-page'});
+  }
+  if(finding.resourceUrl)push(evidence,{source:'browser',kind:'resource-url',label:'Resource URL',value:finding.resourceUrl,scope:'current-page'});
   const meta=serviceData(context,'metaState')||serviceData(context,'meta'),mp=metaPage(meta),mf=metaFetch(meta);
   if(metaRelevant(signal)&&mp){
     if(signal===SIGNALS.CANONICAL)push(evidence,{source:'meta-state',kind:'canonical',label:'Published canonical',value:mp.canonical?.resolved,scope:'published'});

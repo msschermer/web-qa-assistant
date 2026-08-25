@@ -278,6 +278,11 @@ function requireRemediationFamily(ruleId, remediation){
   if(/noindex|robots/.test(ruleId))return /noindex|robots|index|x-robots|meta/.test(text);
   if(/canonical/.test(ruleId))return /canonical|preferred url|head|url/.test(text);
   if(ruleId==='performance.browser.lcp')return /lcp|largest contentful|image|font|css|render|priority|preload/.test(text);
+  if(ruleId==='performance.browser.cls')return /layout[- ]shift|cls|banner|font|image|dimension|inject/.test(text);
+  if(/ux\.inert-link/.test(ruleId))return /href|button|handler|javascript:void|destination|navigation/.test(text);
+  if(/ux\.form-no-submit/.test(ruleId))return /submit|button|form/.test(text);
+  if(/web\.horizontal-overflow|correlation\.viewport-overflow/.test(ruleId))return /viewport|overflow|width|layout/.test(text);
+  if(/runtime\.uncaught-error|runtime\.script-failed/.test(ruleId))return /script|console|exception|stack|first-party|reload/.test(text);
   if(ruleId==='performance.browser.ttfb')return /ttfb|first byte|server|origin|cache|cdn|redirect|backend|database|api/.test(text);
   if(ruleId==='performance.browser.weight')return /transfer|payload|image|script|font|asset|compress|bundle|defer|third-party/.test(text);
   if(/blank-opener/.test(ruleId))return /noopener|noreferrer|rel=|opener/.test(text);
@@ -373,6 +378,18 @@ export function validateLocalFrankOutput(candidate, graph = {}, deterministicPla
 
   if (ruleId === 'performance.browser.lcp' && /field score|field data (?:proves|confirms)|confirm(?:s|ed)? (?:a )?regression|prov(?:e|es|ed) (?:the )?release|real[- ]user data (?:shows|proves|confirms)/.test(text)) {
     return { ok: false, code: 'LOCAL_AI_PERFORMANCE_OVERCLAIM', message: 'The on-device response overstated a browser lab observation.' };
+  }
+  if (ruleId === 'performance.browser.cls' && /field score|core web vitals|field data (?:proves|confirms)|confirm(?:s|ed)? (?:a )?regression|real[- ]user data (?:shows|proves|confirms)/.test(text)) {
+    return { ok: false, code: 'LOCAL_AI_PERFORMANCE_OVERCLAIM', message: 'The on-device response overstated a browser lab observation.' };
+  }
+  if (/(web\.horizontal-overflow|correlation\.viewport-overflow)/.test(ruleId) && /overflow-x\s*:\s*hidden|overflow\s*:\s*hidden|hide overflow|clip(?:ping)? overflow/.test(text)) {
+    return { ok: false, code: 'LOCAL_AI_OVERFLOW_CLIP', message: 'The on-device response recommended hiding overflow instead of fixing the layout.' };
+  }
+  if (/(ux\.inert-link|ux\.form-no-submit)/.test(ruleId) && /cannot activate|cannot submit|unsubmittable|broken control|confirmed broken|\bis broken\b/.test(text)) {
+    return { ok: false, code: 'LOCAL_AI_BROKEN_CONTROL_OVERCLAIM', message: 'The on-device response treated an unverified control as confirmed broken.' };
+  }
+  if (/(runtime\.uncaught-error|runtime\.script-failed|performance\.browser\.cls)/.test(ruleId) && /yoast|smush|shortpixel|imagify|install a (?:cls |layout[- ]shift )?plugin|plugin (?:is|as) the (?:cause|diagnosis|fix|root cause)/.test(text)) {
+    return { ok: false, code: 'LOCAL_AI_PLUGIN_AS_CAUSE', message: 'The on-device response treated a plugin as the diagnosis.' };
   }
 
   return { ok: true };

@@ -181,6 +181,8 @@ function coverage() {
 
   const notes = $('#coverage-notes'); notes.innerHTML = '';
   if (perf?.available) notes.insertAdjacentHTML('beforeend', `<b>Current-page performance is a lab measurement.</b><span>Measured on this machine and network, so it shows direction rather than a field score. Monitored history is the source for regression claims.</span>`);
+  if (String(report.coverage?.runtime) === 'not applicable') notes.insertAdjacentHTML('beforeend', `<b>Uncaught script errors are renderer-only.</b><span>Extension scans do not collect this family, so runtime coverage is not applicable rather than incomplete.</span>`);
+  if (String(report.coverage?.runtime) === 'renderer') notes.insertAdjacentHTML('beforeend', `<b>Renderer runtime coverage is count-only.</b><span>Uncaught errors are recorded as a count. Error text is untrusted and is not treated as instructions.</span>`);
   if (links?.inconclusive) {
     notes.insertAdjacentHTML('beforeend', `<b>${esc(links.inconclusive)} destination${links.inconclusive === 1 ? '' : 's'} could not be independently verified.</b><span>These were not counted as broken links.</span>`);
     const rows = (links.incompleteChecks || []).slice(0, 8);
