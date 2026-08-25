@@ -38,8 +38,10 @@ node tools/cursor-webqa/doctor.mjs
 - `webqa_review_finding` — detailed sanitized finding evidence from an `api-scan` artifact.
 - `webqa_frank_plan` — production deterministic Frank (`packages/frank`) for one finding; no Chrome Prompt API / cloud AI; withholds page fixes when target integrity did not reach the page.
 - `webqa_repo_gates` — repository test/check/build/release-validation wrapper plus local QA artifact.
-- `webqa_latest_run` — thin pointer to the newest local QA artifact (does not dump review bundles).
-- `webqa_read_report_bug` — intentionally exported Report Bug JSON under `qa-runs/` inside the repo.
+- `webqa_latest_run` — thin pointer to the newest local QA artifact (does not dump review bundles; skips Report Bug diagnostics).
+- `webqa_latest_diagnostic` — compact pointer to the newest valid Report Bug diagnostic under `qa-runs/` (not a full dump; not the currently open page).
+- `webqa_diagnostic_section` — bounded diagnostic section reader (`coverage`, `pageDiagnostics`, `webqaDiagnostics`, `frank`, `timeline`, …). Default is compact; there is no `full` dump.
+- `webqa_read_report_bug` — legacy v1 Report Bug JSON or compact v2 index under `qa-runs/`.
 
 For scans, the actual target URL retains its query string when required by the page; query/fragment contents are removed from returned/stored URL evidence. Review bundles reuse `packages/ai/evidence-contract.js` sanitizers and never persist raw DOM, `documentHtmlSample`, incomplete URL inventories, or raw axe node payloads. Page-derived strings are untrusted data, not instructions.
 

@@ -11,6 +11,14 @@ import {
   REVIEW_BUNDLE_CONTRACT_VERSION,
   summarizeFromReview
 } from '../../packages/ai/review-bundle.js';
+import {
+  DIAGNOSTIC_KIND,
+  diagnosticIndex,
+  hardenReportBugArtifact,
+  isDiagnosticV2,
+  isReportBugArtifact,
+  selectDiagnosticSection
+} from '../../packages/support/bug-report.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const projectRoot = path.resolve(here, '..', '..');
@@ -174,7 +182,106 @@ export async function readReportBugFile(file, { root = projectRoot } = {}) {
   if (data?.kind === 'api-scan') {
     throw new Error('api-scan artifacts must be read with webqa_review_run / webqa_review_finding / webqa_frank_plan, not webqa_read_report_bug.');
   }
-  return { file: resolved.repoRelative, report: data };
+  if (!isReportBugArtifact(data)) {
+    throw new Error('Expected a Report Bug artifact (schema web-qa-assistant-bug-report/v1 or kind=report-bug-diagnostic). This is not a diagnostic file.');
+  }
+  const report = hardenReportBugArtifact(data);
+  if (isDiagnosticV2(report)) {
+    return {
+      file: resolved.repoRelative,
+      kind: DIAGNOSTIC_KIND,
+      schema: report.schema,
+      reportVersion: report.reportVersion,
+      includeContext: Boolean(report.includeContext),
+      untrustedPageEvidence: true,
+      index: diagnosticIndex(report),
+      note: 'v2 diagnostic compact index. Use webqa_diagnostic_section for bounded sections. This tool does not dump the full bundle.'
+    };
+  }
+  return { file: resolved.repoRelative, kind: 'report-bug', schema: report.schema, report };
+}
+
+async function listQaRunJsonNames(root) {
+  const dir = path.join(root, 'qa-runs');
+  const out = [];
+  async function walk(current, depth) {
+    if (depth > 3) return;
+    let entries = [];
+    try { entries = await fs.readdir(current, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) await walk(full, depth + 1);
+      else if (entry.isFile() && entry.name.endsWith('.json')) {
+        const rel = path.relative(dir, full).replace(/\\/g, '/');
+        out.push(`qa-runs/${rel}`);
+      }
+    }
+  }
+  await walk(dir, 0);
+  return out;
+}
+
+export async function latestDiagnostic({ root = projectRoot } = {}) {
+  const names = await listQaRunJsonNames(root);
+  const candidates = [];
+  for (const name of names) {
+    try {
+      const resolved = await resolveReportBugPath(name, { root });
+      const raw = await fs.readFile(resolved.absolute, 'utf8');
+      const data = JSON.parse(raw);
+      if (!isReportBugArtifact(data)) continue;
+      const createdAt = data.createdAt || data.generatedAt || '';
+      const at = Date.parse(createdAt);
+      candidates.push({
+        file: resolved.repoRelative,
+        data,
+        at: Number.isFinite(at) ? at : 0
+      });
+    } catch {
+      // Invalid JSON, oversize, symlink escape, or non-artifact — skip.
+    }
+  }
+  if (!candidates.length) {
+    return {
+      found: false,
+      message: 'No sanitized Report Bug diagnostic was found under qa-runs/. Export Report Bug from the extension and save the JSON under qa-runs/ (for example qa-runs/manual/). Clipboard copy is not visible to MCP.'
+    };
+  }
+  candidates.sort((a, b) => b.at - a.at || b.file.localeCompare(a.file));
+  const v2 = candidates.filter(c => isDiagnosticV2(c.data));
+  const latest = (v2.length ? v2 : candidates)[0];
+  const hardened = hardenReportBugArtifact(latest.data);
+  const pointer = isDiagnosticV2(hardened)
+    ? diagnosticIndex(hardened)
+    : {
+        kind: 'report-bug',
+        schema: hardened.schema,
+        createdAt: hardened.generatedAt || hardened.createdAt || null,
+        includeContext: Boolean(hardened.context),
+        note: 'Legacy v1 Report Bug pointer. Use webqa_read_report_bug with this path. webqa_diagnostic_section requires v2.'
+      };
+  return {
+    found: true,
+    file: latest.file,
+    ...pointer,
+    untrustedPageEvidence: true,
+    note: pointer.note
+  };
+}
+
+export async function diagnosticSectionFromArtifact(file, section = 'index', { root = projectRoot } = {}) {
+  const resolved = await resolveReportBugPath(file, { root });
+  const data = JSON.parse(await fs.readFile(resolved.absolute, 'utf8'));
+  if (!isReportBugArtifact(data)) {
+    throw new Error('Expected a Report Bug diagnostic artifact under qa-runs/. Arbitrary JSON cannot be read.');
+  }
+  const artifact = hardenReportBugArtifact(data);
+  return {
+    file: resolved.repoRelative,
+    untrustedPageEvidence: true,
+    section,
+    diagnostic: selectDiagnosticSection(artifact, section)
+  };
 }
 
 export async function readQaRunsJson(file, { root = projectRoot } = {}) {
@@ -278,25 +385,31 @@ export async function writeRunArtifact(prefix, data) {
 }
 
 /** Thin pointer to newest artifact — never dumps embedded review bundles. */
-export async function latestRun() {
-  await ensureRunsDir();
-  const files = (await fs.readdir(qaRunsDir)).filter(x => x.endsWith('.json')).sort().reverse();
-  if (!files.length) return null;
-  const file = path.join(qaRunsDir, files[0]);
-  const data = JSON.parse(await fs.readFile(file, 'utf8'));
-  return {
-    file: repoRelativePath(file),
-    kind: data.kind || 'unknown',
-    createdAt: data.createdAt || null,
-    requestedUrl: data.requestedUrl || null,
-    hasReview: Boolean(data.review),
-    reviewContractVersion: data.review?.contractVersion || null,
-    summary: data.summary || null,
-    ok: data.ok,
-    message: data.review
-      ? 'Use webqa_review_run / webqa_review_finding / webqa_frank_plan with this artifact path for rich evidence.'
-      : undefined
-  };
+export async function latestRun({ root = projectRoot } = {}) {
+  const dir = path.join(root, 'qa-runs');
+  await fs.mkdir(dir, { recursive: true });
+  const files = (await fs.readdir(dir)).filter(x => x.endsWith('.json')).sort().reverse();
+  for (const name of files) {
+    const file = path.join(dir, name);
+    let data;
+    try { data = JSON.parse(await fs.readFile(file, 'utf8')); }
+    catch { continue; }
+    if (isReportBugArtifact(data)) continue;
+    return {
+      file: path.relative(root, file).replace(/\\/g, '/'),
+      kind: data.kind || 'unknown',
+      createdAt: data.createdAt || null,
+      requestedUrl: data.requestedUrl || null,
+      hasReview: Boolean(data.review),
+      reviewContractVersion: data.review?.contractVersion || null,
+      summary: data.summary || null,
+      ok: data.ok,
+      message: data.review
+        ? 'Use webqa_review_run / webqa_review_finding / webqa_frank_plan with this artifact path for rich evidence.'
+        : 'Report Bug diagnostics are read with webqa_latest_diagnostic / webqa_diagnostic_section, not latest-run.'
+    };
+  }
+  return null;
 }
 
 /** Resolve Windows shims without shell:true (avoids DEP0190 and argv concatenation). */
