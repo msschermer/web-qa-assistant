@@ -2,6 +2,12 @@ Web QA Assistant 1.7.4
 
 Automated validation (release prep @ e3ad225): 340/340 tests PASS; npm run check PASS; npm run build:extension PASS; RELEASE_TAG=v1.7.4 npm run release:validate PASS. Docker validation unavailable locally (not fabricated). Doctor PASS for repo readiness. Diagnostic MCP acceptance PASS (timeline hardening fix included in release prep).
 
-Post-deploy hotfix @ ccdcddc (root undici dependency for renderer safe-probe): 340/340 tests PASS; npm run check PASS; npm run build:extension PASS. Production deployed from origin/main @ ccdcddc; public health reports version 1.7.4. Tag v1.7.4 (e3ad225) alone is not a reproducible server deploy until a patch tag includes ccdcddc.
+Post-deploy hotfix @ ccdcddc (root undici dependency for renderer safe-probe): 340/340 tests PASS; npm run check PASS; npm run build:extension PASS. Production deployed from origin/main @ ccdcddc; public health reports version 1.7.4.
+
+Production deployment state (1.7.4):
+- Tag v1.7.4 remains at e3ad225 (immutable; intentionally not moved).
+- Tagged artifact e3ad225 has a renderer packaging defect: root undici dependency was undeclared, so renderer link probing fails from the tag alone.
+- Production 1.7.4 runs ccdcddc (undici dependency fix plus deployment-guidance correction on origin/main).
+- The next normal release must include the undici dependency in release metadata and restore exact-tag server deployability.
 
 Contents: 1.7.3 baseline plus cross-discipline workspace redesign, issue correlation, Worth Checking Further, safe gateway external probing, expanded SEO/dev/UX/forms/runtime QA, Ask Frank focus mode, Report Bug v2 diagnostics, and read-only MCP diagnostic inspection. Frozen product HEAD: f7965b2fd811ab69df90d237870dc23ec6643f66. Release preparation metadata layered on same HEAD.
