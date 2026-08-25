@@ -322,11 +322,11 @@ export function mapExternalProbeRows(candidates = [], probeRows = []) {
       finalUrl: row.finalUrl || candidate.url
     };
     const link = {
-      url: candidate.url,
+      url: evidenceUrl(candidate.url),
       internal: false,
       status,
       state: status ? 'complete' : (row.error || 'unavailable'),
-      finalUrl: row.finalUrl || candidate.url,
+      finalUrl: evidenceUrl(row.finalUrl || candidate.url),
       redirected: Boolean(row.redirected),
       occurrences,
       sources: candidate.sources || [],
