@@ -23,7 +23,9 @@ test('Frank walkthrough restores keyboard focus and announces changing step cont
   assert.match(panel,/returnFocus\?\.isConnected && returnFocus\.focus\(\)/);
   assert.match(content,/class=\"body\" aria-live=\"polite\" aria-atomic=\"true\"/);
   assert.match(html,/id="frank-ledger-title" tabindex="-1"/);
-  assert.doesNotMatch(panel,/frank-ledger-title'\)\.focus/);
+  assert.match(panel,/SAVE_WORKSPACE_SNAPSHOT/);
+  assert.match(panel,/window\.close\(\)/);
+  assert.match(content,/RETURN_TO_QA/);
   assert.match(content,/querySelector\('\.coach'\)\?\.focus/);
 });
 

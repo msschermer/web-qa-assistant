@@ -29,7 +29,8 @@ test('center focus card owns Frank explanation and walkthrough navigation', () =
   assert.match(content, /pointer-events:auto/);
   assert.match(content, /Back/);
   assert.match(content, /Next/);
-  assert.match(content, /Done/);
+  assert.match(content, /Return to QA/);
+  assert.doesNotMatch(content, /aria-label="Exit Frank"/);
   assert.doesNotMatch(content, /orientation only/i);
 });
 
@@ -50,7 +51,8 @@ test('current-step evidence can be visually traced back to Frank reasoning', () 
 test('1.6 visual identity strengthens Frank without adding Tailwind build debt', () => {
   assert.match(tokens, /--wqa-accent:/);
   assert.match(tokens, /--wqa-accent-soft:/);
-  assert.match(panelCss, /linear-gradient/);
+  // Side panel stays flat SaaS workspace; Frank focus card keeps restrained brand accents.
+  assert.doesNotMatch(panelCss, /linear-gradient/);
   assert.match(content, /linear-gradient/);
   const packageJson = fs.readFileSync('package.json', 'utf8');
   assert.doesNotMatch(packageJson, /tailwind/i);

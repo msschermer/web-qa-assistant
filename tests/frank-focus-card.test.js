@@ -40,7 +40,16 @@ function bootPage() {
     PerformanceObserver: function () {}, console,
     addEventListener: () => {}, removeEventListener: () => {},
     get innerWidth() { return 1280; }, get innerHeight() { return 900; },
-    chrome: { runtime: { sendMessage: async () => ({}), onMessage: { addListener: fn => { listener = fn; } } } }
+    chrome: {
+      runtime: {
+        lastError: null,
+        sendMessage: (msg, cb) => {
+          if (typeof cb === 'function') queueMicrotask(() => cb({ ok: true, opened: true }));
+          return Promise.resolve({ ok: true, opened: true });
+        },
+        onMessage: { addListener: fn => { listener = fn; } }
+      }
+    }
   };
   context.globalThis = context;
   vm.createContext(context);
@@ -87,9 +96,11 @@ test('the card carries the finding verdict, step rail and provenance', async () 
 
   assert.equal(shadow.querySelector('.verdict').textContent, 'Verified finding');
   assert.equal(shadow.querySelectorAll('.rail button').length, 3);
-  assert.equal(shadow.querySelector('.rail button[data-state="current"]').textContent.trim(), 'Read');
+  assert.equal(shadow.querySelector('.rail button[data-state="current"]').textContent.trim(), 'Meaning');
   assert.deepEqual([...shadow.querySelectorAll('.sources span')].map(s => s.textContent), ['Axe', 'Browser']);
-  assert.match(shadow.querySelector('.sources em').textContent, /2 evidence records/);
+  assert.match(shadow.querySelector('.sources em').textContent, /2 supporting evidence items for this step/);
+  assert.equal(shadow.querySelector('.return-qa').textContent, 'Return to QA');
+  assert.equal(shadow.querySelector('.next').textContent, 'Next');
 });
 
 test('remediation markup is shown on the page, not just in the sidebar', async () => {
