@@ -13,6 +13,7 @@ import {
   TARGETABILITY
 } from '../packages/findings/correlation.js';
 import { composeAttention, composeReportAttention, finalizeCorrelatedFindings } from '../packages/findings/correlate.js';
+import { applyFindingPolicy } from '../packages/findings/policy.js';
 import { buildEvidenceGraph } from '../packages/frank/evidence.js';
 import { deterministicFrankPlan, validateFrankPlan } from '../packages/frank/plan.js';
 import { guidanceFor } from '../packages/frank/guidance.js';
@@ -99,10 +100,30 @@ test('external 403 stays inconclusive and is never called broken', async () => {
     [url]: [{ status: 403 }, { status: 403 }]
   });
   const result = await h.rules.auditLinks({ limit: 10, concurrency: 1, timeoutMs: 100, retryTimeoutMs: 100, budgetMs: 2000 });
-  assert.equal(result.findings.length, 0);
+  assert.equal(result.confirmedIssues, 0);
+  assert.ok(!result.findings.some(f => /broken|404|410|5xx/i.test(f.ruleId) || /broken/i.test(f.title)));
   assert.equal(result.inconclusive, 1);
   assert.equal(result.incompleteChecks[0].kind, 'external-link');
   assert.match(String(result.incompleteChecks[0].reason), /http-403|403/i);
+  const review = result.findings.find(f => f.ruleId === 'navigation.link-review-external');
+  assert.ok(review);
+  assert.equal(review.confidence, 'inconclusive');
+  assert.match(review.detail, /not treated as a broken link/i);
+});
+
+test('403/429 review findings surface in Worth Checking after policy', () => {
+  const findings = applyFindingPolicy([
+    { id: 'lead', ruleId: 'navigation.link-404', title: 'Broken nav', detail: 'x', category: 'fix', severity: 'high', confidence: 'confirmed', count: 1, link: { url: 'https://example.com/x', prominence: 'navigation', status: 404 } },
+    { id: 'auth', ruleId: 'navigation.link-review-external', title: 'External link returned a forbidden response', detail: 'HTTP 403. This is not treated as a broken link.', category: 'review', severity: 'low', confidence: 'inconclusive', count: 1, link: { url: 'https://cdn.example.com/secret', status: 403, prominence: 'normal' } },
+    { id: 'policy-quiet', ruleId: 'seo.noindex', title: 'noindex', detail: 'z', category: 'context', severity: 'info', confidence: 'confirmed', frankVisible: false, targetType: 'document', count: 1 }
+  ], { type: 'production' });
+  const correlated = attachCorrelationMetadata(findings);
+  const attention = composeReportAttention(correlated, { limit: 8 });
+  assert.ok(attention.groups.some(g => g.lead?.id === 'lead' || g.lead?.ruleId === 'navigation.link-404'));
+  assert.ok((attention.worthChecking || []).some(w => (w.findingIds || []).includes('auth')));
+  assert.ok(!(attention.worthChecking || []).some(w => (w.findingIds || []).includes('lead')));
+  assert.ok(!(attention.worthChecking || []).some(w => (w.findingIds || []).includes('policy-quiet')));
+  assert.equal(correlated.find(f => f.id === 'auth')?.frankVisible, false);
 });
 
 test('external confirmed 404 via privileged probe becomes external finding', () => {
@@ -275,13 +296,15 @@ test('worth checking excludes recommended-order leads and policy-quieted rows', 
   const findings = attachCorrelationMetadata([
     { id: 'lead', ruleId: 'navigation.link-404', title: 'Broken nav', detail: 'x', category: 'fix', severity: 'high', confidence: 'confirmed', count: 1, link: { url: 'https://example.com/x', prominence: 'navigation' } },
     { id: 'quiet', ruleId: 'seo.description-missing', title: 'Missing description', detail: 'y', category: 'review', severity: 'low', confidence: 'inconclusive', targetType: 'document', count: 1 },
-    { id: 'policy-quiet', ruleId: 'seo.noindex', title: 'noindex', detail: 'z', category: 'context', severity: 'info', confidence: 'confirmed', frankVisible: false, targetType: 'document', count: 1 }
+    { id: 'policy-quiet', ruleId: 'seo.noindex', title: 'noindex', detail: 'z', category: 'context', severity: 'info', confidence: 'confirmed', frankVisible: false, targetType: 'document', count: 1 },
+    { id: 'axe-incomplete', ruleId: 'axe.color-contrast.review', title: 'Manual review: contrast', detail: 'incomplete', category: 'review', severity: 'low', confidence: 'inconclusive', frankVisible: false, count: 1 }
   ]);
   const attention = composeReportAttention(findings, { limit: 8 });
   assert.ok(attention.groups.some(g => g.lead.id === 'lead'));
   assert.ok((attention.worthChecking || []).some(w => (w.findingIds || []).includes('quiet')));
   assert.ok(!(attention.worthChecking || []).some(w => (w.findingIds || []).includes('lead')));
   assert.ok(!(attention.worthChecking || []).some(w => (w.findingIds || []).includes('policy-quiet')));
+  assert.ok(!(attention.worthChecking || []).some(w => (w.findingIds || []).includes('axe-incomplete')));
 });
 
 test('unrelated same-rule findings without shared root cause stay separate', () => {

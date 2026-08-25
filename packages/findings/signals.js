@@ -13,7 +13,7 @@ export function signalForFinding(f={}){
   if(/robots/.test(text))return SIGNALS.ROBOTS;
   if(/canonical/.test(text))return SIGNALS.CANONICAL;
   if(/broken-link|link-404|link-410|fragment-missing|link-malformed/.test(text))return SIGNALS.BROKEN_LINK;
-  if(/link.*timeout|could not be verified|external-link|http-403|http-429/.test(text))return SIGNALS.LINK_REVIEW;
+  if(/link-review|link.*timeout|could not be verified|external-link|http-403|http-429|forbidden response|rate-limited response|unauthorized response/.test(text))return SIGNALS.LINK_REVIEW;
   if(/redirect/.test(text))return SIGNALS.REDIRECT;
   if(/title/.test(id))return SIGNALS.TITLE;
   if(/description/.test(id))return SIGNALS.DESCRIPTION;

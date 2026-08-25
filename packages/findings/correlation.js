@@ -294,8 +294,13 @@ export function composeWorthChecking(findings = [], attentionGroups = []) {
   const secondary = findings.filter(f => {
     if (leadIds.has(f.id)) return false;
     if (leadKeys.has(f.rootCauseKey) || leadKeys.has(rootCauseKeyFor(f))) return false;
-    // Policy-quieted rows stay in Show all checks / full results — not a second Frank lane.
-    if (f.frankVisible === false) return false;
+    // Inconclusive link-review rows are quiet for Ask Frank / RO but belong in Worth Checking.
+    // Other frankVisible:false rows (axe incompletes, expected noindex, duplicates) stay out.
+    if (f.frankVisible === false) {
+      const linkReview = f.signal === 'navigation.link-review'
+        || /link-review|link-timeout|http-403|http-429|forbidden response|rate-limited|unauthorized response/i.test(`${f.ruleId || ''} ${f.title || ''} ${f.detail || ''}`);
+      return f.confidence === 'inconclusive' && linkReview;
+    }
     if (f.category === 'context') return true;
     if (f.confidence === 'inconclusive') return true;
     if (f.category === 'review' && /^(low|info)$/i.test(String(f.severity || ''))) return true;

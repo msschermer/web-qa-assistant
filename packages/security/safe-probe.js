@@ -538,6 +538,26 @@ export function mapExternalProbeRows(candidates = [], probeRows = []) {
       prominence: candidate.prominence || '',
       location: candidate.location || ''
     });
+    if ([401, 403, 429].includes(status)) {
+      const label = status === 429 ? 'rate-limited' : status === 401 ? 'unauthorized' : 'forbidden';
+      findings.push({
+        id: `navigation.link-review-external:${hash(candidate.url)}`,
+        ruleId: 'navigation.link-review-external',
+        title: `External link returned a ${label} response`,
+        detail: `${text ? `"${text}" ` : ''}points to ${evidenceUrl(candidate.url)}. Privileged GET received HTTP ${status}. This is not treated as a broken link.`,
+        category: 'review',
+        severity: 'low',
+        confidence: 'inconclusive',
+        evidence: `http-${status} ${evidenceUrl(candidate.url)}`,
+        count: occurrences,
+        selector: candidate.selector || '',
+        targetType: 'visual',
+        sources: ['browser'],
+        link,
+        verification: { ...verification, state: 'inconclusive' },
+        fingerprint: hash(`ext-review|${candidate.url}|${status}`)
+      });
+    }
     resolvedUrls.add(candidate.url);
   }
 

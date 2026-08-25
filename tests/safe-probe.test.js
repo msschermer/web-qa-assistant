@@ -134,12 +134,13 @@ test('mapExternalProbeRows collapses duplicates and keeps 403/429 inconclusive',
     { url: candidates[2].url, status: 200, durationMs: 1, method: 'HEAD', attempts: 1 }
   ];
   const mapped = mapExternalProbeRows(candidates, rows);
-  assert.equal(mapped.findings.length, 1);
+  assert.equal(mapped.findings.length, 2);
   assert.equal(mapped.findings[0].ruleId, 'navigation.link-404-external');
   assert.equal(mapped.findings[0].verification.method, 'privileged external GET');
   assert.equal(mapped.findings[0].verification.attempts, 2);
   assert.equal(mapped.findings[0].count, 2);
   assert.equal(mapped.findings.some((f) => /403/.test(f.ruleId)), false);
+  assert.ok(mapped.findings.some((f) => f.ruleId === 'navigation.link-review-external' && f.confidence === 'inconclusive'));
   assert.ok(mapped.incompleteChecks.some((c) => c.reason === 'http-403'));
 });
 

@@ -729,6 +729,18 @@
         // Prefer HTTP status over probe-transport state so 403/429 never surface as reason "complete".
         const inconclusiveReason=result.status?`http-${result.status}`:(result.state&&result.state!=='complete'?result.state:'unavailable');
         incompleteChecks.push({kind,url:entry.url,path,text:ctx.text||'',reason:inconclusiveReason,status:result.status||0,attempts:attemptEvidence,prominence:ctx.prominence||'',location:ctx.location||''});
+        const reviewStatus=Number(result.status||0);
+        if([401,403,429].includes(reviewStatus)){
+          const dest=entry.internal?path:entry.url;
+          const label=reviewStatus===429?'rate-limited':reviewStatus===401?'unauthorized':'forbidden';
+          findings.push(finding({
+            ruleId:entry.internal?'navigation.link-review':'navigation.link-review-external',
+            title:entry.internal?`Internal link returned a ${label} response`:`External link returned a ${label} response`,
+            detail:`${ctx.text?`"${ctx.text}" `:''}points to ${dest}. Independent requests received HTTP ${reviewStatus}. This is not treated as a broken link.`,
+            category:'review',severity:'low',element:first,evidence:`http-${reviewStatus} ${entry.url}`,count:entry.anchors.length,
+            confidence:'inconclusive',verification:{...extra.verification,state:'inconclusive'},extra
+          }));
+        }
         if(!entry.internal&&(result.state==='unavailable'||result.status===0||result.state==='timeout')){
           externalCandidates.push({url:entry.url,text:ctx.text||'',occurrences:entry.anchors.length,sources,prominence:ctx.prominence||'',location:ctx.location||'',selector:selectorFor(first)});
         }
@@ -784,6 +796,16 @@
       }
       if(status>=200&&status<400){resolvedUrls.add(candidate.url);continue}
       incompleteChecks.push({kind:'external-link',url:candidate.url,path:candidate.url,text:candidate.text||'',reason:status?`http-${status}`:(row.error||'unavailable'),status,attempts:[attempt],prominence:candidate.prominence||'',location:candidate.location||''});
+      if([401,403,429].includes(status)){
+        const label=status===429?'rate-limited':status===401?'unauthorized':'forbidden';
+        findings.push(finding({
+          ruleId:'navigation.link-review-external',
+          title:`External link returned a ${label} response`,
+          detail:`${ctx.text?`"${ctx.text}" `:''}points to ${candidate.url}. Privileged GET received HTTP ${status}. This is not treated as a broken link.`,
+          category:'review',severity:'low',element:first,evidence:`http-${status} ${candidate.url}`,count:Number(candidate.occurrences||liveAnchors.length||1),
+          confidence:'inconclusive',verification:{...extra.verification,state:'inconclusive'},extra
+        }));
+      }
       resolvedUrls.add(candidate.url);
     }
     return{findings,incompleteChecks,resolvedUrls:[...resolvedUrls]};
