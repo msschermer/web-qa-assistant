@@ -9,10 +9,13 @@ import { IMPACT_CLASSES, IMPACT_CLASS_IDS, impactClassFor, materialityScore } fr
 //      one problem with six instances.
 
 function groupKey(finding) {
+  // Prefer an explicit root-cause key when correlation metadata is present so
+  // five anchors to one dead URL (or LCP + heavy LCP image) collapse to one issue.
+  if (finding.rootCauseKey) return String(finding.rootCauseKey);
   const rule = String(finding.ruleId || '').replace(/\.review$/, '');
   // Link findings are grouped per destination, not per rule, because two broken
   // destinations are genuinely two problems.
-  if (finding.link?.url) return `${rule}|${finding.link.url}`;
+  if (finding.link?.url) return `dest:${finding.link.url}`;
   return rule;
 }
 
@@ -89,6 +92,8 @@ export function composeAttention(findings = [], { limit = 8 } = {}) {
     representedClasses: classOrder
   };
 }
+
+export { groupKey as attentionGroupKey };
 
 function phrase(group) {
   const title = String(group.title || '').replace(/\s*\(\d+\s+instances?\)$/i, '').toLowerCase();

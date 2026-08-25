@@ -25,6 +25,7 @@ function buildIntegrityBrowserBundle(root, outDir) {
 
 buildIntegrityBrowserBundle(root, out);
 fs.copyFileSync(path.join(root,'packages/findings/correlate.js'),path.join(out,'correlate.js'));
+fs.copyFileSync(path.join(root,'packages/findings/correlation.js'),path.join(out,'correlation.js'));
 fs.copyFileSync(path.join(root,'packages/findings/compose.js'),path.join(out,'compose.js'));
 fs.copyFileSync(path.join(root,'packages/findings/impact.js'),path.join(out,'impact.js'));
 fs.copyFileSync(path.join(root,'packages/findings/signals.js'),path.join(out,'signals.js'));
@@ -35,7 +36,9 @@ fs.copyFileSync(path.join(root,'packages/frank/evidence.js'),path.join(out,'fran
 // Keep the original module filename too because frank-plan.js imports ./evidence.js.
 fs.copyFileSync(path.join(root,'packages/frank/evidence.js'),path.join(out,'evidence.js'));
 fs.copyFileSync(path.join(root,'packages/frank/guidance.js'),path.join(out,'guidance.js'));
-fs.copyFileSync(path.join(root,'packages/frank/plan.js'),path.join(out,'frank-plan.js'));
+const frankPlanSource=fs.readFileSync(path.join(root,'packages/frank/plan.js'),'utf8').replace('../findings/correlation.js','./correlation.js');
+fs.writeFileSync(path.join(out,'frank-plan.js'),frankPlanSource);
+fs.writeFileSync(path.join(out,'plan.js'),frankPlanSource);
 fs.mkdirSync(path.join(out,'vendor'),{recursive:true});fs.writeFileSync(path.join(out,'vendor/axe.min.js'),axeBytes);
 fs.mkdirSync(path.join(out,'icons'),{recursive:true});for(const n of ['16.png','32.png','48.png','128.png'])fs.copyFileSync(path.join(src,'icons',n),path.join(out,'icons',n));
 console.log(`Built ${out}`);

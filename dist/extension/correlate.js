@@ -1,6 +1,13 @@
 import { signalForFinding } from './signals.js';
 import { normalizeConfidence } from './confidence.js';
 import { composeAttention, composedBrief } from './compose.js';
+import {
+  applyLocalDiscoverabilityCorrelations,
+  applyPerformanceCorrelations,
+  attachCorrelationMetadata,
+  composeWorthChecking,
+  detectPlatform
+} from './correlation.js';
 
 const rank={fix:3,review:2,context:1};
 const severity={critical:5,high:4,medium:3,low:2,info:1};
@@ -56,7 +63,34 @@ export function correlate(local,context={}){
       if(wcagMap[key]){f.wcag=[...new Set([...(f.wcag||[]),...(wcagMap[key].criteria||[])])];f.wcagExplanation=wcagMap[key].summary||'';f.sources=[...new Set([...(f.sources||[]),'wcag-translator'])]}
     }
   }
-  return dedupe(findings);
+  return finalizeCorrelatedFindings(dedupe(findings), local);
+}
+
+/**
+ * Attach cross-discipline correlation metadata and local (browser-only) issue
+ * correlations. Safe to call from extension contextualize and gateway enrich.
+ */
+export function finalizeCorrelatedFindings(findings=[], local={}){
+  const page=local.page||{};
+  let next=applyLocalDiscoverabilityCorrelations(findings, page);
+  next=applyPerformanceCorrelations(next, local.browserPerformance||page.browserPerformance||null);
+  const platform=detectPlatform(page, page.documentHtmlSample||'');
+  next=attachCorrelationMetadata(next, {platform});
+  if(platform?.id){
+    page.platform=platform;
+  }
+  return next;
+}
+
+export function composeReportAttention(findings=[], {limit=8}={}){
+  const attention=composeAttention(findings,{limit});
+  return {
+    ...attention,
+    worthChecking: composeWorthChecking(findings, attention.groups).map(w=>({
+      ...w,
+      findingIds: w.findings.map(f=>f.id)
+    }))
+  };
 }
 // The brief is composed across impact classes so a single noisy scanner cannot
 // occupy it. Grouping happens first, so six instances of one rule read as one
@@ -66,3 +100,10 @@ export function deterministicBrief(findings, context={}){
   return composedBrief(composition,{linkAudit:context?.linkAudit||null,coverage:context?.coverage||{},targetIntegrity:context?.targetIntegrity||context?.page?.targetIntegrity||null});
 }
 export { composeAttention, composedBrief } from './compose.js';
+export {
+  attachCorrelationMetadata,
+  composeWorthChecking,
+  detectPlatform,
+  sanitizeMarkupSnippet,
+  TARGETABILITY
+} from './correlation.js';

@@ -12,8 +12,8 @@ export function signalForFinding(f={}){
   if(/noindex/.test(text))return SIGNALS.NOINDEX;
   if(/robots/.test(text))return SIGNALS.ROBOTS;
   if(/canonical/.test(text))return SIGNALS.CANONICAL;
-  if(/broken[- ]link|link[- ].*(404|410|5\d\d)|\b404\b|\b410\b/.test(text))return SIGNALS.BROKEN_LINK;
-  if(/link.*timeout|could not be verified/.test(text))return SIGNALS.LINK_REVIEW;
+  if(/broken-link|link-404|link-410|fragment-missing|link-malformed/.test(text))return SIGNALS.BROKEN_LINK;
+  if(/link.*timeout|could not be verified|external-link|http-403|http-429/.test(text))return SIGNALS.LINK_REVIEW;
   if(/redirect/.test(text))return SIGNALS.REDIRECT;
   if(/title/.test(id))return SIGNALS.TITLE;
   if(/description/.test(id))return SIGNALS.DESCRIPTION;

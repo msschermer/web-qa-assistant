@@ -12,6 +12,7 @@ import {
 } from './evidence-contract.js';
 import { composeAttention, composedBrief } from '../findings/compose.js';
 import { applyFindingPolicy } from '../findings/policy.js';
+import { finalizeCorrelatedFindings, composeReportAttention } from '../findings/correlate.js';
 import { resolvePerformanceCoverage } from '../findings/coverage.js';
 import { materialityScore } from '../findings/impact.js';
 import { QA_AREA_META, presentFinding } from '../presentation/present.js';
@@ -226,14 +227,17 @@ export function buildReviewBundle(report = {}, {
   // not reached, do not surface any residual findings as auditable site QA.
   // Re-apply local policy so MCP review reflects current product rules even when
   // the gateway artifact was produced by an older deploy.
-  const findings = pageQaWithheld ? [] : applyFindingPolicy(rawFindings, environment);
+  const findings = pageQaWithheld ? [] : applyFindingPolicy(
+    finalizeCorrelatedFindings(rawFindings, report),
+    environment
+  );
   const findingsById = new Map();
   for (const f of findings) {
     const id = findingId(f);
     if (id) findingsById.set(id, f);
   }
 
-  const composition = composeAttention(findings, { limit: maxGroups });
+  const composition = composeReportAttention(findings, { limit: maxGroups });
   const classLabels = Object.fromEntries(
     Object.keys(QA_AREA_META).map(id => [id, QA_AREA_META[id].label])
   );
