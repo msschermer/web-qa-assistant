@@ -4,7 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { allContext, integrationHealth, TOOL_REGISTRY } from '../../packages/connectors/connectors.js';
-import { correlate, deterministicBrief } from '../../packages/findings/correlate.js';
+import { correlate, deterministicBrief, finalizeCorrelatedFindings, composeReportAttention } from '../../packages/findings/correlate.js';
 import { priorityBrief, frankWalkthrough, probeAiHealth, aiFailureInfo } from '../../packages/ai/ai.js';
 import { buildEvidenceGraph, evidenceHash } from '../../packages/frank/evidence.js';
 import { deterministicFrankPlan, validateFrankPlan } from '../../packages/frank/plan.js';
@@ -117,6 +117,7 @@ async function enrich(local, requestId = '', { allowAi = true } = {}) {
     wcag: coverageStatus(context.wcag, 'wcag')
   };
   const finalized = finalizeBlockedTargetReport({ ...base, coverage }, policyFindings);
+  const attention = composeReportAttention(finalized.findings || [], { limit: 8 });
   const briefContext = {
     coverage: finalized.coverage,
     linkAudit: finalized.linkAudit || null,
@@ -136,6 +137,21 @@ async function enrich(local, requestId = '', { allowAi = true } = {}) {
       environment,
       page: { ...finalized.page, environment },
       findings: finalized.findings,
+      attention: {
+        groups: attention.groups.map(g => ({
+          key: g.key, impactClass: g.impactClass, title: g.title, size: g.size, instanceCount: g.instanceCount,
+          score: g.score, leadId: g.lead.id, selectors: g.selectors, instanceIds: g.instances.map(x => x.id),
+          rootCauseKey: g.lead.rootCauseKey || g.key, targetability: g.lead.targetability || '', lenses: g.lead.lenses || []
+        })),
+        worthChecking: (attention.worthChecking || []).map(w => ({
+          key: w.key, title: w.title, scope: w.scope, lens: w.lens, fixOwner: w.fixOwner,
+          size: w.size, instanceCount: w.instanceCount, findingIds: w.findings.map(f => f.id)
+        })),
+        classCounts: attention.classCounts,
+        materialGroupCount: attention.materialGroupCount,
+        materialFindingCount: attention.materialFindingCount,
+        representedClasses: attention.representedClasses
+      },
       coverage: { ...finalized.coverage, ai: coverage.ai },
       context: {
         performance: context.performance?.data || null,

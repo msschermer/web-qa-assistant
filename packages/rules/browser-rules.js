@@ -244,9 +244,10 @@
     return{blockCount:blocks.length,types:[...types],errors};
   }
   function pageSummary(){
-    const canonicalEl=document.querySelector('link[rel~="canonical"]'),descEl=document.querySelector('meta[name="description" i]'),robotsEl=document.querySelector('meta[name="robots" i]'),viewportEl=document.querySelector('meta[name="viewport" i]'),h1s=[...document.querySelectorAll('h1')],schema=schemaState();
+    const canonicalEl=document.querySelector('link[rel~="canonical"]'),descEl=document.querySelector('meta[name="description" i]'),robotsEl=document.querySelector('meta[name="robots" i]'),viewportEl=document.querySelector('meta[name="viewport" i]'),generatorEl=document.querySelector('meta[name="generator" i]'),h1s=[...document.querySelectorAll('h1')],schema=schemaState();
     let canonical='';try{canonical=canonicalEl?.href||''}catch{}
-    return{url:location.href,origin:location.origin,hostname:location.hostname,pathname:location.pathname,title:document.title||'',description:attr(descEl,'content'),canonical,robots:attr(robotsEl,'content'),lang:attr(document.documentElement,'lang'),viewport:attr(viewportEl,'content'),h1s:h1s.map(h=>clip(h.textContent,160)),schemaTypes:schema.types,schemaBlockCount:schema.blockCount,formCount:document.forms.length,imageCount:document.images.length,linkCount:document.links.length,interactiveCount:document.querySelectorAll('a,button,input,select,textarea,[role="button"],[tabindex]').length};
+    const resourceHints=[...document.querySelectorAll('script[src],link[href],img[src]')].slice(0,80).map(el=>attr(el,'src')||attr(el,'href')).filter(Boolean);
+    return{url:location.href,origin:location.origin,hostname:location.hostname,pathname:location.pathname,title:document.title||'',description:attr(descEl,'content'),canonical,robots:attr(robotsEl,'content'),lang:attr(document.documentElement,'lang'),viewport:attr(viewportEl,'content'),generator:attr(generatorEl,'content'),resourceHints,h1s:h1s.map(h=>clip(h.textContent,160)),schemaTypes:schema.types,schemaBlockCount:schema.blockCount,formCount:document.forms.length,imageCount:document.images.length,linkCount:document.links.length,interactiveCount:document.querySelectorAll('a,button,input,select,textarea,[role="button"],[tabindex]').length};
   }
 
   function run(){
@@ -279,8 +280,12 @@
 
     if(!page.lang)findings.push(finding({ruleId:'a11y.lang-missing',title:'Document language is missing',detail:'The root html element has no lang attribute.',category:'fix',severity:'medium',element:document.documentElement,targetType:'page',evidence:snippet(document.documentElement).slice(0,200),wcag:['3.1.1']}));
     else{try{new Intl.Locale(page.lang)}catch{findings.push(finding({ruleId:'a11y.lang-invalid',title:'Document language is not a valid language tag',detail:`The html lang value "${page.lang}" could not be parsed as a valid BCP 47 language tag.`,category:'fix',severity:'medium',element:document.documentElement,targetType:'page',evidence:page.lang,wcag:['3.1.1']}))}}
-    if(!viewportEl)findings.push(finding({ruleId:'web.viewport-missing',title:'Viewport metadata is missing',detail:'No viewport meta tag was observed in the rendered document.',category:'fix',severity:'medium',targetType:'document'}));
-    else if(/user-scalable\s*=\s*no/i.test(page.viewport)||/maximum-scale\s*=\s*1(?:\.0+)?(?:,|$)/i.test(page.viewport))findings.push(finding({ruleId:'a11y.viewport-zoom-restricted',title:'Viewport appears to restrict zoom',detail:'The viewport configuration may prevent or severely limit user zoom.',category:'review',severity:'medium',element:viewportEl,targetType:'document',evidence:page.viewport,wcag:['1.4.4']}));
+    if(!viewportEl)findings.push(finding({ruleId:'web.viewport-missing',title:'Viewport metadata is missing',detail:'No viewport meta tag was observed in the rendered document.',category:'fix',severity:'medium',targetType:'document',evidence:'',extra:{markupSnippet:''}}));
+    else if(/user-scalable\s*=\s*no/i.test(page.viewport)||/maximum-scale\s*=\s*1(?:\.0+)?(?:,|$)/i.test(page.viewport))findings.push(finding({ruleId:'a11y.viewport-zoom-restricted',title:'Viewport appears to restrict zoom',detail:'The viewport configuration may prevent or severely limit user zoom.',category:'review',severity:'medium',element:viewportEl,targetType:'document',evidence:snippet(viewportEl)||page.viewport,wcag:['1.4.4']}));
+    else if(/\bwidth\s*=\s*(\d+)/i.test(page.viewport)&&!/device-width/i.test(page.viewport)){
+      const widthMatch=/width\s*=\s*(\d+)/i.exec(page.viewport);
+      findings.push(finding({ruleId:'web.viewport-fixed',title:'Viewport uses a fixed pixel width',detail:`Viewport is fixed to ${widthMatch?.[1]||'a pixel width'}px instead of device-width. Mobile browsers may render a desktop-scale layout that requires horizontal scrolling.`,category:'review',severity:'medium',element:viewportEl,targetType:'document',evidence:snippet(viewportEl)||page.viewport}));
+    }
     const refresh=document.querySelector('meta[http-equiv="refresh" i]');if(refresh)findings.push(finding({ruleId:'web.meta-refresh',title:'Page uses a meta refresh',detail:'Meta refresh can create unexpected navigation and accessibility issues.',category:'review',severity:'medium',element:refresh,targetType:'document',evidence:attr(refresh,'content')}));
     if(!document.querySelector('meta[charset],meta[http-equiv="content-type" i]'))findings.push(finding({ruleId:'web.charset-missing',title:'Character encoding declaration was not observed',detail:'No rendered meta charset or equivalent content-type declaration was found. Confirm encoding is declared reliably in the HTTP response.',category:'review',severity:'low',targetType:'document'}));
     if(!h1s.length)findings.push(finding({ruleId:'structure.h1-missing',title:'No H1 heading is present',confidence:'inferred',detail:'The rendered page has no H1. Review the document heading structure.',category:'review',severity:'medium',targetType:'page'}));
@@ -300,6 +305,9 @@
 
     const browserPerformance=performanceSignals();
     findings.push(...performanceFindings(browserPerformance));
+    findings.push(...imageResourceFindings(browserPerformance));
+    findings.push(...fragmentFindings());
+    findings.push(...malformedLinkFindings());
 
     findings.sort((a,b)=>(CATEGORY_RANK[b.category]-CATEGORY_RANK[a.category])||(SEVERITY_RANK[b.severity]-SEVERITY_RANK[a.severity]));
     return{scannedAt:new Date().toISOString(),page,findings,browserPerformance,coverage:{browser:'complete',links:'pending',axe:'pending',published:'pending',performance:browserPerformance.available?'current-page':'pending',wcag:'pending',ai:'pending'}};
@@ -371,7 +379,18 @@
       const lcp=latestLcp;
       let lcpElement=null;
       if(lcp?.element){
-        try{lcpElement={tag:String(lcp.element.tagName||'').toLowerCase(),selector:selectorFor(lcp.element),url:sanitizeResourceUrl(lcp.url||lcp.element.currentSrc||lcp.element.src||''),size:Number(lcp.size||0)};}catch{}
+        try{
+          const el=lcp.element;
+          const rect=el.getBoundingClientRect?.()||{width:0,height:0};
+          lcpElement={
+            tag:String(el.tagName||'').toLowerCase(),
+            selector:selectorFor(el),
+            url:sanitizeResourceUrl(lcp.url||el.currentSrc||el.src||''),
+            size:Number(lcp.size||0),
+            intrinsic:el.naturalWidth?{width:Number(el.naturalWidth)||0,height:Number(el.naturalHeight)||0}:null,
+            rendered:{width:Math.round(rect.width||0),height:Math.round(rect.height||0)}
+          };
+        }catch{}
       }
       const knownResources=resources.filter(r=>(Number(r.transferSize)||0)>0);
       return{
@@ -402,7 +421,7 @@
     const out=[];
     if(Number.isFinite(signals.largestContentfulPaintMs)&&signals.largestContentfulPaintMs>4000){
       const elementNote=signals.lcpElement?.selector?` The observed LCP element was ${signals.lcpElement.selector}.`:'';
-      out.push(finding({ruleId:'performance.browser.lcp',title:'Largest contentful paint is slow in this browser',confidence:'inferred',detail:`Largest contentful paint was observed at ${(signals.largestContentfulPaintMs/1000).toFixed(1)}s on this machine and network.${elementNote} This is a lab observation, not a field score.`,category:'review',severity:'medium',targetType:'page',evidence:`lcp=${signals.largestContentfulPaintMs}ms`,extra:{performanceObservation:signals}}));
+      out.push(finding({ruleId:'performance.browser.lcp',title:'Largest contentful paint is slow in this browser',confidence:'inferred',detail:`Largest contentful paint was observed at ${(signals.largestContentfulPaintMs/1000).toFixed(1)}s on this machine and network.${elementNote} This is a lab observation, not a field score.`,category:'review',severity:'medium',selector:signals.lcpElement?.selector||'',element:null,targetType:signals.lcpElement?.selector?'visual':'page',evidence:`lcp=${signals.largestContentfulPaintMs}ms`,extra:{performanceObservation:signals,resourceUrl:signals.lcpElement?.url||''}}));
     }
     if(Number.isFinite(signals.ttfbMs)&&signals.ttfbMs>1800)
       out.push(finding({ruleId:'performance.browser.ttfb',title:'Server response time is slow in this browser',confidence:'inferred',detail:`Time to first byte was ${signals.ttfbMs}ms. That points at server or origin response time rather than front-end assets.`,category:'review',severity:'medium',targetType:'page',evidence:`ttfb=${signals.ttfbMs}ms`,extra:{performanceObservation:signals}}));
@@ -410,6 +429,74 @@
       const qualifier=signals.transferIsLowerBound?'At least ':'Approximately ';
       const coverage=signals.transferIsLowerBound?` ${signals.unknownTransferCount} transfer size${signals.unknownTransferCount===1?' was':'s were'} unavailable because cached or cross-origin resources may not expose transfer size.`:'';
       out.push(finding({ruleId:'performance.browser.weight',title:'Page transfers an unusually large measurable payload',confidence:'confirmed',detail:`${qualifier}${(signals.transferBytes/1048576).toFixed(1)}MB of measurable transfer was observed across the document and ${signals.resourceCount} resource requests.${coverage}`,category:'review',severity:'medium',targetType:'page',evidence:`known-transfer=${signals.transferBytes} bytes; measured=${signals.measuredTransferCount}; unknown=${signals.unknownTransferCount}`,extra:{performanceObservation:signals}}));
+    }
+    return out;
+  }
+
+  function imageResourceFindings(signals){
+    const out=[];
+    // Broken / unloaded images where the browser completed decode with zero natural size.
+    [...document.images].slice(0,80).forEach(img=>{
+      if(!img.complete)return;
+      const src=sanitizeResourceUrl(img.currentSrc||img.src||'');
+      if(!src||src.startsWith('data:'))return;
+      if(Number(img.naturalWidth)===0&&Number(img.naturalHeight)===0){
+        out.push(finding({ruleId:'web.image-broken',title:'Image failed to load',detail:'An image element completed loading with naturalWidth 0, which usually means the resource is missing or undecodable.',category:'fix',severity:'medium',element:img,evidence:src,extra:{resourceUrl:src}}));
+      }
+    });
+    // Intrinsic vs rendered oversize — only when the image is meaningfully displayed.
+    [...document.images].slice(0,60).forEach(img=>{
+      const nw=Number(img.naturalWidth)||0,nh=Number(img.naturalHeight)||0;
+      const rw=Math.round(img.clientWidth||0),rh=Math.round(img.clientHeight||0);
+      if(nw<2||nh<2||rw<40||rh<40)return;
+      if(nw>=rw*2.5&&nh>=rh*2.5&&(nw*nh)>=350000){
+        const src=sanitizeResourceUrl(img.currentSrc||img.src||'');
+        out.push(finding({ruleId:'performance.browser.image-oversized',title:'Image is much larger than its rendered size',detail:`This image is ${nw}×${nh} intrinsically but renders at about ${rw}×${rh}. Serving an appropriately sized asset reduces transfer and decode work.`,category:'review',severity:'medium',element:img,confidence:'inferred',evidence:`intrinsic=${nw}x${nh}; rendered=${rw}x${rh}; src=${src}`,extra:{resourceUrl:src,imageMetrics:{intrinsic:{width:nw,height:nh},rendered:{width:rw,height:rh}}}}));
+      }
+    });
+    // Correlate slow LCP with oversized LCP image dimensions when both are present.
+    if(signals?.available&&Number.isFinite(signals.largestContentfulPaintMs)&&signals.largestContentfulPaintMs>4000){
+      const el=signals.lcpElement;
+      if(el?.intrinsic?.width&&el?.rendered?.width&&el.intrinsic.width>=el.rendered.width*2.5){
+        out.push(finding({ruleId:'performance.browser.lcp-image-oversized',title:'LCP image is oversized for its display size',detail:`LCP was ${(signals.largestContentfulPaintMs/1000).toFixed(1)}s and the LCP image is ${el.intrinsic.width}×${el.intrinsic.height} while rendering near ${el.rendered.width}×${el.rendered.height}. Resize/compress/serve an appropriately sized modern asset.`,category:'review',severity:'medium',selector:el.selector||'',confidence:'inferred',evidence:`lcp=${signals.largestContentfulPaintMs}ms; intrinsic=${el.intrinsic.width}x${el.intrinsic.height}; rendered=${el.rendered.width}x${el.rendered.height}; resource=${el.url||''}`,extra:{resourceUrl:el.url||'',performanceObservation:signals,rootCauseKey:el.url?`lcp-resource:${hash(el.url)}`:undefined}}));
+      }
+    }
+    return out;
+  }
+
+  function fragmentFindings(){
+    const groups=new Map();
+    for(const a of document.querySelectorAll('a[href^="#"]')){
+      const raw=attr(a,'href');
+      if(!raw||raw==='#'||/^#top$/i.test(raw))continue;
+      let id='';
+      try{id=decodeURIComponent(raw.slice(1))}catch{id=raw.slice(1)}
+      if(!id||/^\/?$/.test(id))continue;
+      let exists=false;
+      try{exists=!!(document.getElementById(id)||document.querySelector(`[name="${CSS.escape(id)}"]`))}catch{exists=!!document.getElementById(id)}
+      if(exists)continue;
+      if(!groups.has(id))groups.set(id,[]);
+      groups.get(id).push(a);
+    }
+    const out=[];
+    for(const[id,anchors]of groups){
+      const first=anchors[0],ctx=linkContext(first);
+      const sources=anchors.slice(0,12).map(a=>({...linkContext(a),selector:selectorFor(a)}));
+      out.push(finding({ruleId:'navigation.fragment-missing',title:'In-page link points to a missing fragment',detail:`${ctx.text?`"${ctx.text}" `:''}points to #${id}, but no matching id or name exists in the document.`,category:'fix',severity:'medium',element:first,count:anchors.length,confidence:'confirmed',evidence:`#${id}`,extra:{link:{url:`#${id}`,internal:true,fragment:id,status:0,occurrences:anchors.length,sources,...ctx},verification:{state:'confirmed',method:'deterministic DOM fragment resolution',attempts:1,evidence:[`no element with id or name "${id}"`]}}}));
+    }
+    return out;
+  }
+
+  function malformedLinkFindings(){
+    const out=[],seen=new Set();
+    for(const a of document.querySelectorAll('a[href]')){
+      const raw=attr(a,'href');
+      if(!raw||raw.startsWith('#')||/^(mailto:|tel:|javascript:|data:)/i.test(raw))continue;
+      let ok=true;try{new URL(raw,location.href)}catch{ok=false}
+      if(ok)continue;
+      const key=clip(raw,180);if(seen.has(key))continue;seen.add(key);
+      const ctx=linkContext(a);
+      out.push(finding({ruleId:'navigation.link-malformed',title:'Link href is malformed',detail:`${ctx.text?`"${ctx.text}" `:''}uses an href that could not be parsed as a URL.`,category:'fix',severity:'medium',element:a,confidence:'confirmed',evidence:key,extra:{link:{url:key,internal:false,malformed:true,occurrences:1,sources:[{...ctx,selector:selectorFor(a)}],...ctx},verification:{state:'confirmed',method:'URL parse',attempts:1,evidence:[key]}}}));
     }
     return out;
   }
@@ -457,16 +544,16 @@
     return out;
   }
 
-  function safeLink(url,anchor){
-    if(!url||anchor?.hasAttribute('download'))return null;
-    const raw=anchor?.getAttribute('href')||'';
+  function classifyLink(anchor){
+    if(!anchor||anchor?.hasAttribute?.('download'))return null;
+    const raw=anchor?.getAttribute?.('href')||'';
     if(!raw||raw.startsWith('#')||/^(mailto:|tel:|javascript:|data:)/i.test(raw))return null;
     try{
       const u=new URL(raw,location.href);
-      if(!/^https?:$/.test(u.protocol)||u.origin!==location.origin)return null;
+      if(!/^https?:$/.test(u.protocol))return null;
       if(/\/(?:logout|log-out|signout|sign-out)(?:\/|$|\?)/i.test(u.pathname))return null;
       u.hash='';
-      return u.href;
+      return{url:u.href,internal:u.origin===location.origin};
     }catch{return null}
   }
   function linkContext(anchor){
@@ -490,11 +577,11 @@
     const ttl=result.verificationState==='healthy'?60000:result.verificationState==='confirmed-failure'?30000:10000;
     linkVerificationCache.set(url,{result:{...result,cached:false},expiresAt:Date.now()+ttl});
   }
-  async function probeUrl(url,{timeoutMs=3500}={}){
+  async function probeUrl(url,{timeoutMs=3500,internal=true}={}){
     const controller=new AbortController(),started=performance.now();
     const timer=setTimeout(()=>controller.abort(),timeoutMs);
     try{
-      const res=await fetch(url,{method:'GET',redirect:'follow',credentials:'same-origin',cache:'no-store',signal:controller.signal,headers:{'Accept':'text/html,application/xhtml+xml,application/json;q=0.8,*/*;q=0.5'}});
+      const res=await fetch(url,{method:'GET',redirect:'follow',credentials:internal?'same-origin':'omit',cache:'no-store',signal:controller.signal,headers:{'Accept':'text/html,application/xhtml+xml,application/json;q=0.8,*/*;q=0.5'}});
       return{state:'complete',status:res.status,finalUrl:res.url||url,redirected:res.redirected,durationMs:Math.round(performance.now()-started)};
     }catch(error){
       const message=error?.message||'request failed';
@@ -521,17 +608,17 @@
           out[i]={state:'budget-exhausted',status:0,error:'link audit time budget exhausted',finalUrl:entries[i].url,durationMs:0};
           continue;
         }
-        out[i]=await probeUrl(entries[i].url,{timeoutMs:Math.max(500,Math.min(timeoutMs,remaining))});
+        out[i]=await probeUrl(entries[i].url,{timeoutMs:Math.max(500,Math.min(timeoutMs,remaining)),internal:entries[i].internal!==false});
       }
     }
     await Promise.all(Array.from({length:Math.min(concurrency,entries.length)},()=>worker()));
     return out;
   }
-  async function verifyLink(url,first,{retryTimeoutMs=7000,thirdTimeoutMs=8000,degraded=false}={}){
+  async function verifyLink(url,first,{retryTimeoutMs=7000,thirdTimeoutMs=8000,degraded=false,internal=true}={}){
     const attempts=[first];
     const firstClass=probeClass(first);
     if(firstClass==='healthy')return{verificationState:'healthy',confidence:'confirmed',result:first,attempts};
-    const second=await probeUrl(url,{timeoutMs:degraded?Math.max(retryTimeoutMs,8000):retryTimeoutMs});
+    const second=await probeUrl(url,{timeoutMs:degraded?Math.max(retryTimeoutMs,8000):retryTimeoutMs,internal});
     attempts.push(second);
     const secondClass=probeClass(second);
     if(secondClass==='healthy')return{verificationState:'healthy',confidence:'confirmed',result:second,attempts};
@@ -544,7 +631,7 @@
     const oneFailure=[firstClass,secondClass].filter(x=>x==='missing'||x==='server-error'||x==='redirect-error');
     const oneInconclusive=[firstClass,secondClass].some(x=>x==='inconclusive');
     if(oneFailure.length===1&&oneInconclusive){
-      const third=await probeUrl(url,{timeoutMs:thirdTimeoutMs});
+      const third=await probeUrl(url,{timeoutMs:thirdTimeoutMs,internal});
       attempts.push(third);
       const thirdClass=probeClass(third);
       if(thirdClass==='healthy')return{verificationState:'healthy',confidence:'confirmed',result:third,attempts};
@@ -555,8 +642,9 @@
     return{verificationState:'inconclusive',confidence:'inconclusive',result:attempts[attempts.length-1],attempts};
   }
   async function recheckLink(url,{timeoutMs=4500,retryTimeoutMs=8000}={}){
-    const first=await probeUrl(url,{timeoutMs});
-    const result=await verifyLink(url,first,{retryTimeoutMs,thirdTimeoutMs:retryTimeoutMs,degraded:false});
+    let internal=true;try{internal=new URL(url).origin===location.origin}catch{}
+    const first=await probeUrl(url,{timeoutMs,internal});
+    const result=await verifyLink(url,first,{retryTimeoutMs,thirdTimeoutMs:retryTimeoutMs,degraded:false,internal});
     cacheLinkResult(url,result);
     return {
       url,
@@ -572,19 +660,20 @@
   async function auditLinks({limit=36,concurrency=6,timeoutMs=3000,retryTimeoutMs=7000,budgetMs=15000}={}){
     const groups=new Map();
     for(const a of document.querySelectorAll('a[href]')){
-      const url=safeLink(a.href,a);if(!url)continue;
-      if(!groups.has(url))groups.set(url,[]);
-      groups.get(url).push(a);
+      const classified=classifyLink(a);if(!classified)continue;
+      const {url,internal}=classified;
+      if(!groups.has(url))groups.set(url,{url,internal,anchors:[]});
+      groups.get(url).anchors.push(a);
       if(groups.size>=limit)break;
     }
-    const entries=[...groups.entries()].map(([url,anchors])=>({url,anchors}));
+    const entries=[...groups.values()];
     const deadlineAt=performance.now()+budgetMs;
     const firstResults=new Array(entries.length);
     const uncached=[];
     entries.forEach((entry,i)=>{
       const cached=cachedLinkResult(entry.url);
       if(cached)firstResults[i]=cached;
-      else uncached.push({index:i,url:entry.url});
+      else uncached.push({index:i,url:entry.url,internal:entry.internal});
     });
     if(uncached.length){
       const probed=await runQueue(uncached,{concurrency,timeoutMs,deadlineAt});
@@ -601,7 +690,7 @@
       else if(probeClass(first)==='healthy'){
         verificationResults[i]={verificationState:'healthy',confidence:'confirmed',result:first,attempts:[first]};
         cacheLinkResult(entry.url,verificationResults[i]);
-      } else pending.push({index:i,url:entry.url,first});
+      } else pending.push({index:i,url:entry.url,first,internal:entry.internal});
     });
 
     let pendingCursor=0;
@@ -615,43 +704,84 @@
           continue;
         }
         const effectiveRetry=Math.max(700,Math.min(retryTimeoutMs,remaining));
-        const verified=await verifyLink(item.url,item.first,{retryTimeoutMs:effectiveRetry,thirdTimeoutMs:Math.max(700,Math.min(8000,deadlineAt-performance.now())),degraded});
+        const verified=await verifyLink(item.url,item.first,{retryTimeoutMs:effectiveRetry,thirdTimeoutMs:Math.max(700,Math.min(8000,deadlineAt-performance.now())),degraded,internal:item.internal!==false});
         verificationResults[item.index]=verified;
         cacheLinkResult(item.url,verified);
       }
     }
     await Promise.all(Array.from({length:Math.min(retryConcurrency,pending.length)},()=>retryWorker()));
 
-    const findings=[],incompleteChecks=[];
+    const findings=[],incompleteChecks=[],externalCandidates=[];
     let healthy=0,confirmedIssues=0,cachedCount=0;
     entries.forEach((entry,i)=>{
-      const {url,anchors}=entry,verified=verificationResults[i]||{verificationState:'inconclusive',confidence:'inconclusive',attempts:[]};
+      const verified=verificationResults[i]||{verificationState:'inconclusive',confidence:'inconclusive',attempts:[]};
       if(verified.cached)cachedCount++;
-      const first=anchors[0],ctx=linkContext(first);
-      const sources=anchors.slice(0,12).map(a=>({...linkContext(a),selector:selectorFor(a)}));
-      const result=verified.result||verified.attempts?.[verified.attempts.length-1]||{status:0,state:'unavailable',finalUrl:url};
-      const attemptEvidence=(verified.attempts||[]).map((a,index)=>({attempt:index+1,state:a.state,status:a.status||0,durationMs:a.durationMs||0,finalUrl:a.finalUrl||url}));
-      const extra={link:{url,sourceUrl:location.href,status:result.status||0,state:result.state||'unknown',finalUrl:result.finalUrl||url,redirected:!!result.redirected,occurrences:anchors.length,sources,...ctx},verification:{state:verified.verificationState,method:'same-origin browser GET with independent retry',attempts:attemptEvidence.length,evidence:attemptEvidence}};
+      const first=entry.anchors[0],ctx=linkContext(first);
+      const sources=entry.anchors.slice(0,12).map(a=>({...linkContext(a),selector:selectorFor(a)}));
+      const result=verified.result||verified.attempts?.[verified.attempts.length-1]||{status:0,state:'unavailable',finalUrl:entry.url};
+      const attemptEvidence=(verified.attempts||[]).map((a,index)=>({attempt:index+1,state:a.state,status:a.status||0,durationMs:a.durationMs||0,finalUrl:a.finalUrl||entry.url}));
+      const method=entry.internal?'same-origin browser GET with independent retry':'cross-origin GET with independent retry';
+      const extra={link:{url:entry.url,internal:!!entry.internal,sourceUrl:location.href,status:result.status||0,state:result.state||'unknown',finalUrl:result.finalUrl||entry.url,redirected:!!result.redirected,occurrences:entry.anchors.length,sources,...ctx},verification:{state:verified.verificationState,method,attempts:attemptEvidence.length,evidence:attemptEvidence}};
       if(verified.verificationState==='healthy'){healthy++;return}
       if(verified.verificationState==='inconclusive'){
-        incompleteChecks.push({kind:'internal-link',url,path:new URL(url).pathname,text:ctx.text||'',reason:result.state||'unavailable',attempts:attemptEvidence});
+        const kind=entry.internal?'internal-link':'external-link';
+        let path='';try{path=new URL(entry.url).pathname}catch{path=entry.url}
+        incompleteChecks.push({kind,url:entry.url,path,text:ctx.text||'',reason:result.state||'unavailable',status:result.status||0,attempts:attemptEvidence,prominence:ctx.prominence||'',location:ctx.location||''});
+        if(!entry.internal&&(result.state==='unavailable'||result.status===0||result.state==='timeout')){
+          externalCandidates.push({url:entry.url,text:ctx.text||'',occurrences:entry.anchors.length,sources,prominence:ctx.prominence||'',location:ctx.location||'',selector:selectorFor(first)});
+        }
         return;
       }
       confirmedIssues++;
       if(verified.failureClass==='missing'){
         const status=result.status===410?410:404;
-        findings.push(finding({ruleId:`navigation.link-${status}`,title:'Internal link points to a missing page',detail:`${ctx.text?`"${ctx.text}" `:''}points to ${new URL(url).pathname}. Independent browser requests confirmed the destination returns HTTP ${result.status}.`,category:'fix',severity:'high',element:first,evidence:`confirmed ${result.status} ${url}`,count:anchors.length,confidence:'confirmed',verification:extra.verification,extra}));
+        const ruleId=entry.internal?`navigation.link-${status}`:`navigation.link-${status}-external`;
+        const title=entry.internal?'Internal link points to a missing page':'External link points to a missing page';
+        const dest=entry.internal?new URL(entry.url).pathname:entry.url;
+        findings.push(finding({ruleId,title,detail:`${ctx.text?`"${ctx.text}" `:''}points to ${dest}. Independent requests confirmed the destination returns HTTP ${result.status}.`,category:'fix',severity:'high',element:first,evidence:`confirmed ${result.status} ${entry.url}`,count:entry.anchors.length,confidence:'confirmed',verification:extra.verification,extra}));
       }else if(verified.failureClass==='server-error'){
-        findings.push(finding({ruleId:'navigation.link-5xx',title:'Internal link points to a server error',detail:`${ctx.text?`"${ctx.text}" `:''}points to ${new URL(url).pathname}. Independent browser requests confirmed a server error at the destination.`,category:'fix',severity:'critical',element:first,evidence:`confirmed ${result.status} ${url}`,count:anchors.length,confidence:'confirmed',verification:extra.verification,extra}));
+        findings.push(finding({ruleId:entry.internal?'navigation.link-5xx':'navigation.link-5xx-external',title:entry.internal?'Internal link points to a server error':'External link points to a server error',detail:`${ctx.text?`"${ctx.text}" `:''}points to ${entry.internal?new URL(entry.url).pathname:entry.url}. Independent requests confirmed a server error at the destination.`,category:'fix',severity:'critical',element:first,evidence:`confirmed ${result.status} ${entry.url}`,count:entry.anchors.length,confidence:'confirmed',verification:extra.verification,extra}));
       }else if(verified.failureClass==='redirect-error'){
-        findings.push(finding({ruleId:'navigation.link-redirect-error',title:'Internal link has a confirmed redirect failure',detail:`${ctx.text?`"${ctx.text}" `:''}points to ${new URL(url).pathname}, and repeated browser requests could not complete its redirect sequence.`,category:'fix',severity:'high',element:first,evidence:`confirmed redirect failure ${url}`,count:anchors.length,confidence:'confirmed',verification:extra.verification,extra}));
+        findings.push(finding({ruleId:entry.internal?'navigation.link-redirect-error':'navigation.link-redirect-error-external',title:entry.internal?'Internal link has a confirmed redirect failure':'External link has a confirmed redirect failure',detail:`${ctx.text?`"${ctx.text}" `:''}points to ${entry.internal?new URL(entry.url).pathname:entry.url}, and repeated requests could not complete its redirect sequence.`,category:'fix',severity:'high',element:first,evidence:`confirmed redirect failure ${entry.url}`,count:entry.anchors.length,confidence:'confirmed',verification:extra.verification,extra}));
       }
     });
     const coverageState=incompleteChecks.length?'partial':'complete';
     return{
       findings,checked:entries.length,verifiedHealthy:healthy,confirmedIssues,inconclusive:incompleteChecks.length,
-      incompleteChecks,limit,reachedLimit:groups.size>=limit,degraded,cached:cachedCount,budgetExhausted:incompleteChecks.some(x=>x.reason==='budget-exhausted'),status:coverageState
+      incompleteChecks,externalCandidates,limit,reachedLimit:groups.size>=limit,degraded,cached:cachedCount,budgetExhausted:incompleteChecks.some(x=>x.reason==='budget-exhausted'),status:coverageState
     };
+  }
+
+  function applyExternalProbeResults(candidates=[], probeRows=[]){
+    const byUrl=new Map((probeRows||[]).map(r=>[String(r.url||''),r]));
+    const findings=[],incompleteChecks=[],resolvedUrls=new Set();
+    for(const candidate of candidates||[]){
+      const row=byUrl.get(candidate.url);
+      if(!row)continue;
+      const status=Number(row.status||0);
+      let liveAnchors=[...document.querySelectorAll('a[href]')].filter(a=>{
+        try{const c=classifyLink(a);return c&&c.url===candidate.url}catch{return false}
+      });
+      if(!liveAnchors.length){
+        liveAnchors=[{nodeType:1,localName:'a',tagName:'A',id:'',classList:{length:0},parentElement:null,innerText:candidate.text||'',className:'',getAttribute(name){return name==='href'?candidate.url:null},hasAttribute(){return false},closest(){return null},getBoundingClientRect(){return{x:0,y:0,width:0,height:0}}}];
+      }
+      const first=liveAnchors[0],ctx={text:candidate.text||'',location:candidate.location||'body',prominence:candidate.prominence||'normal',...linkContext(first)};
+      const sources=candidate.sources||[{...ctx,selector:candidate.selector||selectorFor(first)}];
+      const attempt={attempt:1,state:status?'complete':'unavailable',status,durationMs:Number(row.durationMs||0),finalUrl:row.finalUrl||candidate.url};
+      const extra={link:{url:candidate.url,internal:false,sourceUrl:location.href,status,state:status?'complete':'unavailable',finalUrl:row.finalUrl||candidate.url,redirected:!!row.redirected,occurrences:Number(candidate.occurrences||liveAnchors.length||1),sources,...ctx},verification:{state:'confirmed',method:'privileged external GET',attempts:1,evidence:[attempt]}};
+      if(status===404||status===410){
+        findings.push(finding({ruleId:`navigation.link-${status===410?410:404}-external`,title:'External link points to a missing page',detail:`${ctx.text?`"${ctx.text}" `:''}points to ${candidate.url}. A privileged request confirmed HTTP ${status}.`,category:'fix',severity:'high',element:first,evidence:`confirmed ${status} ${candidate.url}`,count:Number(candidate.occurrences||liveAnchors.length||1),confidence:'confirmed',verification:extra.verification,extra}));
+        resolvedUrls.add(candidate.url);continue;
+      }
+      if(status>=500){
+        findings.push(finding({ruleId:'navigation.link-5xx-external',title:'External link points to a server error',detail:`${ctx.text?`"${ctx.text}" `:''}points to ${candidate.url}. A privileged request confirmed a server error.`,category:'fix',severity:'critical',element:first,evidence:`confirmed ${status} ${candidate.url}`,count:Number(candidate.occurrences||1),confidence:'confirmed',verification:extra.verification,extra}));
+        resolvedUrls.add(candidate.url);continue;
+      }
+      if(status>=200&&status<400){resolvedUrls.add(candidate.url);continue}
+      incompleteChecks.push({kind:'external-link',url:candidate.url,path:candidate.url,text:candidate.text||'',reason:status?`http-${status}`:(row.error||'unavailable'),status,attempts:[attempt],prominence:candidate.prominence||'',location:candidate.location||''});
+      resolvedUrls.add(candidate.url);
+    }
+    return{findings,incompleteChecks,resolvedUrls:[...resolvedUrls]};
   }
 
   function merge(local,axeResults,linkResult={findings:[],checked:0}){
@@ -661,7 +791,7 @@
     return{...local,browserPerformance:local.browserPerformance||null,findings:[...seen.values()],linkAudit:{checked:linkResult.checked||0,verifiedHealthy:linkResult.verifiedHealthy||0,confirmedIssues:linkResult.confirmedIssues||0,inconclusive:linkResult.inconclusive||0,incompleteChecks:linkResult.incompleteChecks||[],reachedLimit:!!linkResult.reachedLimit,degraded:!!linkResult.degraded,cached:linkResult.cached||0},coverage:{...local.coverage,links:linksStatus,axe:axeResults?'complete':'unavailable'}};
   }
 
-  globalThis.WebQARules={run,axeFindings,resolvedTargetState,auditLinks,recheckLink,merge,selectorFor,resolveTarget,performanceSignals,preparePerformanceSignals,semanticContextFor,targetContextFor(targetId,selector='',ruleId=''){
+  globalThis.WebQARules={run,axeFindings,resolvedTargetState,auditLinks,recheckLink,applyExternalProbeResults,merge,selectorFor,resolveTarget,performanceSignals,preparePerformanceSignals,semanticContextFor,targetContextFor(targetId,selector='',ruleId=''){
     const el=resolveTarget(targetId,selector);if(!el)return null;
     const style=getComputedStyle(el),rect=el.getBoundingClientRect();
     return{found:true,tag:el.tagName.toLowerCase(),selector:selector||selectorFor(el),markup:clip(cleanMarkup(el.outerHTML),1400),text:clip(el.innerText||el.textContent,500),semantics:semanticContextFor(el,ruleId),rect:{x:Math.round(rect.x),y:Math.round(rect.y),width:Math.round(rect.width),height:Math.round(rect.height)},styles:{color:style.color,backgroundColor:style.backgroundColor,fontSize:style.fontSize,fontWeight:style.fontWeight,lineHeight:style.lineHeight,display:style.display,position:style.position}};
