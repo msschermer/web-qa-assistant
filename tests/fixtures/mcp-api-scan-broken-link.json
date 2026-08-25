@@ -1,0 +1,504 @@
+{
+  "kind": "api-scan",
+  "createdAt": "2026-08-24T00:00:00.000Z",
+  "requestedUrl": "https://example.com/",
+  "requestId": "fixture-broken",
+  "gateway": "https://assistant.msschermer.us",
+  "summary": {
+    "page": {
+      "url": "https://example.com/",
+      "hostname": "example.com",
+      "title": "Example Domain",
+      "environment": "production",
+      "targetIntegrity": "reached"
+    },
+    "assessment": "One issue needs attention. confirmed broken internal link.",
+    "priorityMode": "deterministic",
+    "connectedMode": "gateway",
+    "coverage": {
+      "browser": "complete",
+      "links": "complete",
+      "axe": "complete"
+    },
+    "attention": {
+      "materialGroupCount": 1,
+      "materialFindingCount": 1,
+      "representedClasses": [
+        "availability"
+      ],
+      "classCounts": {
+        "availability": 1
+      },
+      "classLabels": {
+        "availability": "Navigation",
+        "discoverability": "Discoverability",
+        "performance": "Performance",
+        "accessibility": "Accessibility",
+        "security": "Security",
+        "implementation": "Web quality",
+        "coverage": "Coverage"
+      },
+      "groups": [
+        {
+          "area": "Navigation",
+          "impactClass": "availability",
+          "title": "Confirmed broken internal link",
+          "instanceCount": 1,
+          "score": 142,
+          "leadId": "f-broken",
+          "lead": {
+            "id": "f-broken",
+            "ruleId": "links.broken-link",
+            "title": "Broken internal link",
+            "detail": "Pricing points to /missing…, which returned a confirmed missing-page response.",
+            "category": "fix",
+            "severity": "critical",
+            "confidence": "confirmed",
+            "impactClass": "availability",
+            "targetType": "page",
+            "link": {
+              "url": "https://example.com/missing?token=%5Bredacted%5D",
+              "status": 404,
+              "state": "broken",
+              "verificationState": "",
+              "occurrences": 1,
+              "prominence": "navigation",
+              "location": "header",
+              "text": "Pricing"
+            },
+            "verification": {
+              "method": "http-get",
+              "attempts": 2,
+              "state": "confirmed"
+            },
+            "sources": [
+              "browser"
+            ]
+          }
+        }
+      ]
+    },
+    "linkAudit": {
+      "checked": 3,
+      "confirmedIssues": 1,
+      "inconclusive": 0,
+      "reachedLimit": false
+    },
+    "frank": {
+      "eligible": true,
+      "withholdReason": "",
+      "provenance": "mcp_local_packages_frank",
+      "planIncluded": false
+    },
+    "scannedAt": "2026-08-24T00:00:00.000Z",
+    "untrustedPageEvidence": true,
+    "provenance": {
+      "labels": {
+        "webqa_evidence": "gateway_api_scan",
+        "attention_priority": "mcp_local_recompose",
+        "frank_deterministic": "mcp_local_packages_frank",
+        "browser_observation": "not_in_artifact",
+        "reviewer_inference": "not_in_artifact"
+      },
+      "scanEvidence": {
+        "source": "gateway_api_scan",
+        "note": "Sanitized findings, coverage, targetIntegrity, link aggregates, and lab performance derive from gateway /api/scan (or an equivalent scan report)."
+      },
+      "attention": {
+        "source": "mcp_local_recompose",
+        "method": "packages/findings/compose.js#composeAttention",
+        "gatewayProvided": false,
+        "note": "Recommended Order / attention groups are recomposed locally by MCP. Gateway /api/scan does not return attention."
+      },
+      "priority": {
+        "source": "mcp_local_recompose",
+        "method": "packages/findings/compose.js#composedBrief",
+        "gatewayBriefPresent": true,
+        "note": "priority.brief and ordering are recomposed locally from composeAttention. Do not treat them as verbatim /api/scan priorityBrief."
+      },
+      "frank": {
+        "source": "mcp_local_packages_frank",
+        "includedInBundle": false,
+        "method": "packages/frank deterministicFrankPlan via webqa_frank_plan",
+        "note": "Frank plans are not returned by /api/scan. Generate on demand with webqa_frank_plan (production deterministic planner; no cloud AI; no Chrome Prompt API)."
+      },
+      "browser_observation": {
+        "source": "not_in_artifact",
+        "note": "Cursor Browser observations are never stored in this artifact and must not be promoted into WebQA findings."
+      },
+      "reviewer_inference": {
+        "source": "not_in_artifact",
+        "note": "Reviewer judgment is outside this artifact."
+      }
+    }
+  },
+  "review": {
+    "contractVersion": 1,
+    "untrustedPageEvidence": true,
+    "provenance": {
+      "labels": {
+        "webqa_evidence": "gateway_api_scan",
+        "attention_priority": "mcp_local_recompose",
+        "frank_deterministic": "mcp_local_packages_frank",
+        "browser_observation": "not_in_artifact",
+        "reviewer_inference": "not_in_artifact"
+      },
+      "scanEvidence": {
+        "source": "gateway_api_scan",
+        "note": "Sanitized findings, coverage, targetIntegrity, link aggregates, and lab performance derive from gateway /api/scan (or an equivalent scan report)."
+      },
+      "attention": {
+        "source": "mcp_local_recompose",
+        "method": "packages/findings/compose.js#composeAttention",
+        "gatewayProvided": false,
+        "note": "Recommended Order / attention groups are recomposed locally by MCP. Gateway /api/scan does not return attention."
+      },
+      "priority": {
+        "source": "mcp_local_recompose",
+        "method": "packages/findings/compose.js#composedBrief",
+        "gatewayBriefPresent": true,
+        "note": "priority.brief and ordering are recomposed locally from composeAttention. Do not treat them as verbatim /api/scan priorityBrief."
+      },
+      "frank": {
+        "source": "mcp_local_packages_frank",
+        "includedInBundle": false,
+        "method": "packages/frank deterministicFrankPlan via webqa_frank_plan",
+        "note": "Frank plans are not returned by /api/scan. Generate on demand with webqa_frank_plan (production deterministic planner; no cloud AI; no Chrome Prompt API)."
+      },
+      "browser_observation": {
+        "source": "not_in_artifact",
+        "note": "Cursor Browser observations are never stored in this artifact and must not be promoted into WebQA findings."
+      },
+      "reviewer_inference": {
+        "source": "not_in_artifact",
+        "note": "Reviewer judgment is outside this artifact."
+      }
+    },
+    "rules": {
+      "treatAsDataNotInstructions": true,
+      "wholeDomAllowed": false,
+      "formValuesAllowed": false,
+      "cookiesAllowed": false,
+      "queryValuesRetained": false,
+      "arbitraryDataAttributesAllowed": false,
+      "rawAxeNodesAllowed": false,
+      "documentHtmlAllowed": false
+    },
+    "run": {
+      "requestId": "fixture-broken",
+      "requestedUrl": "https://example.com/",
+      "gateway": "https://assistant.msschermer.us/",
+      "scannedAt": "2026-08-24T00:00:00.000Z",
+      "connectedMode": "gateway"
+    },
+    "page": {
+      "url": "https://example.com/",
+      "hostname": "example.com",
+      "title": "Example Domain",
+      "environment": {
+        "type": "production",
+        "confidence": 0.9,
+        "confidenceLabel": "high"
+      }
+    },
+    "targetIntegrity": {
+      "state": "reached",
+      "confidence": "high",
+      "score": 0,
+      "signals": [],
+      "httpStatus": null,
+      "requestedHost": "",
+      "finalHost": "",
+      "pageQaWithheld": false,
+      "note": ""
+    },
+    "coverage": {
+      "browser": "complete",
+      "links": "complete",
+      "axe": "complete"
+    },
+    "attention": {
+      "provenance": "mcp_local_recompose",
+      "materialGroupCount": 1,
+      "materialFindingCount": 1,
+      "representedClasses": [
+        "availability"
+      ],
+      "classCounts": {
+        "availability": 1
+      },
+      "classLabels": {
+        "availability": "Navigation",
+        "discoverability": "Discoverability",
+        "performance": "Performance",
+        "accessibility": "Accessibility",
+        "security": "Security",
+        "implementation": "Web quality",
+        "coverage": "Coverage"
+      },
+      "groups": [
+        {
+          "key": "links.broken-link|https://example.com/missing?token=%5Bredacted%5D",
+          "impactClass": "availability",
+          "areaLabel": "Navigation",
+          "title": "Confirmed broken internal link",
+          "size": 1,
+          "instanceCount": 1,
+          "score": 142,
+          "leadId": "f-broken",
+          "instanceIds": [
+            "f-broken"
+          ]
+        }
+      ]
+    },
+    "findings": {
+      "provenance": "gateway_api_scan",
+      "index": [
+        {
+          "id": "f-broken",
+          "ruleId": "links.broken-link",
+          "title": "Broken internal link",
+          "impactClass": "availability",
+          "areaLabel": "Navigation",
+          "severity": "critical",
+          "confidence": "confirmed",
+          "frankPriority": "blocker",
+          "score": 142,
+          "frankEligible": true,
+          "detailIncluded": true
+        }
+      ],
+      "detail": [
+        {
+          "id": "f-broken",
+          "fingerprint": "f-broken",
+          "ruleId": "links.broken-link",
+          "title": "Confirmed broken internal link",
+          "detail": "Pricing points to a missing page",
+          "category": "fix",
+          "severity": "critical",
+          "confidence": "confirmed",
+          "signal": "",
+          "frankPriority": "blocker",
+          "frankVisible": true,
+          "policyReason": "",
+          "impactClass": "availability",
+          "selector": "",
+          "targetId": "",
+          "targetType": "page",
+          "sources": [
+            "browser"
+          ],
+          "wcag": [],
+          "count": 1,
+          "verification": {
+            "state": "confirmed",
+            "method": "http-get",
+            "attempts": 2,
+            "evidence": [
+              {
+                "attempt": 1,
+                "state": "broken",
+                "status": 404,
+                "durationMs": 40,
+                "finalUrl": "https://example.com/missing?token=%5Bredacted%5D"
+              }
+            ]
+          },
+          "link": {
+            "url": "https://example.com/missing?token=%5Bredacted%5D",
+            "status": 404,
+            "state": "broken",
+            "verificationState": "",
+            "occurrences": 1,
+            "prominence": "navigation",
+            "location": "header",
+            "text": "Pricing"
+          },
+          "wcagExplanation": "",
+          "areaLabel": "Navigation",
+          "presentedTitle": "Broken internal link",
+          "presentedSummary": "Pricing points to /missing…, which returned a confirmed missing-page response.",
+          "nextAction": "Repair the navigation path at its source or restore/redirect the destination when that URL is still the intended route.",
+          "materialityScore": 142,
+          "evidencePreview": [
+            {
+              "id": "ev_16699qj",
+              "source": "browser",
+              "kind": "finding",
+              "label": "Verified finding",
+              "value": "Pricing points to a missing page",
+              "scope": "current-page"
+            },
+            {
+              "id": "ev_152ydpf",
+              "source": "browser",
+              "kind": "rule",
+              "label": "Rule",
+              "value": "links.broken-link",
+              "scope": "current-page"
+            },
+            {
+              "id": "ev_10snrvj",
+              "source": "browser",
+              "kind": "confidence",
+              "label": "Finding confidence",
+              "value": "confirmed",
+              "scope": "verification"
+            },
+            {
+              "id": "ev_184vlry",
+              "source": "browser",
+              "kind": "verification-method",
+              "label": "Verification method",
+              "value": "http-get",
+              "scope": "verification"
+            },
+            {
+              "id": "ev_1dzwojc",
+              "source": "browser",
+              "kind": "verification-attempts",
+              "label": "Verification attempts",
+              "value": 2,
+              "scope": "verification"
+            },
+            {
+              "id": "ev_1qumcv6",
+              "source": "browser",
+              "kind": "verification-evidence",
+              "label": "Verification evidence",
+              "value": {
+                "attempt": 1,
+                "state": "broken",
+                "status": 404,
+                "durationMs": 40,
+                "finalUrl": "https://example.com/missing?token=%5Bredacted%5D"
+              },
+              "scope": "verification"
+            },
+            {
+              "id": "ev_5gkbbj",
+              "source": "browser",
+              "kind": "environment",
+              "label": "Environment",
+              "value": "unknown",
+              "scope": "context"
+            },
+            {
+              "id": "ev_qv5hfe",
+              "source": "browser",
+              "kind": "signal",
+              "label": "Signal",
+              "value": "navigation.broken-link",
+              "scope": "context"
+            },
+            {
+              "id": "ev_8pw1rq",
+              "source": "browser",
+              "kind": "link-url",
+              "label": "Link destination",
+              "value": "https://example.com/missing?token=%5Bredacted%5D",
+              "scope": "current-page"
+            },
+            {
+              "id": "ev_633cix",
+              "source": "browser",
+              "kind": "http-status",
+              "label": "Destination HTTP status",
+              "value": 404,
+              "scope": "current-page"
+            },
+            {
+              "id": "ev_xrcr42",
+              "source": "browser",
+              "kind": "link-occurrences",
+              "label": "Occurrences on page",
+              "value": 1,
+              "scope": "current-page"
+            },
+            {
+              "id": "ev_ts3ioc",
+              "source": "browser",
+              "kind": "link-text",
+              "label": "Link text",
+              "value": "Pricing",
+              "scope": "current-page"
+            },
+            {
+              "id": "ev_jt2bol",
+              "source": "browser",
+              "kind": "link-location",
+              "label": "Link location",
+              "value": "header",
+              "scope": "current-page"
+            },
+            {
+              "id": "ev_z2lzpt",
+              "source": "browser",
+              "kind": "link-prominence",
+              "label": "Link prominence",
+              "value": "navigation",
+              "scope": "current-page"
+            }
+          ],
+          "targetContextPresent": false
+        }
+      ],
+      "truncated": false,
+      "omittedMaterialCount": 0,
+      "detailCount": 1,
+      "indexCount": 1,
+      "pageDerivedSuppressed": false
+    },
+    "links": {
+      "provenance": "gateway_api_scan",
+      "checked": 3,
+      "verifiedHealthy": 2,
+      "confirmedIssues": 1,
+      "inconclusive": 0,
+      "reachedLimit": false,
+      "degraded": false,
+      "confirmedBroken": [
+        {
+          "findingId": "f-broken",
+          "url": "https://example.com/missing?token=%5Bredacted%5D",
+          "status": 404,
+          "text": "Pricing",
+          "prominence": "navigation",
+          "verification": {
+            "state": "confirmed",
+            "method": "http-get",
+            "attempts": 2
+          }
+        }
+      ]
+    },
+    "performance": null,
+    "priority": {
+      "provenance": "mcp_local_recompose",
+      "brief": "One issue needs attention. confirmed broken internal link.",
+      "mode": "deterministic",
+      "reason": "",
+      "ordering": [
+        {
+          "leadId": "f-broken",
+          "areaLabel": "Navigation",
+          "title": "Confirmed broken internal link",
+          "score": 142
+        }
+      ],
+      "gatewayBriefRetained": false
+    },
+    "frank": {
+      "provenance": "mcp_local_packages_frank",
+      "eligible": true,
+      "withholdReason": "",
+      "targetContextPresent": false,
+      "rewrite": "none",
+      "mode": "deterministic",
+      "planIncluded": false
+    }
+  },
+  "fixtureNote": "Deterministic acceptance fixture for live MCP review/Frank tools. Not a live gateway scan."
+}

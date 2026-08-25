@@ -63,7 +63,7 @@ function sanitizeStructured(value, depth = 0) {
   }));
 }
 
-function safeImagePurpose(value = {}) {
+export function safeImagePurpose(value = {}) {
   const d = value.descriptor || {};
   return {
     purpose: sanitizeText(value.purpose, 40), confidence: sanitizeText(value.confidence, 40),
@@ -72,7 +72,7 @@ function safeImagePurpose(value = {}) {
     nearbyText: sanitizeText(value.nearbyText || d.siblingText, 160)
   };
 }
-function safeSemantics(value = {}) {
+export function safeSemantics(value = {}) {
   if (!value || typeof value !== 'object') return null;
   const naming = value.naming || {};
   return {
@@ -86,7 +86,7 @@ function safeSemantics(value = {}) {
   };
 }
 
-function safeAxe(value = {}) {
+export function safeAxe(value = {}) {
   if (!value || typeof value !== 'object') return null;
   const safeChecks = bucket => (value.checks?.[bucket] || []).slice(0, 6).map(check => ({
     id: sanitizeText(check.id, 100),
@@ -102,7 +102,7 @@ function safeAxe(value = {}) {
     checks: { any: safeChecks('any'), all: safeChecks('all'), none: safeChecks('none') }
   };
 }
-function safeLink(value = {}) {
+export function safeLink(value = {}) {
   if (!value || typeof value !== 'object') return null;
   return {
     url: sanitizeUrl(value.url || ''), status: Number(value.status || 0), state: sanitizeText(value.state, 60),
@@ -111,7 +111,7 @@ function safeLink(value = {}) {
   };
 }
 
-function safePerformance(value = {}) {
+export function safePerformance(value = {}) {
   if (!value || typeof value !== 'object') return null;
   return {
     available: Boolean(value.available), measurement: sanitizeText(value.measurement, 40), note: sanitizeText(value.note, 320),
@@ -189,6 +189,63 @@ function safeVerification(value = {}) {
     attempts: Number(value.attempts || 0),
     evidence: Array.isArray(value.evidence) ? value.evidence.slice(0, 5).map(item => sanitizeText(typeof item === 'string' ? item : JSON.stringify(item), 320)) : []
   } : null;
+}
+
+/** Structured verification evidence for reviewer/Frank fidelity (still privacy-bounded). */
+export function reviewVerification(value = {}) {
+  if (!value || typeof value !== 'object') return null;
+  return {
+    state: sanitizeText(value.state, 40),
+    method: sanitizeText(value.method, 180),
+    attempts: Number(value.attempts || 0),
+    evidence: Array.isArray(value.evidence) ? value.evidence.slice(0, 5).map(item => {
+      if (item && typeof item === 'object') {
+        return {
+          attempt: Number(item.attempt || 0),
+          state: sanitizeText(item.state, 60),
+          status: item.status != null ? Number(item.status) : null,
+          durationMs: item.durationMs != null ? Number(item.durationMs) : null,
+          finalUrl: item.finalUrl ? sanitizeUrl(item.finalUrl) : undefined
+        };
+      }
+      return sanitizeText(typeof item === 'string' ? item : JSON.stringify(item), 320);
+    }) : []
+  };
+}
+
+/**
+ * Allowlisted finding projection for MCP review / deterministic Frank.
+ * Keeps semantics, axe checks, link, and lab performance — never raw nodes/DOM.
+ */
+export function reviewFinding(f = {}) {
+  return {
+    id: sanitizeText(f.id || f.fingerprint, 180),
+    fingerprint: sanitizeText(f.fingerprint, 180),
+    ruleId: sanitizeText(f.ruleId, 180),
+    title: sanitizeText(f.title, 180),
+    detail: sanitizeText(f.detail, 700),
+    category: sanitizeText(f.category, 40),
+    severity: sanitizeText(f.severity, 40),
+    confidence: sanitizeText(f.confidence, 40),
+    signal: sanitizeText(f.signal, 120),
+    frankPriority: sanitizeText(f.frankPriority, 40),
+    frankVisible: f.frankVisible !== false,
+    policyReason: sanitizeText(f.policyReason, 260),
+    impactClass: sanitizeText(f.impactClass, 80),
+    selector: sanitizeSelector(f.selector),
+    targetId: sanitizeText(f.targetId, 180),
+    targetType: sanitizeText(f.targetType, 40),
+    evidence: safeEvidenceValue({ kind: 'evidence', value: f.evidence }),
+    sources: [...(f.sources || [])].slice(0, 12).map(x => sanitizeText(x, 80)),
+    wcag: [...(f.wcag || [])].slice(0, 12).map(x => sanitizeText(x, 40)),
+    count: Number(f.count || 1),
+    verification: reviewVerification(f.verification),
+    link: f.link ? safeLink(f.link) : undefined,
+    axe: f.axe ? safeAxe(f.axe) : undefined,
+    semantics: f.semantics ? safeSemantics(f.semantics) : undefined,
+    performanceObservation: f.performanceObservation ? safePerformance(f.performanceObservation) : undefined,
+    wcagExplanation: sanitizeText(f.wcagExplanation, 700)
+  };
 }
 
 function gatewayFinding(f = {}) {
