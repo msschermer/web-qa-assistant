@@ -20,6 +20,28 @@
     try{const u=new URL(value);u.search='';u.hash='';return clip(u.toString(),n)}
     catch{return clip(value.split(/[?#]/)[0]||value,n)}
   }
+  function sanitizeHttpUrl(raw,n=220){
+    const value=String(raw||'').trim();
+    if(!value)return'';
+    try{
+      const u=new URL(value,location.href);
+      if(!/^https?:$/.test(u.protocol))return'';
+      u.username='';u.password='';
+      u.search='';u.hash='';
+      return clip(u.toString(),n);
+    }catch{return''}
+  }
+  function robotsIndexState(content){
+    const text=String(content||'').toLowerCase();
+    if(/\bnoindex\b/.test(text))return'noindex';
+    if(/\bindex\b/.test(text))return'index';
+    return'';
+  }
+  function isInertHref(raw){
+    const h=String(raw||'').trim().toLowerCase().replace(/\s+/g,'');
+    if(h==='')return true;
+    return /^javascript:(?:void(?:\(0?\))?;?|void0;?|;)$/.test(h);
+  }
   function hash(input){let h=2166136261;for(let i=0;i<input.length;i++){h^=input.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36)}
   function selectorFor(el){
     if(!el||el.nodeType!==1)return'';
@@ -295,13 +317,30 @@
     const schema=schemaState();schema.errors.forEach(err=>findings.push(finding({ruleId:'schema.jsonld-invalid',title:'JSON-LD could not be parsed',detail:`Structured data block ${err.index+1} contains invalid JSON: ${err.message}`,category:'fix',severity:'high',element:err.element,targetType:'document',evidence:'Invalid JSON-LD block'})));
 
     const ids=new Map();document.querySelectorAll('[id]').forEach(el=>{const id=el.id;if(!id)return;const list=ids.get(id)||[];list.push(el);ids.set(id,list)});
-    for(const[id,els]of ids)if(els.length>1)findings.push(finding({ruleId:'web.duplicate-id',title:'Duplicate element ID',detail:`The id "${id}" appears ${els.length} times. Duplicate IDs can break labels, ARIA references, fragment links, and scripts.`,category:'fix',severity:'medium',element:els[1],evidence:id,count:els.length}));
+    for(const[id,els]of ids)if(els.length>1){
+      let referencedBy='';
+      try{
+        if(document.querySelector(`label[for="${CSS.escape(id)}"]`))referencedBy='label[for]';
+        else if(document.querySelector(`a[href="#${CSS.escape(id)}"]`))referencedBy='fragment link';
+      }catch{}
+      const refNote=referencedBy?` A ${referencedBy} points at this id, so the wrong element may receive the reference.`:'';
+      findings.push(finding({ruleId:'web.duplicate-id',title:'Duplicate element ID',detail:`The id "${id}" appears ${els.length} times. Duplicate IDs can break labels, ARIA references, fragment links, and scripts.${refNote}`,category:'fix',severity:'medium',element:els[1],evidence:id,count:els.length}));
+    }
 
     document.querySelectorAll('form[action]').forEach(form=>{const raw=attr(form,'action');if(!raw)return;try{const target=new URL(raw,location.href);if(location.protocol==='https:'&&target.protocol==='http:')findings.push(finding({ruleId:'security.insecure-form-action',title:'Secure page submits a form over HTTP',detail:'A form on this HTTPS page points to an insecure HTTP action.',category:'fix',severity:'critical',element:form,evidence:target.href}))}catch{}});
     document.querySelectorAll('a[target="_blank"]').forEach(a=>{const rel=attr(a,'rel').toLowerCase();if(!rel.includes('noopener')&&!rel.includes('noreferrer'))findings.push(finding({ruleId:'security.blank-opener',title:'New-tab link can retain opener access',detail:'A target=_blank link does not declare noopener or noreferrer.',category:'review',severity:'low',element:a,evidence:snippet(a)}))});
 
     const ogTitle=document.querySelector('meta[property="og:title"]'),ogDesc=document.querySelector('meta[property="og:description"]');
     if(!ogTitle||!ogDesc)findings.push(finding({ruleId:'social.og-incomplete',title:'Open Graph metadata is incomplete',confidence:'inferred',detail:'One or more core Open Graph title/description fields were not observed. Review sharing metadata if social previews matter for this page.',category:'context',severity:'info',targetType:'document',evidence:`og:title=${!!ogTitle}; og:description=${!!ogDesc}`}));
+
+    findings.push(...mixedContentFindings());
+    findings.push(...inertLinkFindings());
+    findings.push(...formQualityFindings());
+    findings.push(...hreflangFindings());
+    findings.push(...robotsGooglebotFindings());
+    findings.push(...overflowFindings());
+    findings.push(...resourceFailureFindings());
+    findings.push(...runtimeErrorFindings());
 
     const browserPerformance=performanceSignals();
     findings.push(...performanceFindings(browserPerformance));
@@ -310,7 +349,7 @@
     findings.push(...malformedLinkFindings());
 
     findings.sort((a,b)=>(CATEGORY_RANK[b.category]-CATEGORY_RANK[a.category])||(SEVERITY_RANK[b.severity]-SEVERITY_RANK[a.severity]));
-    return{scannedAt:new Date().toISOString(),page,findings,browserPerformance,coverage:{browser:'complete',links:'pending',axe:'pending',published:'pending',performance:browserPerformance.available?'current-page':'pending',wcag:'pending',ai:'pending'}};
+    return{scannedAt:new Date().toISOString(),page,findings,browserPerformance,coverage:{browser:'complete',links:'pending',axe:'pending',published:'pending',performance:browserPerformance.available?'current-page':'pending',wcag:'pending',ai:'pending',runtime:globalThis.__WEBQA_RUNTIME_ERRORS__?'renderer':'not applicable'}};
   }
 
   // Semantic context is what lets Frank reason about the correct implementation
@@ -349,7 +388,7 @@
   // browser, not field data, and it is labelled that way everywhere it surfaces.
   // LCP is captured with a buffered PerformanceObserver because browsers do not
   // expose largest-contentful-paint through performance.getEntriesByType().
-  let latestLcp=null,lcpObserver=null;
+  let latestLcp=null,lcpObserver=null,latestCls=0,clsObserver=null;
   function initLcpObserver(){
     if(lcpObserver||typeof PerformanceObserver==='undefined')return;
     try{
@@ -357,9 +396,23 @@
       lcpObserver.observe({type:'largest-contentful-paint',buffered:true});
     }catch{lcpObserver=null}
   }
+  function initClsObserver(){
+    if(clsObserver||typeof PerformanceObserver==='undefined')return;
+    try{
+      clsObserver=new PerformanceObserver(list=>{
+        for(const entry of list.getEntries?.()||[]){
+          if(entry?.hadRecentInput)continue;
+          latestCls+=Number(entry.value)||0;
+        }
+      });
+      clsObserver.observe({type:'layout-shift',buffered:true});
+    }catch{clsObserver=null}
+  }
   initLcpObserver();
+  initClsObserver();
   async function preparePerformanceSignals(){
     initLcpObserver();
+    initClsObserver();
     // Give the buffered observer callback one task to publish an already-recorded LCP.
     await new Promise(resolve=>setTimeout(resolve,0));
     return performanceSignals();
@@ -409,6 +462,7 @@
         unknownTransferCount,
         resourceCount:resources.length,
         resourceMix:byType,
+        cumulativeLayoutShift:Math.round(latestCls*1000)/1000,
         heaviest:knownResources.slice().sort((a,b)=>(Number(b.transferSize)||0)-(Number(a.transferSize)||0)).slice(0,5).map(r=>({name:sanitizeResourceUrl(r.name),type:r.initiatorType||'other',bytes:Number(r.transferSize)||0,durationMs:Math.round(r.duration||0)}))
       };
     }catch(error){return{available:false,reason:String(error?.message||error)}}
@@ -430,7 +484,262 @@
       const coverage=signals.transferIsLowerBound?` ${signals.unknownTransferCount} transfer size${signals.unknownTransferCount===1?' was':'s were'} unavailable because cached or cross-origin resources may not expose transfer size.`:'';
       out.push(finding({ruleId:'performance.browser.weight',title:'Page transfers an unusually large measurable payload',confidence:'confirmed',detail:`${qualifier}${(signals.transferBytes/1048576).toFixed(1)}MB of measurable transfer was observed across the document and ${signals.resourceCount} resource requests.${coverage}`,category:'review',severity:'medium',targetType:'page',evidence:`known-transfer=${signals.transferBytes} bytes; measured=${signals.measuredTransferCount}; unknown=${signals.unknownTransferCount}`,extra:{performanceObservation:signals}}));
     }
+    if(Number.isFinite(signals.cumulativeLayoutShift)&&signals.cumulativeLayoutShift>0.25){
+      out.push(finding({ruleId:'performance.browser.cls',title:'Layout shift is high in this browser',confidence:'inferred',detail:`Cumulative layout shift was ${signals.cumulativeLayoutShift.toFixed(3)} in this lab observation. This is a current-page measurement in the inspecting browser, not a field Core Web Vitals score.`,category:'review',severity:'medium',targetType:'page',evidence:`cls=${signals.cumulativeLayoutShift}`,extra:{performanceObservation:signals}}));
+    }
     return out;
+  }
+
+  function mixedContentFindings(){
+    if(location.protocol!=='https:')return[];
+    const groups=new Map();
+    const collect=(el,attrName,active)=>{
+      const raw=attr(el,attrName);if(!raw)return;
+      let parsed;try{parsed=new URL(raw,location.href)}catch{return}
+      if(parsed.protocol!=='http:')return;
+      const url=sanitizeHttpUrl(parsed.href);if(!url)return;
+      const key=`${active?'active':'passive'}|${url}`;
+      if(!groups.has(key))groups.set(key,{url,active,attrName,els:[]});
+      groups.get(key).els.push(el);
+    };
+    document.querySelectorAll('script[src]').forEach(el=>collect(el,'src',true));
+    document.querySelectorAll('link[rel~="stylesheet"][href]').forEach(el=>collect(el,'href',true));
+    document.querySelectorAll('iframe[src]').forEach(el=>collect(el,'src',true));
+    document.querySelectorAll('img[src],audio[src],video[src],source[src]').forEach(el=>collect(el,'src',false));
+    document.querySelectorAll('video[poster]').forEach(el=>collect(el,'poster',false));
+    const out=[];
+    for(const row of groups.values()){
+      const first=row.els[0];
+      const inHead=document.head?.contains(first);
+      const tinyImg=!row.active&&first.tagName==='IMG'&&Number(first.width||first.getAttribute?.('width')||0)<=2&&Number(first.height||first.getAttribute?.('height')||0)<=2;
+      out.push(finding({
+        ruleId:row.active?'security.mixed-content':'security.mixed-content-passive',
+        title:row.active?'HTTPS page requests an insecure active resource':'HTTPS page requests an insecure image or media resource',
+        detail:row.active
+          ?`Markup on this HTTPS page points ${first.tagName.toLowerCase()} at ${row.url}. Browsers typically block or restrict active mixed content.`
+          :`Markup on this HTTPS page points ${first.tagName.toLowerCase()} at ${row.url}. This is mixed content in the markup; the browser may upgrade, block, or load it.`,
+        category:'fix',
+        severity:row.active?'high':(tinyImg?'low':'medium'),
+        confidence:'confirmed',
+        element:inHead?null:first,
+        targetType:inHead||!first?'document':'visual',
+        count:row.els.length,
+        evidence:row.url,
+        extra:{resourceUrl:row.url}
+      }));
+    }
+    return out;
+  }
+  function inertLinkFindings(){
+    const groups=new Map();
+    for(const a of document.querySelectorAll('a[href]')){
+      const raw=attr(a,'href');
+      if(!isInertHref(raw))continue;
+      const roles=attr(a,'role').toLowerCase().split(/\s+/).filter(Boolean);
+      if(roles.some(r=>r==='button'||r==='menuitem'||r==='tab'))continue;
+      const key=raw.trim()===''?'empty-href':'javascript-void';
+      if(!groups.has(key))groups.set(key,[]);
+      groups.get(key).push(a);
+    }
+    const out=[];
+    for(const[kind,anchors]of groups){
+      const first=anchors[0];
+      out.push(finding({
+        ruleId:'ux.inert-link',
+        title:kind==='empty-href'?'Link href does not declare a destination':'Link href does not declare a navigation destination',
+        detail:kind==='empty-href'
+          ? `${anchors.length===1?'A link uses':'Links use'} an empty href, so native navigation stays on the current document rather than an explicit destination. This scan did not verify click or keyboard handlers and does not treat the control as broken.`
+          : `${anchors.length===1?'A link uses':'Links use'} a javascript:void href, so native link navigation will not occur. This scan did not verify click or keyboard handlers and does not treat the control as broken.`,
+        category:'review',severity:'low',confidence:'inferred',element:first,count:anchors.length,
+        evidence:kind,extra:{worthChecking:true}
+      }));
+    }
+    return out;
+  }
+  function formHasSubmitter(form){
+    if(form.querySelector('button,input[type="submit" i],input[type="image" i],input[type="button" i],input[type="reset" i]'))return true;
+    const id=form.id;
+    if(!id)return false;
+    try{
+      const sel=`button[form="${CSS.escape(id)}"],input[type="submit" i][form="${CSS.escape(id)}"],input[type="image" i][form="${CSS.escape(id)}"],input[type="button" i][form="${CSS.escape(id)}"],input[type="reset" i][form="${CSS.escape(id)}"]`;
+      return !!document.querySelector(sel);
+    }catch{return false}
+  }
+  function formQualityFindings(){
+    const out=[];
+    document.querySelectorAll('form form').forEach(inner=>{
+      out.push(finding({
+        ruleId:'web.nested-form',
+        title:'A form is nested inside another form',
+        detail:'The live DOM contains a form inside a form. Nested forms are invalid HTML and browsers may ignore the inner form or attach controls to the outer form.',
+        category:'fix',severity:'medium',confidence:'confirmed',element:inner,evidence:'nested-form'
+      }));
+    });
+    document.querySelectorAll('form').forEach(form=>{
+      const actionRaw=attr(form,'action');
+      if(!actionRaw)return;
+      let action;try{action=new URL(actionRaw,location.href)}catch{return}
+      if(!/^https?:$/.test(action.protocol))return;
+      if(formHasSubmitter(form))return;
+      const fields=[...form.querySelectorAll('input,select,textarea')].filter(el=>{
+        const type=attr(el,'type').toLowerCase();
+        return type!=='hidden'&&type!=='submit'&&type!=='button'&&type!=='image'&&type!=='reset';
+      });
+      if(fields.length<=1)return;
+      out.push(finding({
+        ruleId:'ux.form-no-submit',
+        title:'HTML form has an action but no submit control',
+        detail:`A form posts to ${sanitizeHttpUrl(action.href)||'an HTTP(S) action'} and has ${fields.length} visible fields, but no native submit control or button was observed. Scripted submit was not verified, so this is not treated as a confirmed broken form.`,
+        category:'review',severity:'low',confidence:'inferred',targetType:'document',
+        evidence:sanitizeHttpUrl(action.href),extra:{worthChecking:true,resourceUrl:sanitizeHttpUrl(action.href)}
+      }));
+    });
+    document.querySelectorAll('input[type="hidden" i][required],input[type="hidden" i][aria-required="true" i]').forEach(input=>{
+      const name=attr(input,'name').slice(0,80);
+      out.push(finding({
+        ruleId:'ux.hidden-required',
+        title:'A hidden input is marked required',
+        detail:`A type=hidden input${name?` named "${name}"`:''} is marked required. HTML constraint validation typically ignores required on type=hidden, so this is invalid or confusing markup rather than a confirmed submit blocker.`,
+        category:'review',severity:'medium',confidence:'inferred',targetType:'document',
+        evidence:name?`type=hidden; required; name=${name}`:'type=hidden; required'
+      }));
+    });
+    document.querySelectorAll('input[autocomplete]').forEach(input=>{
+      const type=attr(input,'type').toLowerCase()||'text';
+      const auto=attr(input,'autocomplete').toLowerCase();
+      const tokens=auto.split(/\s+/);
+      const wantsEmail=tokens.includes('email');
+      const wantsTel=tokens.some(t=>t==='tel'||t.startsWith('tel-'));
+      if(!wantsEmail&&!wantsTel)return;
+      if(wantsEmail&&type==='email')return;
+      if(wantsTel&&type==='tel')return;
+      if(type!=='text'&&type!=='search'&&type!=='')return;
+      out.push(finding({
+        ruleId:'ux.input-type-mismatch',
+        title:wantsEmail?'Email autocomplete is on a non-email input':'Telephone autocomplete is on a non-tel input',
+        detail:wantsEmail
+          ?`An input declares autocomplete="email" but uses type="${type||'text'}". Use type="email" so browsers can offer email validation and the matching keyboard.`
+          :`An input declares telephone autocomplete but uses type="${type||'text'}". Use type="tel" so browsers can offer a telephone keyboard.`,
+        category:'review',severity:'low',confidence:'inferred',element:input,
+        evidence:`type=${type||'text'}; autocomplete=${auto}`,extra:{worthChecking:true}
+      }));
+    });
+    return out;
+  }
+  function hreflangFindings(){
+    const out=[],seen=new Set();
+    for(const link of document.querySelectorAll('link[rel~="alternate"][hreflang]')){
+      const lang=attr(link,'hreflang');
+      const href=attr(link,'href');
+      if(lang.toLowerCase()!=='x-default'){
+        try{new Intl.Locale(lang)}catch{
+          const key=`lang:${lang}`;if(seen.has(key))continue;seen.add(key);
+          out.push(finding({ruleId:'seo.hreflang-invalid',title:'hreflang language tag is invalid',detail:`An alternate link uses hreflang="${clip(lang,80)}", which is not a valid BCP 47 language tag or x-default.`,category:'fix',severity:'medium',confidence:'confirmed',element:link,targetType:'document',evidence:`lang=${clip(lang,80)}`}));
+          continue;
+        }
+      }
+      if(!href){
+        const key='empty';if(seen.has(key))continue;seen.add(key);
+        out.push(finding({ruleId:'seo.hreflang-invalid',title:'hreflang href is empty',detail:'An alternate hreflang link has no href, so the language annotation cannot identify a URL.',category:'fix',severity:'medium',confidence:'confirmed',element:link,targetType:'document',evidence:'empty-href'}));
+        continue;
+      }
+      try{
+        const u=new URL(href,location.href);
+        if(!/^https?:$/.test(u.protocol)){
+          const key=`scheme:${u.protocol}`;if(seen.has(key))continue;seen.add(key);
+          out.push(finding({ruleId:'seo.hreflang-invalid',title:'hreflang URL uses an unsupported scheme',detail:`hreflang "${lang}" points to a non-HTTP URL. Alternate URLs should resolve to HTTP or HTTPS.`,category:'fix',severity:'medium',confidence:'confirmed',element:link,targetType:'document',evidence:`scheme=${u.protocol||'unsupported'}`}));
+        }
+      }catch{
+        const key=`parse:${href}`;if(seen.has(key))continue;seen.add(key);
+        out.push(finding({ruleId:'seo.hreflang-invalid',title:'hreflang URL is invalid',detail:`hreflang "${clip(lang,80)}" href could not be parsed as a URL.`,category:'fix',severity:'medium',confidence:'confirmed',element:link,targetType:'document',evidence:'unparseable-href'}));
+      }
+    }
+    return out;
+  }
+  function robotsGooglebotFindings(){
+    const robotsEl=document.querySelector('meta[name="robots" i]');
+    const googleEl=document.querySelector('meta[name="googlebot" i]');
+    if(!robotsEl||!googleEl)return[];
+    const robots=robotsIndexState(attr(robotsEl,'content'));
+    const google=robotsIndexState(attr(googleEl,'content'));
+    if(!robots||!google||robots===google)return[];
+    return[finding({
+      ruleId:'seo.robots-googlebot-conflict',
+      title:'robots and googlebot indexing directives disagree',
+      detail:`Meta robots is "${robots}" while googlebot is "${google}". That can be an intentional Google-only override, so confirm the indexing intent before changing it.`,
+      category:'review',severity:'low',confidence:'inferred',element:googleEl,targetType:'document',
+      evidence:`robots=${attr(robotsEl,'content')}; googlebot=${attr(googleEl,'content')}`,extra:{worthChecking:true}
+    })];
+  }
+  function overflowFindings(){
+    const viewportWidth=Number(globalThis.innerWidth||0);
+    if(viewportWidth<200)return[];
+    const root=document.scrollingElement||document.documentElement;
+    const scrollWidth=Math.max(Number(root?.scrollWidth)||0,Number(document.documentElement?.scrollWidth)||0,Number(document.body?.scrollWidth)||0);
+    const overflowPx=Math.round(scrollWidth-viewportWidth);
+    if(overflowPx<16)return[];
+    return[finding({
+      ruleId:'web.horizontal-overflow',
+      title:'Page content overflows the scanned viewport',
+      detail:`At the scanned viewport width of ${viewportWidth}px, document scroll width is ${scrollWidth}px (${overflowPx}px of horizontal overflow). This is an observation at the current width, not proof of a mobile-only defect.`,
+      category:'review',severity:'low',confidence:'inferred',targetType:'page',
+      evidence:`viewport=${viewportWidth}; scrollWidth=${scrollWidth}; overflow=${overflowPx}`,
+      extra:{worthChecking:true,overflowMetrics:{viewportWidth,scrollWidth,overflowPx}}
+    })];
+  }
+  function resourceFailureFindings(){
+    const out=[];
+    let resources=[];
+    try{resources=performance.getEntriesByType('resource')||[]}catch{return out}
+    const failed=new Map();
+    for(const entry of resources){
+      const status=Number(entry.responseStatus);
+      if(!Number.isFinite(status)||status<400)continue;
+      let parsed;try{parsed=new URL(entry.name)}catch{continue}
+      if(parsed.origin!==location.origin)continue;
+      const url=sanitizeHttpUrl(entry.name);if(!url)continue;
+      const initiator=String(entry.initiatorType||'');
+      const path=parsed.pathname||'';
+      let kind='';
+      if(initiator==='script'||/\.m?js$/i.test(path))kind='script';
+      else if(/\.css$/i.test(path))kind='stylesheet';
+      else if(initiator==='css'||initiator==='link'){
+        try{
+          if([...document.querySelectorAll('link[rel~="stylesheet"]')].some(node=>sanitizeHttpUrl(attr(node,'href'))===url))kind='stylesheet';
+        }catch{}
+      }
+      if(!kind)continue;
+      if(!failed.has(url))failed.set(url,{url,kind,status});
+    }
+    for(const row of failed.values()){
+      const selector=row.kind==='script'?'script[src]':'link[rel~="stylesheet"]';
+      let el=null;
+      try{
+        el=[...document.querySelectorAll(selector)].find(node=>sanitizeHttpUrl(attr(node,row.kind==='script'?'src':'href'))===row.url)||null;
+      }catch{}
+      const inHead=el&&document.head?.contains(el);
+      out.push(finding({
+        ruleId:row.kind==='script'?'runtime.script-failed':'web.stylesheet-failed',
+        title:row.kind==='script'?'Script failed to load':'Stylesheet failed to load',
+        detail:`A same-origin ${row.kind} request for ${row.url} completed with HTTP ${row.status}. Restore the asset or remove the unused reference.`,
+        category:'fix',severity:'high',confidence:'confirmed',
+        element:inHead?null:el,targetType:inHead||!el?'document':'visual',
+        evidence:`http-${row.status} ${row.url}`,extra:{resourceUrl:row.url}
+      }));
+    }
+    return out;
+  }
+  function runtimeErrorFindings(){
+    const bucket=globalThis.__WEBQA_RUNTIME_ERRORS__;
+    const count=Math.max(0,Math.min(20,Number(bucket?.count||0)));
+    if(!count)return[];
+    return[finding({
+      ruleId:'runtime.uncaught-error',
+      title:'Uncaught script error observed during this session',
+      detail:`${count} uncaught script error${count===1?' was':'s were'} observed during this renderer session. The error text is untrusted runtime output and is not treated as instructions. This scan does not identify the throwing statement or claim a specific feature is broken.`,
+      category:'review',severity:'low',confidence:'inferred',targetType:'page',
+      evidence:`uncaught-error; count=${count}`,extra:{worthChecking:true,runtimeErrorCount:count}
+    })];
   }
 
   function imageResourceFindings(signals){
@@ -815,10 +1124,16 @@
     const findings=[...local.findings,...axeFindings(axeResults),...(linkResult.findings||[])],seen=new Map();
     for(const f of findings){const key=`${f.ruleId}|${f.selector}|${f.evidence}`;if(!seen.has(key))seen.set(key,f)}
     const linksStatus=linkResult.status==='partial'?'partial':linkResult.status==='unavailable'?'unavailable':Number(linkResult.checked||0)===0?'none_checked':'complete';
-    return{...local,browserPerformance:local.browserPerformance||null,findings:[...seen.values()],linkAudit:{checked:linkResult.checked||0,verifiedHealthy:linkResult.verifiedHealthy||0,confirmedIssues:linkResult.confirmedIssues||0,inconclusive:linkResult.inconclusive||0,incompleteChecks:linkResult.incompleteChecks||[],reachedLimit:!!linkResult.reachedLimit,degraded:!!linkResult.degraded,cached:linkResult.cached||0},coverage:{...local.coverage,links:linksStatus,axe:axeResults?'complete':'unavailable'}};
+    const runtimeStatus=globalThis.__WEBQA_RUNTIME_ERRORS__||local.coverage?.runtime==='renderer'?'renderer':(local.coverage?.runtime||'not applicable');
+    return{...local,browserPerformance:local.browserPerformance||null,findings:[...seen.values()],linkAudit:{checked:linkResult.checked||0,verifiedHealthy:linkResult.verifiedHealthy||0,confirmedIssues:linkResult.confirmedIssues||0,inconclusive:linkResult.inconclusive||0,incompleteChecks:linkResult.incompleteChecks||[],reachedLimit:!!linkResult.reachedLimit,degraded:!!linkResult.degraded,cached:linkResult.cached||0},coverage:{...local.coverage,links:linksStatus,axe:axeResults?'complete':'unavailable',runtime:runtimeStatus}};
   }
 
-  globalThis.WebQARules={run,axeFindings,resolvedTargetState,auditLinks,recheckLink,applyExternalProbeResults,merge,selectorFor,resolveTarget,performanceSignals,preparePerformanceSignals,semanticContextFor,targetContextFor(targetId,selector='',ruleId=''){
+  function recordRuntimeErrors(payload){
+    const count=Math.max(0,Math.min(20,Number(payload?.count||0)));
+    globalThis.__WEBQA_RUNTIME_ERRORS__={count};
+  }
+
+  globalThis.WebQARules={run,axeFindings,resolvedTargetState,auditLinks,recheckLink,applyExternalProbeResults,merge,recordRuntimeErrors,selectorFor,resolveTarget,performanceSignals,preparePerformanceSignals,semanticContextFor,targetContextFor(targetId,selector='',ruleId=''){
     const el=resolveTarget(targetId,selector);if(!el)return null;
     const style=getComputedStyle(el),rect=el.getBoundingClientRect();
     return{found:true,tag:el.tagName.toLowerCase(),selector:selector||selectorFor(el),markup:clip(cleanMarkup(el.outerHTML),1400),text:clip(el.innerText||el.textContent,500),semantics:semanticContextFor(el,ruleId),rect:{x:Math.round(rect.x),y:Math.round(rect.y),width:Math.round(rect.width),height:Math.round(rect.height)},styles:{color:style.color,backgroundColor:style.backgroundColor,fontSize:style.fontSize,fontWeight:style.fontWeight,lineHeight:style.lineHeight,display:style.display,position:style.position}};

@@ -59,6 +59,8 @@ async function openPage(url) {
   const b = await browser();
   const context = await b.newContext({ ignoreHTTPSErrors: false, javaScriptEnabled: true, acceptDownloads: false, serviceWorkers: 'block', viewport: { width: 1365, height: 850 } });
   const page = await context.newPage();
+  const runtimeErrors = { count: 0 };
+  page.on('pageerror', () => { runtimeErrors.count += 1; });
   await page.route('**/*', route => {
     const u = route.request().url();
     if (!/^https?:/i.test(u)) return route.abort('blockedbyclient');
@@ -67,7 +69,7 @@ async function openPage(url) {
   });
   const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 12000 });
   await page.waitForTimeout(900);
-  return { context, page, response };
+  return { context, page, response, runtimeErrors };
 }
 async function targetContext(page, selector) {
   if (!selector) return null;
@@ -94,18 +96,21 @@ app.post('/scan', async (req, res) => {
   let opened;
   try {
     opened = await openPage(url);
-    const { page, response } = opened;
+    const { page, response, runtimeErrors } = opened;
     await page.addScriptTag({ path: path.resolve(__dirname, '../../node_modules/axe-core/axe.min.js') });
     await page.addScriptTag({ path: path.resolve(__dirname, '../../packages/integrity/target-integrity.browser.js') });
     await page.addScriptTag({ path: path.resolve(__dirname, '../../packages/rules/image-purpose.js') });
     await page.addScriptTag({ path: path.resolve(__dirname, '../../packages/rules/browser-rules.js') });
-    const report = await page.evaluate(async () => {
+    const errorCount = Math.max(0, Math.min(20, Number(runtimeErrors?.count || 0)));
+    const report = await page.evaluate(async (runtimeErrorCount) => {
+      try { window.WebQARules.recordRuntimeErrors?.({ count: runtimeErrorCount }); } catch {}
       try { await window.WebQARules.preparePerformanceSignals?.(); } catch {}
       const local = window.WebQARules.run(); let axe = null; let links = { findings: [], checked: 0 };
       try { axe = await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] } }); } catch {}
       try { links = await window.WebQARules.auditLinks({ limit: 30, concurrency: 6, timeoutMs: 3000, retryTimeoutMs: 6000, budgetMs: 10000 }); } catch {}
+      if (runtimeErrorCount >= 0) local.coverage = { ...local.coverage, runtime: 'renderer' };
       return { local, axe, links };
-    });
+    }, errorCount);
     const { local, axe, links } = report;
     // Gateway-authoritative privileged probes (SSRF+DNS per hop). No browser host permissions.
     const externalCandidates = Array.isArray(links?.externalCandidates) ? links.externalCandidates.slice(0, 12) : [];

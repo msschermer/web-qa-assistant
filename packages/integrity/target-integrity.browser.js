@@ -173,7 +173,9 @@ const PAGE_DERIVED_RULE_PREFIXES = [
   'social.',
   'schema.',
   'web.',
-  'security.'
+  'security.',
+  'ux.',
+  'runtime.'
 ];
 
 function isPageDerivedFinding(finding = {}) {
