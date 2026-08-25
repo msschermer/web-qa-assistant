@@ -35,3 +35,43 @@ test('LCP is captured through buffered PerformanceObserver and transfer coverage
   assert.equal(perf.unknownTransferCount,1);
   assert.ok(perf.transferBytes>7_000_000);
 });
+
+test('browser performance resource URLs drop query and hash while keeping origin/path',async()=>{
+  const dirty='https://example.com/hero.jpg?token=supersecret&email=test@example.com#private';
+  const clean='https://cdn.example.org/assets/font.woff2';
+  const nav={requestStart:10,responseStart:100,domContentLoadedEventEnd:200,loadEventEnd:300,duration:300,transferSize:100};
+  const resources=[
+    {name:dirty,initiatorType:'img',transferSize:5_000_000,duration:400},
+    {name:clean,initiatorType:'css',transferSize:40_000,duration:20}
+  ];
+  class PO{
+    constructor(cb){this.cb=cb}
+    observe(){
+      this.cb({getEntries:()=>[{
+        startTime:1200,
+        size:100000,
+        url:dirty,
+        element:{nodeType:1,tagName:'IMG',id:'hero',getAttribute:()=>'',parentElement:null,currentSrc:dirty,src:dirty}
+      }]});
+    }
+  }
+  const context=browserContext({
+    PerformanceObserver:PO,
+    performance:{getEntriesByType:type=>type==='navigation'?[nav]:type==='resource'?resources:type==='paint'?[]:[]}
+  });
+  vm.runInContext(fs.readFileSync('packages/rules/browser-rules.js','utf8'),context);
+  await context.WebQARules.preparePerformanceSignals();
+  const perf=context.WebQARules.performanceSignals();
+
+  assert.equal(perf.lcpElement.url,'https://example.com/hero.jpg');
+  assert.doesNotMatch(perf.lcpElement.url,/token|supersecret|email|test@example\.com|#|private/);
+
+  const heavy=perf.heaviest.find(r=>r.bytes===5_000_000);
+  assert.ok(heavy);
+  assert.equal(heavy.name,'https://example.com/hero.jpg');
+  assert.doesNotMatch(heavy.name,/token|supersecret|email|test@example\.com|#|private/);
+
+  const cleanHeavy=perf.heaviest.find(r=>r.bytes===40_000);
+  assert.ok(cleanHeavy);
+  assert.equal(cleanHeavy.name,clean);
+});
