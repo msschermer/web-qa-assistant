@@ -70,10 +70,12 @@ export function sanitizeMarkupSnippet(html = '', { max = 280 } = {}) {
 export function suggestedMarkupFor(ruleId = '') {
   const id = String(ruleId || '');
   if (/viewport-missing/i.test(id)) return '<meta name="viewport" content="width=device-width, initial-scale=1">';
+  if (/viewport-overflow|viewport-fixed/i.test(id)) return '<meta name="viewport" content="width=device-width, initial-scale=1">';
   if (/title-missing/i.test(id)) return '<title>Descriptive page title</title>';
   if (/lang-missing/i.test(id)) return '<html lang="en">';
   if (/charset-missing/i.test(id)) return '<meta charset="utf-8">';
   if (/description-missing/i.test(id)) return '<meta name="description" content="…">';
+  if (/hreflang/i.test(id)) return '<link rel="alternate" hreflang="en" href="/en">';
   return '';
 }
 
@@ -83,10 +85,10 @@ export function targetabilityFor(finding = {}) {
   }
   const type = String(finding.targetType || '');
   const rule = String(finding.ruleId || '');
-  if (/viewport|canonical|robots|charset|meta-refresh|noindex|title-missing|description-missing|jsonld|canonical-path-conflict|noindex-self-canonical/i.test(rule)) {
+  if (/viewport|canonical|robots|charset|meta-refresh|noindex|title-missing|description-missing|jsonld|canonical-path-conflict|noindex-self-canonical|hreflang|viewport-overflow/i.test(rule)) {
     return TARGETABILITY.markup;
   }
-  if (/ttfb|weight|transfer|robots-block|canonical-mismatch|title-mismatch|robots-mismatch/i.test(rule)) {
+  if (/ttfb|weight|transfer|robots-block|canonical-mismatch|title-mismatch|robots-mismatch|uncaught-error|horizontal-overflow|performance\.browser\.cls/i.test(rule)) {
     return TARGETABILITY.document;
   }
   // Slow LCP with a resolved element stays spotlightable; bare LCP without selector is document.
@@ -110,8 +112,11 @@ export function lensesFor(finding = {}) {
   if (finding.link?.prominence === 'navigation' || finding.link?.prominence === 'cta') {
     if (!lenses.includes('ux')) lenses.unshift('ux');
   }
-  if (/performance\.browser\.lcp|image-oversized|lcp-image/i.test(String(finding.ruleId || ''))) {
+  if (/performance\.browser\.lcp|image-oversized|lcp-image|cls|overflow/i.test(String(finding.ruleId || ''))) {
     for (const l of ['performance', 'ux', 'development']) if (!lenses.includes(l)) lenses.push(l);
+  }
+  if (/inert-link|form-no-submit|hidden-required/i.test(String(finding.ruleId || ''))) {
+    if (!lenses.includes('ux')) lenses.unshift('ux');
   }
   return lenses;
 }
@@ -119,12 +124,12 @@ export function lensesFor(finding = {}) {
 export function fixOwnerFor(finding = {}) {
   if (finding.fixOwner && FIX_OWNERS.includes(finding.fixOwner)) return finding.fixOwner;
   const rule = String(finding.ruleId || '');
-  if (/noindex|canonical|robots|title|description|schema/i.test(rule)) return 'seo';
-  if (/link-|fragment/i.test(rule)) return 'developer';
+  if (/noindex|canonical|robots|title|description|schema|hreflang/i.test(rule)) return 'seo';
+  if (/link-|fragment|inert-link/i.test(rule)) return 'developer';
   if (/ttfb/i.test(rule)) return 'infrastructure';
   if (/axe\.|a11y\./i.test(rule)) return 'mixed';
-  if (/performance|image-oversized|weight/i.test(rule)) return 'developer';
-  if (/security/i.test(rule)) return 'developer';
+  if (/performance|image-oversized|weight|cls/i.test(rule)) return 'developer';
+  if (/security|mixed-content/i.test(rule)) return 'developer';
   return 'developer';
 }
 
@@ -137,7 +142,7 @@ export function rootCauseKeyFor(finding = {}) {
   }
   if (finding.resourceUrl) return `resource:${rule}|${hash(finding.resourceUrl)}`;
   if (/web\.duplicate-id/.test(rule) && finding.evidence) return `dup-id:${hash(finding.evidence)}`;
-  if (/viewport|charset|canonical-missing|title-missing|lang-missing|noindex$/.test(rule)) return `doc:${rule}`;
+  if (/viewport|charset|canonical-missing|title-missing|lang-missing|noindex$|viewport-overflow|horizontal-overflow/i.test(rule)) return `doc:${/viewport|overflow/i.test(rule)?'viewport-layout':rule}`;
   return `rule:${rule}|${finding.selector || finding.id || finding.fingerprint || hash(finding.evidence || finding.title || '')}`;
 }
 
@@ -285,6 +290,44 @@ export function applyPerformanceCorrelations(findings = [], browserPerformance =
 }
 
 /**
+ * Combine viewport metadata issues with observed horizontal overflow at the
+ * scanned width. Does not claim the viewport is the sole cause.
+ */
+export function applyResponsiveCorrelations(findings = []) {
+  const out = [...findings];
+  const overflow = out.find(f => f.ruleId === 'web.horizontal-overflow');
+  const viewport = out.find(f => /web\.viewport-(fixed|missing)/.test(String(f.ruleId || '')));
+  if (!overflow || !viewport) return out;
+  const metrics = overflow.overflowMetrics || {};
+  const key = 'viewport-layout';
+  viewport.rootCauseKey = key;
+  overflow.rootCauseKey = key;
+  viewport.supersededBy = 'correlation.viewport-overflow';
+  overflow.supersededBy = 'correlation.viewport-overflow';
+  if (out.some(f => f.ruleId === 'correlation.viewport-overflow')) return out;
+  out.push({
+    id: `correlation.viewport-overflow:${hash(`${viewport.ruleId}|${overflow.evidence || ''}`)}`,
+    ruleId: 'correlation.viewport-overflow',
+    title: 'Viewport configuration coincides with horizontal overflow',
+    detail: `Viewport metadata is ${/missing/.test(viewport.ruleId) ? 'missing' : 'fixed to a pixel width'}, and ${metrics.overflowPx || 'measurable'}px of horizontal overflow was observed at ${metrics.viewportWidth || 'the scanned'}px. Start by restoring a responsive viewport; a wide child, 100vw box, or table can still overflow after that change.`,
+    category: 'review',
+    severity: 'medium',
+    confidence: 'inferred',
+    targetType: 'document',
+    targetability: TARGETABILITY.markup,
+    scope: 'markup',
+    sources: ['browser'],
+    evidence: `${viewport.evidence || viewport.ruleId}; ${overflow.evidence || 'overflow'}`,
+    overflowMetrics: metrics,
+    fingerprint: hash(`viewport-overflow|${viewport.ruleId}|${overflow.evidence || ''}`),
+    verification: { state: 'inferred', method: 'viewport markup plus overflow observation', attempts: 1, evidence: [] },
+    count: 1,
+    rootCauseKey: key
+  });
+  return out;
+}
+
+/**
  * Secondary review/inconclusive/context items grouped for "Worth checking further".
  * Confirmed material RO leads are excluded.
  */
@@ -299,6 +342,7 @@ export function composeWorthChecking(findings = [], attentionGroups = []) {
     if (f.frankVisible === false) {
       const linkReview = f.signal === 'navigation.link-review'
         || /link-review|link-timeout|http-403|http-429|forbidden response|rate-limited|unauthorized response/i.test(`${f.ruleId || ''} ${f.title || ''} ${f.detail || ''}`);
+      if (f.worthChecking === true) return true;
       return f.confidence === 'inconclusive' && linkReview;
     }
     if (f.category === 'context') return true;

@@ -124,6 +124,7 @@ export function safePerformance(value = {}) {
     unknownTransferCount: Number(value.unknownTransferCount || 0), transferIsLowerBound: Boolean(value.transferIsLowerBound),
     resourceMix: sanitizeStructured(value.resourceMix || {}),
     lcpElement: value.lcpElement ? { tag: sanitizeText(value.lcpElement.tag, 40), selector: sanitizeSelector(value.lcpElement.selector), url: sanitizeUrl(value.lcpElement.url || ''), size: Number(value.lcpElement.size || 0) } : null,
+    cumulativeLayoutShift: Number.isFinite(Number(value.cumulativeLayoutShift)) ? Number(value.cumulativeLayoutShift) : undefined,
     heaviest: (value.heaviest || []).slice(0, 5).map(row => ({ type: sanitizeText(row.type, 60), bytes: Number(row.bytes || 0), durationMs: Number(row.durationMs || 0), name: sanitizeUrl(row.name || '') }))
   };
 }
