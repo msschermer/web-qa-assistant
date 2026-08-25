@@ -1,5 +1,5 @@
-Web QA Assistant 1.7.2
+Web QA Assistant 1.7.3
 
-Automated validation: 227/227 tests PASS; npm run check PASS; npm run build:extension PASS; RELEASE_TAG=v1.7.2 npm run release:validate PASS.
+Automated validation: 263/263 tests PASS; npm run check PASS; npm run build:extension PASS; RELEASE_TAG=v1.7.3 npm run release:validate PASS. Docker validation unavailable locally (not fabricated). Doctor PASS for repo readiness; deployed gateway remains v1.7.2 until production upgrade.
 
-Contents: 1.7.1 cross-discipline workspace plus target-integrity safe suppression for blocked/substituted renderer targets, renderer Docker integrity packaging, and stable shared-network alias web-qa-api for Caddy routing.
+Contents: 1.7.2 target-integrity baseline plus product-quality attention balance, honest current-page performance coverage, uncertain image-alt demotion, title/lang duplicate quieting, blank-opener security representation, Frank contrast/uncertain-image guidance, browser performance resource URL sanitization, and MCP review policy re-application. Candidate lineage on main before release metadata: d1edd41, f82f50b, bf14fa2, d3aa3b9. Release preparation from frozen HEAD d3aa3b9452c1c853210720d65d51d26b39b4b122.

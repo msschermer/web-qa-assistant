@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Web QA Assistant",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "description": "Evidence-first web QA with guided engineering investigation by Frank.",
   "minimum_chrome_version": "116",
   "permissions": [
@@ -39,6 +39,6 @@
     "48": "icons/48.png",
     "128": "icons/128.png"
   },
-  "version_name": "1.7.2 cross-discipline QA workspace",
+  "version_name": "1.7.3 product-quality attention balance",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwcHr722jLpd3z7UvU9FOSD2GrZ81X6Qs3rhfmA/gJrrGwoLn/Nl+WM8aVWD3U5S5KPAq3+dbycxR28WQvgRlot/aX2D0lH+3vVg5hLJfNp07hZFMZnncx///NMTnHZbP4+iffgI41hwNNgWPiY2+rPAaUgKR+mwv89vPOWKq1WjPSk35Syz+oySYPKWzSOhSWnnYiliR5dtMFHWkGGaotYcMhXFvt7WUXweubsLPqBc19JEdvXjiloeaO9rAcwS4VBKN8fyQwfyk/tj114S2ynEFJsnoSIqx9GxWm6MGMP/nMv6nBGCrO8xLRlaBEUX+gFt4+xsSvyPEkjWcn/LjRQIDAQAB"
 }

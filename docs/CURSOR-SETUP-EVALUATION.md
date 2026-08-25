@@ -117,7 +117,7 @@ Reviewed: no additional provider API key or fixed subscription is required, but 
 The following were validated on the post-v1.7.2 Cursor workspace:
 
 1. Cursor discovers the project-local `webqa` MCP from `.cursor/mcp.json`.
-2. `webqa_health` reports gateway health and version (currently v1.7.2 at `https://assistant.msschermer.us`).
+2. `webqa_health` reports gateway health and version (use it to confirm the deployed release at `https://assistant.msschermer.us`).
 3. `webqa_scan_url` provides end-to-end renderer evidence; blocked/WAF outcomes correctly withhold page-derived QA.
 4. Cursor native Browser works for ordinary public-page evidence when available in the Agent session.
 5. `node tools/cursor-webqa/doctor.mjs` passes required local checks.

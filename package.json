@@ -1,6 +1,6 @@
 {
   "name": "web-qa-assistant",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "private": true,
   "type": "module",
   "description": "Connected web QA with Frank, an AI-guided engineering investigation layer grounded in deterministic evidence.",

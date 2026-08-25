@@ -160,6 +160,6 @@ Use a stronger/third-party model deliberately for difficult architecture or fina
 
 ## Operational notes
 
-- Current deployed product release: **v1.7.2** at `https://assistant.msschermer.us`.
+- Use `webqa_health` to confirm the deployed gateway version at `https://assistant.msschermer.us`.
 - Local Windows Docker is not required for Cursor development. Production Docker validation happens on the droplet.
 - Stage Cursor tooling deliberately. Do not use `git add .`; keep product release files and workspace tooling in separate intentional commits.

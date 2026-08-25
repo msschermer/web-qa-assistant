@@ -13,7 +13,7 @@ const LOCAL_APIS = ['http://localhost:3000', 'http://localhost:8787'];
 const GATEWAY_TIMEOUT_MS = 10000;
 const FRANK_TIMEOUT_MS = 16000;
 const dirtyTimers = new Map();
-const RELEASE_VERSION = '1.7.2';
+const RELEASE_VERSION = '1.7.3';
 
 function diagnosticHash(input){let h=2166136261;for(let i=0;i<input.length;i++){h^=input.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36).toUpperCase()}
 function requestId(operation='REQ'){return `WQA-${operation}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,7).toUpperCase()}`}

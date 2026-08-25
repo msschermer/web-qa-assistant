@@ -8,7 +8,7 @@ test('normalizeReleaseText converts CRLF to LF for cross-platform release checks
 });
 
 test('provenanceMatchesVersion accepts CRLF or LF provenance headers', () => {
-  const version = '1.7.2';
+  const version = '1.7.3';
   assert.equal(provenanceMatchesVersion(`Web QA Assistant ${version}\n\nAutomated validation`, version), true);
   assert.equal(provenanceMatchesVersion(`Web QA Assistant ${version}\r\n\r\nAutomated validation`, version), true);
   assert.equal(provenanceMatchesVersion(`Web QA Assistant 1.7.1\n\nAutomated validation`, version), false);
