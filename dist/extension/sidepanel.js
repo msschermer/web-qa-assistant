@@ -1,4 +1,4 @@
-globalThis.__WEBQA_BUILD_REVISION__="f09b41dd7c4b";
+globalThis.__WEBQA_BUILD_REVISION__="d92a55b6a9ef";
 import { localFrankRuntime, localFrankWalkthrough, probeLocalAi, setLocalAiTraceSink, localAiDiagnostics } from './local-ai.js';
 import { presentFinding, presentArea, QA_AREA_ORDER } from './presentation.js';
 import { RuntimeTrace, buildBugReport, bugReportPrivacySummary } from './bug-report.js';
