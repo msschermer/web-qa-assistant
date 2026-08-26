@@ -413,6 +413,28 @@ function renderOverviewOnly() {
 
 function render() {
   if (!report) return;
+  try {
+    renderUnsafe();
+  } catch (error) {
+    runtimeTrace.record('sidepanel-render-failed', {
+      stage: 'result-render',
+      code: 'SIDEPANEL_RENDER_FAILED',
+      operation: 'RENDER',
+      recoverable: true,
+      coverageImpact: 'none'
+    });
+    notice('Scan evidence is available, but the results panel hit a display error. Try Rescan, or use Report Bug.', 'warn');
+    try {
+      document.body.dataset.hasReport = 'true';
+      $('#summary').hidden = false;
+      $('#idle-state').hidden = true;
+      if (report?.page) $('#host').textContent = report.page.hostname || report.page.url || '';
+      renderOverviewOnly();
+    } catch {}
+  }
+}
+
+function renderUnsafe() {
   document.body.dataset.hasReport = 'true';
   $('#summary').hidden = false;
   $('#idle-state').hidden = true;
@@ -928,7 +950,7 @@ async function rescan() {
         const connection = $('#connection-settings'); if (connection) connection.open = true;
         notice('Browser QA completed locally. The saved assistant access key was rejected. Verify the key under Connection settings to restore connected services.', 'warn');
       } else if (report.connectedMode === 'unavailable') notice('Browser QA completed. The assistant gateway could not be reached. Browser QA remains available with local evidence and verified guidance.', 'warn');
-      else if (limited.length) notice(`Scan complete with limited coverage in ${limited.length} area${limited.length === 1 ? '' : 's'}: ${limited.slice(0, 4).join('; ')}.`, 'warn');
+      else if (limited.length) notice(`Scan complete. Limited coverage in ${limited.length} area${limited.length === 1 ? '' : 's'}: ${limited.slice(0, 4).join('; ')}.`, 'warn');
       else notice(`Scan complete at ${scanned}.`, 'ok');
       if (tab?.id && report?.page?.url) {
         await send({
@@ -1210,6 +1232,13 @@ async function restoreWorkspaceOrRescan({ tabId = null, pageUrl = '', preferRest
       const stored = String(workspace.buildRevision || workspace.report?.buildRevision || '').trim();
       if (isStaleBuildRevision(currentBuildRevision(), stored)) {
         await send({ type: 'CLEAR_WORKSPACE_SNAPSHOT', tabId: useTabId }, 4000).catch(() => {});
+        runtimeTrace.record('hydration-stale-build', {
+          stage: 'hydration',
+          code: 'STALE_BUILD_REVISION',
+          operation: 'RESTORE_WORKSPACE',
+          recoverable: true,
+          coverageImpact: 'none'
+        });
         notice('Extension updated. Refreshing this page assessment…', 'warn');
         await rescan();
         return { restored: false, staleBuild: true };

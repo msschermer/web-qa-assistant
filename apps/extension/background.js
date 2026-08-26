@@ -6,7 +6,7 @@ import { applyFindingPolicy } from './policy.js';
 import { attachTargetIntegrity, finalizeBlockedTargetReport } from './apply-report.js';
 import { IMPACT_CLASSES } from './impact.js';
 import { gatewayContextEnvelope, gatewayFrankGraph } from './evidence-contract.js';
-import { explainCoverageReasons, resolvePerformanceCoverage } from './coverage.js';
+import { explainCoverageReasons, resolvePerformanceCoverage, reconcilePerformanceCoverage } from './coverage.js';
 
 const LIVE_API = 'https://assistant.msschermer.us';
 const LOCAL_APIS = ['http://localhost:3000', 'http://localhost:8787'];
@@ -164,7 +164,14 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
   (async()=>{
   if(msg.type==='SCAN_ACTIVE'){const current=await activeTab(),report=await localScan(current);return{tab:{id:current.id,windowId:current.windowId,url:report.page.url},report}}
   if(msg.type==='SCAN_TAB'){const report=await scanExistingTab(msg.tabId);const current=await chrome.tabs.get(msg.tabId).catch(()=>null);return{tab:{id:msg.tabId,windowId:current?.windowId,url:report.page.url},report}}
-  if(msg.type==='ENRICH'){const enriched=await enrich(msg.report,msg.tabId||null);if(msg.tabId&&enriched?.page?.url)await updateState({id:msg.tabId,url:enriched.page.url},enriched);return{report:enriched}}
+  if(msg.type==='ENRICH'){
+    const enriched=await enrich(msg.report,msg.tabId||null);
+    if(msg.tabId&&enriched?.page?.url){
+      try{await updateState({id:msg.tabId,url:enriched.page.url},enriched)}
+      catch(error){console.error(`[Web QA Assistant ${RELEASE_VERSION}] updateState after ENRICH failed`,error)}
+    }
+    return{report:enriched}
+  }
   if(msg.type==='PREPARE_FRANK')return prepareFrank(msg);
   if(msg.type==='CLOUD_FRANK_PLAN')return cloudFrankPlan(msg);
   if(msg.type==='FRANK_START_PLAN')return startFrankPlan(msg);
@@ -255,10 +262,13 @@ async function contextualize(report,context=null){
   const attention=composeReportAttention(findings,{limit:8});
   const next={...finalized,environment,page:{...finalized.page,environment},findings,attention:{groups:attention.groups.map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead.id,selectors:g.selectors,instanceIds:g.instances.map(x=>x.id),rootCauseKey:g.lead.rootCauseKey||g.key,targetability:g.lead.targetability||'',lenses:g.lead.lenses||[]})),worthChecking:(attention.worthChecking||[]).map(w=>({key:w.key,title:w.title,scope:w.scope,lens:w.lens,fixOwner:w.fixOwner,size:w.size,instanceCount:w.instanceCount,findingIds:w.findings.map(f=>f.id)})),classCounts:attention.classCounts,materialGroupCount:attention.materialGroupCount,materialFindingCount:attention.materialFindingCount,representedClasses:attention.representedClasses,classLabels:Object.fromEntries(Object.entries(IMPACT_CLASSES).map(([k,v])=>[k,v.label]))},priorityBrief:finalized.priorityBrief||report.priorityBrief||null,targetIntegrityBlocked:finalized.targetIntegrityBlocked||false};
   next.coverageReasons=explainCoverageReasons(next);
-  return next;
+  return reconcilePerformanceCoverage(next);
 }
 function mergeGatewayReport(local,remote){
   if(!remote)return local;
+  const browserPerformance = local.browserPerformance?.available
+    ? local.browserPerformance
+    : (remote.browserPerformance || local.browserPerformance);
   if(remote.linkAudit?.privilegedProbe==='gateway'){
     const probed=new Set((remote.findings||[]).map(f=>f?.link?.url).filter(Boolean));
     const localExtra=(local.linkAudit?.incompleteChecks||[]).filter(c=>{
@@ -270,11 +280,26 @@ function mergeGatewayReport(local,remote){
     const incompleteChecks=[...(remote.linkAudit?.incompleteChecks||[]),...localExtra];
     const linkAudit={...(remote.linkAudit||{}),incompleteChecks,inconclusive:incompleteChecks.length,reachedLimit:Boolean(remote.linkAudit?.reachedLimit||local.linkAudit?.reachedLimit||localExtra.length)};
     const linksCoverage=incompleteChecks.length?'partial':(remote.coverage?.links||local.coverage?.links);
-    return{...local,...remote,page:{...(remote.page||{}),...(local.page||{}),environment:remote.page?.environment||local.page?.environment},findings:remote.findings||local.findings,linkAudit,coverage:{...(local.coverage||{}),...(remote.coverage||{}),links:linksCoverage}};
+    return reconcilePerformanceCoverage({
+      ...local,
+      ...remote,
+      page:{...(remote.page||{}),...(local.page||{}),environment:remote.page?.environment||local.page?.environment},
+      findings:remote.findings||local.findings,
+      linkAudit,
+      browserPerformance,
+      coverage:{...(local.coverage||{}),...(remote.coverage||{}),links:linksCoverage}
+    });
   }
   const byId=new Map((local.findings||[]).map(f=>[f.id||f.fingerprint,f]));
   const findings=(remote.findings||[]).map(r=>{const l=byId.get(r.id||r.fingerprint);if(!l)return r;return{...r,selector:l.selector||r.selector,targetId:l.targetId||r.targetId,targetType:l.targetType||r.targetType,evidence:l.evidence??r.evidence,axe:l.axe,link:l.link||r.link,verification:r.verification||l.verification};});
-  return{...local,...remote,page:{...(remote.page||{}),...(local.page||{}),environment:remote.page?.environment||local.page?.environment},findings,linkAudit:local.linkAudit||remote.linkAudit};
+  return reconcilePerformanceCoverage({
+    ...local,
+    ...remote,
+    page:{...(remote.page||{}),...(local.page||{}),environment:remote.page?.environment||local.page?.environment},
+    findings,
+    linkAudit:local.linkAudit||remote.linkAudit,
+    browserPerformance
+  });
 }
 function snapshotFinding(f){return{fingerprint:f.fingerprint,ruleId:f.ruleId,title:f.title,detail:f.detail,category:f.category,severity:f.severity,confidence:f.confidence,selector:f.selector||'',sources:f.sources||[]}}
 async function updateState(tab,report){

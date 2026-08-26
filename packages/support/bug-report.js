@@ -27,7 +27,7 @@ const TRACE_KEYS = new Set(['status','progress','code','fromUserGesture','priorS
 const TRACE_IGNORE = /^(frank-readiness|local-ai:readiness)$/;
 const HIGH_SIGNAL_TRACE = new Set([
   'scan-start','scan_started','scan-complete','scan_completed','scan-enrichment-failed','scan-failed',
-  'gateway-test-start','gateway-test-complete','frank-request','frank-reasoning','frank-started',
+  'sidepanel-render-failed','hydration-stale-build','gateway-test-start','gateway-test-complete','frank-request','frank-reasoning','frank-started',
   'local-ai:session-create-failed','local-ai:prompt-rejected','local-ai:prompt-accepted','local-ai:prompt-start'
 ]);
 const PAGE_ERROR_RULES = new Set(['runtime.uncaught-error']);
@@ -441,7 +441,7 @@ function stageForOperation(operation = '') {
   return 'service-worker';
 }
 
-function projectWebqaDiagnostics({ lastDiagnostic, report, lastScanAttempt, includeContext }) {
+function projectWebqaDiagnostics({ lastDiagnostic, report, lastScanAttempt, includeContext, trace = [] }) {
   const errors = [];
   if (lastDiagnostic?.id) {
     errors.push({
@@ -452,6 +452,18 @@ function projectWebqaDiagnostics({ lastDiagnostic, report, lastScanAttempt, incl
       at: clip(lastDiagnostic.timestamp, 60),
       recoverable: true,
       coverageImpact: /ENRICH|CONTEXT/i.test(String(lastDiagnostic.operation || '')) ? 'enrichment' : 'scan'
+    });
+  }
+  for (const row of trace || []) {
+    if (row?.type !== 'sidepanel-render-failed' && row?.type !== 'hydration-stale-build') continue;
+    errors.push({
+      kind: 'webqa_error',
+      stage: clip(row.data?.stage || (row.type === 'hydration-stale-build' ? 'hydration' : 'result-render'), 40),
+      code: clip(row.data?.code || row.type, 80),
+      operation: clip(row.data?.operation || row.type, 40),
+      at: clip(row.at, 60),
+      recoverable: row.data?.recoverable !== false,
+      coverageImpact: clip(row.data?.coverageImpact || 'none', 40)
     });
   }
   if (report?.connectedMode === 'unavailable' || report?.connectedError) {
@@ -788,7 +800,7 @@ export function buildBugReport({
     performance: projectPerformance(reportForProjection),
     links: projectLinks(reportForProjection),
     pageDiagnostics: projectPageDiagnostics(reportForProjection, includeContext),
-    webqaDiagnostics: projectWebqaDiagnostics({ lastDiagnostic, report: reportForProjection, lastScanAttempt, includeContext }),
+    webqaDiagnostics: projectWebqaDiagnostics({ lastDiagnostic, report: reportForProjection, lastScanAttempt, includeContext, trace }),
     frank: projectFrank({ frank, localAi, includeContext }),
     timeline: projectTimeline({ trace, report: reportForProjection, lastDiagnostic })
   };
