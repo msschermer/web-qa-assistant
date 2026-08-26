@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Frame and interaction matrix</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+  <h1>Frame and interaction matrix</h1>
+  <p>Synthetic parent page for same-origin iframe and safe disclosure checks.</p>
+
+  <button type="button" id="good-toggle" aria-expanded="false" aria-controls="good-panel">Working section</button>
+  <div id="good-panel" hidden>Working panel content</div>
+
+  <button type="button" id="broken-toggle" aria-expanded="false" aria-controls="broken-panel">Broken section</button>
+  <div id="broken-panel" hidden>Broken panel content</div>
+
+  <form action="https://example.com/checkout" method="post">
+    <button type="submit" id="unsafe-buy" aria-expanded="false" aria-controls="buy-panel">Buy now</button>
+    <div id="buy-panel" hidden>Should never be activated by WebQA</div>
+  </form>
+
+  <iframe id="so-frame" title="Same-origin embed" width="480" height="240"
+    srcdoc="&lt;!DOCTYPE html&gt;&lt;html&gt;&lt;head&gt;&lt;meta charset='utf-8'&gt;&lt;/head&gt;&lt;body&gt;&lt;h1&gt;Embedded child&lt;/h1&gt;&lt;form action='https://example.com/embed-post' method='post'&gt;&lt;input placeholder='Name only' type='text'&gt;&lt;button type='submit'&gt;Send&lt;/button&gt;&lt;/form&gt;&lt;img src='/missing-frame-photo.png' width='120' height='80' alt=''&gt;&lt;/body&gt;&lt;/html&gt;"></iframe>
+  <iframe id="xo-frame" src="https://cdn.example.net/widget/embed" width="480" height="240"></iframe>
+</body>
+</html>

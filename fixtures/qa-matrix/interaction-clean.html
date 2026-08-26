@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Quiet interaction control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+  <h1>Quiet interaction control</h1>
+  <p>Working disclosure and no broken embeds.</p>
+  <button type="button" id="ok-toggle" aria-expanded="false" aria-controls="ok-panel">Details</button>
+  <div id="ok-panel" hidden>Ok panel</div>
+  <script>
+    document.getElementById('ok-toggle').addEventListener('click', function () {
+      var open = this.getAttribute('aria-expanded') === 'true';
+      this.setAttribute('aria-expanded', open ? 'false' : 'true');
+      document.getElementById('ok-panel').hidden = open;
+    });
+  </script>
+</body>
+</html>

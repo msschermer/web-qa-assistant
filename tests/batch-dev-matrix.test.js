@@ -54,7 +54,9 @@ test('clean control stays quiet for new batch rule families', () => {
     'seo.soft-404-probable', 'runtime.unhandled-rejection', 'runtime.font-failed',
     'ux.placeholder-only-label', 'ux.form-control-missing-name', 'seo.hreflang-duplicate-target',
     'schema.jsonld-missing-type', 'ux.disclosure-target-missing', 'navigation.skip-link-target-missing',
-    'ux.iframe-missing-title', 'ux.controls-target-missing'
+    'ux.iframe-missing-title', 'ux.controls-target-missing', 'ux.disclosure-toggle-failed',
+    'runtime.resource-failed-cross-origin', 'ux.embed-resource-failed', 'web.iframe-title-missing',
+    'performance.browser.weight-dominant-resource'
   ];
   for (const id of batchRules) assert.equal(ruleIds(report).includes(id), false, id);
 });
