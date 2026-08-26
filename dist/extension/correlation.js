@@ -295,7 +295,45 @@ export function applyPerformanceCorrelations(findings = [], browserPerformance =
       if (heavy || oversized) {
         lcpFinding.supersededBy = heavy ? 'performance.browser.lcp-heavy-image' : 'performance.browser.lcp-image-oversized';
       }
+      // Quiet generic image-oversized twins for the same selected LCP resource.
+      const lcpSrc = String(oversized?.resourceUrl || lcpEl.url || '');
+      for (const f of out) {
+        if (f.ruleId !== 'performance.browser.image-oversized') continue;
+        const src = String(f.resourceUrl || f.imageMetrics?.selectedSource || '');
+        if (src && lcpSrc && (src === lcpSrc || src.endsWith(lcpSrc) || lcpSrc.endsWith(src))) {
+          f.supersededBy = 'performance.browser.lcp-image-oversized';
+          f.rootCauseKey = key;
+        }
+      }
     }
+  }
+  // Quiet generic twins whenever an LCP oversized finding exists (even without bare LCP timing finding).
+  const lcpOversizeLead = out.find(f => f.ruleId === 'performance.browser.lcp-image-oversized');
+  if (lcpOversizeLead) {
+    const key = lcpOversizeLead.rootCauseKey
+      || (lcpOversizeLead.resourceUrl ? `lcp-resource:${hash(lcpOversizeLead.resourceUrl)}` : 'lcp-resource:unknown');
+    lcpOversizeLead.rootCauseKey = key;
+    const lcpSrc = String(lcpOversizeLead.resourceUrl || lcpOversizeLead.imageMetrics?.selectedSource || '');
+    for (const f of out) {
+      if (f.ruleId !== 'performance.browser.image-oversized') continue;
+      const src = String(f.resourceUrl || f.imageMetrics?.selectedSource || '');
+      if (src && lcpSrc && (src === lcpSrc || src.endsWith(lcpSrc) || lcpSrc.endsWith(src))) {
+        f.supersededBy = 'performance.browser.lcp-image-oversized';
+        f.rootCauseKey = key;
+      }
+    }
+  }
+  // Ensure non-LCP oversized share one family key for Recommended Order grouping.
+  for (const f of out) {
+    if (f.ruleId !== 'performance.browser.image-oversized') continue;
+    if (f.supersededBy) continue;
+    if (f.imageMetrics?.magnitude === 'mild' || f.rootCauseKey === 'images-oversized-mild') {
+      f.rootCauseKey = 'images-oversized-mild';
+      f.frankVisible = false;
+      f.worthChecking = true;
+      continue;
+    }
+    f.rootCauseKey = 'images-oversized';
   }
   const weight = out.find(f => f.ruleId === 'performance.browser.weight');
   if (weight && Array.isArray(browserPerformance.heaviest) && browserPerformance.heaviest[0]?.bytes) {

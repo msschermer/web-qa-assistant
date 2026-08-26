@@ -259,10 +259,22 @@ function projectPerformance(report) {
   );
   const labCoverage = labReady ? 'available' : (perf.available === true ? 'partial' : 'unavailable');
   const monitorReason = clip(report?.coverageReasons?.performance, 60);
-  const historical = /connector|not monitored|enrichment|unavailable/i.test(String(report?.coverage?.performance || '') + String(monitorReason || ''))
-    || String(report?.coverage?.performance || '') === 'not monitored'
-    ? 'unavailable'
-    : (String(report?.coverage?.performance || '') === 'complete' ? 'available' : 'unavailable');
+  const ctxPerf = report?.context?.performance?.data
+    || report?.context?.services?.performance?.data
+    || report?.context?.performance
+    || report?.performanceMonitor;
+  const monitorFromEvidence = ctxPerf?.monitored === true
+    || ctxPerf?.available === true
+    || (Array.isArray(report?.findings) && report.findings.some(f => /^performance\.(mobile|desktop)(-|$)/.test(String(f.ruleId || ''))));
+  const historical = monitorFromEvidence
+    ? 'available'
+    : (/connector|not monitored|enrichment|unavailable/i.test(String(report?.coverage?.performance || '') + String(monitorReason || ''))
+      || String(report?.coverage?.performance || '') === 'not monitored'
+      || String(report?.coverage?.performance || '') === 'current-page'
+      || String(report?.coverage?.performance || '') === 'partial'
+      || String(report?.coverage?.performance || '') === 'local-only'
+      ? 'unavailable'
+      : (String(report?.coverage?.performance || '') === 'complete' ? 'available' : 'unavailable'));
   return {
     observationScope: 'current-page-lab',
     available: perf.available === true,

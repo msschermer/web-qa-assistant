@@ -18,6 +18,53 @@ export function resolvePerformanceCoverage(baseCoverage = {}, browserPerformance
   return 'complete';
 }
 
+/**
+ * User-facing coverage limitation labels for the side-panel banner.
+ * Must stay aligned with Report Bug coverageReasons + coverage status.
+ * Historical performance unavailability is not treated as failed lab collection.
+ */
+export function limitedCoverageLabels(report = {}) {
+  const labels = [];
+  const reasons = report.coverageReasons || {};
+  const coverage = report.coverage || {};
+  const seen = new Set();
+  const push = (label) => {
+    const key = String(label || '').toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    labels.push(label);
+  };
+  for (const [area, reason] of Object.entries(reasons)) {
+    const r = String(reason || '');
+    if (area === 'performance' && /connector|not.monitored|enrichment|lab-partial/i.test(r)) {
+      if (/lab-partial/i.test(r)) push('current-page performance partial');
+      else push('historical performance unavailable');
+    } else if (area === 'links') push('links partially checked');
+    else if (area === 'runtime') push('runtime partially observed');
+    else if (area === 'published') push('published-state unavailable');
+    else if (area === 'axe') push('accessibility checks incomplete');
+    else if (area) push(`${area} limited`);
+  }
+  for (const [area, status] of Object.entries(coverage)) {
+    const value = String(status || '');
+    if (/complete|current-page|deterministic|renderer|extension-partial|local-only|not applicable/i.test(value)) continue;
+    if (area === 'performance' && /not monitored|unavailable|pending/i.test(value)) push('historical performance unavailable');
+    else if (area === 'performance' && /partial/i.test(value)) push('current-page performance partial');
+    else if (area === 'links' && /partial|none checked|unavailable/i.test(value)) push('links partially checked');
+    else if (area === 'published' && /unavailable|local-only/i.test(value)) push('published-state unavailable');
+    else if (/partial|unavailable|pending/i.test(value)) push(`${area} limited`);
+  }
+  return labels;
+}
+
+/** True when persisted scan identity does not match the running extension build. */
+export function isStaleBuildRevision(currentBuildRevision = '', storedBuildRevision = '') {
+  const current = String(currentBuildRevision || '').trim();
+  const stored = String(storedBuildRevision || '').trim();
+  if (!current) return false;
+  return !stored || stored !== current;
+}
+
 export const COVERAGE_REASON = {
   TARGET_BLOCKED: 'target-blocked',
   TARGET_SUBSTITUTED: 'target-substituted',
