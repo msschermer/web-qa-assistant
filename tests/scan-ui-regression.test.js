@@ -21,10 +21,19 @@ test('gateway not-monitored coverage cannot erase current-page lab evidence', ()
     }
   });
   assert.equal(reconciled.coverage.performance, 'current-page');
-  assert.equal(reconciled.coverageReasons.performance, 'connector-unavailable');
+  // Historical monitor stays out of coverageReasons when lab owns performance status.
+  assert.equal(reconciled.coverageReasons.performance, undefined);
   const labels = limitedCoverageLabels(reconciled);
-  assert.ok(labels.includes('historical performance unavailable'));
-  assert.equal(labels.some(l => /current-page performance/i.test(l) && /fail/i.test(l)), false);
+  assert.equal(labels.includes('historical performance unavailable'), false);
+  assert.ok(labels.includes('links partially checked') || labels.includes('runtime partially observed'));
+  const artifact = buildBugReport({
+    version: '1.7.4',
+    report: reconciled,
+    lastScanAttempt: { ok: true, scanId: 'scan-lab' }
+  });
+  assert.equal(artifact.performance.lab.coverage, 'available');
+  assert.equal(artifact.performance.historicalMonitor.coverage, 'unavailable');
+  assert.equal(artifact.coverage.performance, 'current-page');
 });
 
 test('successful scan report is not marked failed when render diagnostic is present', () => {

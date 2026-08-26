@@ -158,14 +158,11 @@ export function reconcilePerformanceCoverage(report = {}) {
   else if (/^not applicable$/i.test(prior)) connectorResult = { status: 'not_applicable' };
   coverage.performance = resolvePerformanceCoverage(coverage, report.browserPerformance, connectorResult);
   const next = { ...report, coverage };
+  // Rebuild reasons from reconciled coverage. When lab wins (current-page), do not
+  // re-inject connector-unavailable — historical honesty lives in the Performance row /
+  // historicalMonitor projection, not as a Limited-coverage degradation of lab success.
   next.coverageReasons = explainCoverageReasons(next, {
-    enrichmentFailed: /enrichment/i.test(String(report.coverageReasons?.published || report.coverageReasons?.performance || ''))
+    enrichmentFailed: /enrichment/i.test(String(report.coverageReasons?.published || ''))
   });
-  if (labPerformanceReady(report.browserPerformance) && /not monitored|unavailable|connector/i.test(prior + String(report.coverageReasons?.performance || ''))) {
-    next.coverageReasons = {
-      ...(next.coverageReasons || {}),
-      performance: COVERAGE_REASON.CONNECTOR_UNAVAILABLE
-    };
-  }
   return next;
 }
