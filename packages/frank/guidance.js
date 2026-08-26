@@ -281,40 +281,51 @@ function rawGuidanceFor(f,environment={type:'unknown'}){
     const obs=f.interactionObservation||{};
     const inFrame=f.embeddedContext==='same-origin-iframe'||obs.context==='same-origin-iframe';
     const settle=obs.settleDurationBucket&&obs.settleDurationBucket!=='immediate';
+    const expected=obs.expectedState?.ariaExpanded||'a state change';
     return{
       interpretation:inFrame
         ?(settle
-          ?`This control is inside a same-origin embedded document. It was safely activated under WebQA’s allowlist, but the expected panel state did not appear during the bounded verification window (observed aria-expanded "${obs.observedState?.ariaExpanded||'unchanged'}" after initial "${obs.initialState?.ariaExpanded||'unknown'}").`
-          :`This control is inside a same-origin embedded document. An allowlisted local disclosure was activated and the expected panel state did not change (initial aria-expanded "${obs.initialState?.ariaExpanded||'unknown'}", observed "${obs.observedState?.ariaExpanded||'no change'}").`)
+          ?`This control is inside a same-origin embedded document. It was safely activated under WebQA’s allowlist, but the expected panel state did not appear during the bounded verification window (initial aria-expanded "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${expected}", observed "${obs.observedState?.ariaExpanded||'unchanged'}").`
+          :`This control is inside a same-origin embedded document. An allowlisted local disclosure was activated and the expected panel state did not change (initial aria-expanded "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${expected}", observed "${obs.observedState?.ariaExpanded||'no change'}").`)
         :(settle
-          ?`This control was safely activated under WebQA’s allowlist, but the expected panel state did not appear during the bounded verification window. Initial aria-expanded was "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${obs.expectedState?.ariaExpanded||'a state change'}", observed "${obs.observedState?.ariaExpanded||'no change'}".`
-          :`An allowlisted local disclosure control was activated. Initial aria-expanded was "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${obs.expectedState?.ariaExpanded||'a state change'}", observed "${obs.observedState?.ariaExpanded||'no change'}".`),
+          ?`This control was safely activated under WebQA’s allowlist, but the expected panel state did not appear during the bounded verification window. Initial aria-expanded was "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${expected}", observed "${obs.observedState?.ariaExpanded||'no change'}".`
+          :`An allowlisted local disclosure control was activated. Initial aria-expanded was "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${expected}", observed "${obs.observedState?.ariaExpanded||'no change'}".`),
       impact:'Users may be unable to open or close accordion/menu panels even when the markup looks structurally complete. If the control only updates after a longer delay or animation, this may be a verification-window limit rather than a broken control.',
       recommendation:'Reproduce the toggle manually and inspect the click/keyboard handler for that control.',
       remediation:'Do not assume a specific script file is at fault unless separate runtime evidence points there. Verify the listener updates aria-expanded and panel visibility, then restore the prior collapsed/expanded state after testing.',
       verify:'Activate the control with pointer and keyboard, confirm aria-expanded and panel visibility change, then confirm the control can return to its prior state.',
       limitations:inFrame
-        ?'Allowlisted activation is not a guarantee of zero side effects — page handlers may still run. This control lives inside a same-origin iframe; spotlight may be unavailable. Forms, navigation, purchases, downloads, and third-party widgets are never activated.'
+        ?'Allowlisted activation is not a guarantee of zero side effects — page handlers may still run. This control lives inside a same-origin iframe; spotlight may be unavailable. Forms, navigation, purchases, downloads, and third-party widgets are never activated. Co-occurring script failures are correlated only as Worth Checking, not as proven causation.'
         :'Allowlisted activation is not a guarantee of zero side effects — page handlers may still run (analytics, fetches, preference writes). Forms, navigation, purchases, downloads, and third-party widgets are never activated. Co-occurring script failures are correlated only as Worth Checking, not as proven causation.'
     };
   }
   if(/ux\.interaction-restoration-unproven/.test(id)){
+    const obs=f.interactionObservation||{};
+    const inFrame=f.embeddedContext==='same-origin-iframe'||obs.context==='same-origin-iframe';
     return{
-      interpretation:'WebQA stopped interaction testing after it could not verify restoration of the original page state.',
-      impact:'Further interactive checks were skipped to avoid leaving or compounding an altered page state.',
+      interpretation:inFrame
+        ?'Inside a same-origin embedded document, WebQA stopped interaction testing after it could not verify restoration of the original framed state.'
+        :'WebQA stopped interaction testing after it could not verify restoration of the original page state.',
+      impact:'Further interactive checks were skipped to avoid leaving or compounding an altered page state. This is a scan-safety stop, not proof that a specific user-facing toggle is broken.',
       recommendation:'Manually confirm the last tested control returns to its prior expanded/collapsed (or selected) state, then rescan.',
       remediation:'Inspect the control that was activated last. Ensure toggling is reversible and that aria-expanded / panel visibility can return to the starting state. Do not treat this as proof that application logic is broken.',
       verify:'Activate the control, confirm the intended state change, restore it manually, and rescan to resume interaction coverage.',
-      limitations:'WebQA refuses to continue activating dependent controls when restoration cannot be proven.'
+      limitations:inFrame
+        ?'This stop occurred inside a same-origin iframe; spotlight may be unavailable. WebQA refuses to continue activating dependent controls when restoration cannot be proven.'
+        :'WebQA refuses to continue activating dependent controls when restoration cannot be proven.'
     };
   }
   if(/runtime\.resource-status-inconclusive/.test(id)){
+    const url=f.resourceUrl||'';
+    const role=f.resourceRole||'resource';
     return{
-      interpretation:'A resource showed an opaque or missing response status, so HTTP failure is not confirmed from browser APIs alone.',
-      impact:'Impact is uncertain until the asset is checked in DevTools Network or against a visible broken element.',
-      recommendation:'Confirm whether the resource is required for a visible feature, then check its network status manually.',
-      remediation:'Do not treat opaque status as a confirmed HTTP error. If a visible dependency is broken, restore that asset; if the request is expected to be opaque (cross-origin timing), leave it as diagnostic context.',
-      verify:'In DevTools Network, confirm the final HTTP status and whether the page feature still works.',
+      interpretation:url
+        ?`A ${role} resource (${url}) showed an opaque or missing response status, so HTTP failure is not confirmed from browser APIs alone.`
+        :`A ${role} showed an opaque or missing response status, so HTTP failure is not confirmed from browser APIs alone.`,
+      impact:'Impact is uncertain until DevTools Network confirms the final status for this asset.',
+      recommendation:'A visible markup dependency was already associated with this asset. Confirm its Network status and whether the dependent feature still works.',
+      remediation:'Do not treat opaque or missing status as a confirmed HTTP error. Opaque responses are common for cross-origin assets that hide HTTP status; restore the asset only when the visible dependency is actually broken.',
+      verify:'In DevTools Network, confirm the final HTTP status for this URL and whether the page feature still works.',
       limitations:'Opaque responses are common for cross-origin assets; this observation alone is not a defect.'
     };
   }

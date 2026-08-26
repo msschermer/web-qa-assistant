@@ -1392,8 +1392,11 @@
   function isUnsafeInteractionTarget(el){
     if(!el||el.nodeType!==1)return true;
     if(el.closest?.('form'))return true;
-    if(el.matches?.('a[href]:not([href^="#"]),a[download],input,select,textarea,button[type="submit"]'))return true;
-    if(attr(el,'type').toLowerCase()==='submit')return true;
+    try{if(el.form)return true}catch{}
+    if(attr(el,'form'))return true;
+    if(attr(el,'formaction'))return true;
+    if(el.matches?.('a[href]:not([href^="#"]),a[download],input,select,textarea,button[type="submit"],button[type="image"],button[type="reset"],input[type="submit"],input[type="image"],input[type="reset"]'))return true;
+    if(/^(submit|image|reset)$/i.test(attr(el,'type')))return true;
     if(hasHighRiskInteractionSemantics(el))return true;
     return false;
   }
@@ -1573,11 +1576,15 @@
     observation.observedState={ariaExpanded:afterExpanded,panelVisible:after.visible,clickDispatched:clickOk};
     if(budgetRef)budgetRef.remainingMs-=settle.durationMs;
 
-    // Restore: prefer re-click when we observed a change; always force attributes afterward.
+    // Restore: re-click only for immediate/sync changes. Delayed handlers can race a second
+    // click and re-open after attribute force — prefer attribute/panel restore for async paths.
     let restored=false;
     try{
-      if(changed&&attr(btn,'aria-expanded')!==initialExpanded)activateElement(btn);
+      if(changed&&settle.immediate&&attr(btn,'aria-expanded')!==initialExpanded)activateElement(btn);
       await settleUntil(()=>attr(btn,'aria-expanded')===initialExpanded,{maxMs:80,stepMs:16});
+      if(attr(btn,'aria-expanded')!==initialExpanded)btn.setAttribute('aria-expanded',initialExpanded);
+      restorePanelState(doc,panelId,before);
+      await Promise.resolve();
       if(attr(btn,'aria-expanded')!==initialExpanded)btn.setAttribute('aria-expanded',initialExpanded);
       restorePanelState(doc,panelId,before);
       const restoredVis=panelVisibility(doc,panelId);

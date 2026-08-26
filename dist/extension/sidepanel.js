@@ -112,7 +112,16 @@ function findingById(id) { return (report?.findings || []).find(f => f.id === id
 function materialFindings() { return (report?.findings || []).filter(f => f.lifecycle !== 'ignored' && f.frankVisible !== false && f.category !== 'context' && f.confidence !== 'inconclusive'); }
 function incompleteCoverage() {
   const statuses = Object.values(report?.coverage || {}).filter(v => /partial|unavailable/i.test(String(v))).length;
-  return statuses + Number(report?.linkAudit?.inconclusive || 0);
+  const ix = report?.interactionCoverage;
+  const embed = report?.page?.embeddedCoverage;
+  const interactionGaps = ix && (
+    Number(ix.inconclusive || 0) > 0
+    || Number(ix.restorationFailures || 0) > 0
+    || Number(ix.eligible || 0) > Number(ix.safelyTested || ix.tested || 0)
+    || /budget|restoration|prepare-failed|time-budget|frame-budget/i.test(String(ix.partialReason || ''))
+  ) ? 1 : 0;
+  const embedGaps = embed && Number(embed.crossOriginFramesNotInspectable || embed.crossOriginIframes || 0) > 0 ? 1 : 0;
+  return statuses + Number(report?.linkAudit?.inconclusive || 0) + interactionGaps + embedGaps;
 }
 function targetBlocked() {
   return Boolean(report?.targetIntegrityBlocked || report?.page?.targetIntegrity === 'blocked' || report?.priorityMode === 'target-integrity');
@@ -186,7 +195,13 @@ function coverage() {
     const line = inconclusive
       ? `${tested} safely tested · ${skipped} skipped · ${inconclusive} inconclusive`
       : `${tested} safely tested · ${skipped} skipped`;
-    const ixPartial = Boolean(ix.failed || ix.restorationFailures || ix.inconclusive || /budget|restoration|prepare-failed|time-budget/i.test(String(ix.partialReason || '')));
+    const ixPartial = Boolean(
+      ix.failed
+      || ix.restorationFailures
+      || ix.inconclusive
+      || Number(ix.eligible || 0) > Number(ix.safelyTested || ix.tested || 0)
+      || /budget|restoration|prepare-failed|time-budget|frame-budget/i.test(String(ix.partialReason || ''))
+    );
     box.insertAdjacentHTML('beforeend', `<span>Interactions</span><b data-status="${ixPartial ? 'partial' : 'complete'}">${esc(line)}</b>`);
   }
   const embed = report.page?.embeddedCoverage;
