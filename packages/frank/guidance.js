@@ -277,26 +277,31 @@ function rawGuidanceFor(f,environment={type:'unknown'}){
     };
   }
   if(/ux\.iframe-missing-title|web\.iframe-title-missing/.test(id))return{interpretation:id.includes('iframe-title-missing')?'Inside an embedded same-origin document, the document title is empty.':'A visible iframe has no title attribute.',impact:'Screen-reader users may not know what the embedded frame contains.',recommendation:id.includes('iframe-title-missing')?'Set a concise document title inside the framed experience.':'Add a concise title describing the embedded content.',remediation:id.includes('iframe-title-missing')?'Update the iframe document <title>, not only the parent page.':'Set title on the iframe to match the embedded experience (for example “Payment form” or “Map”).',verify:'Rescan and confirm the iframe or framed document exposes a meaningful title.',limitations:'Worth Checking observation — confirm whether the embed is user-facing before prioritizing it as a defect.'};
-  if(/ux\.disclosure-toggle-failed/.test(id)){
+  if(/ux\.disclosure-toggle-failed|ux\.menu-toggle-failed/.test(id)){
     const obs=f.interactionObservation||{};
     const inFrame=f.embeddedContext==='same-origin-iframe'||obs.context==='same-origin-iframe';
     const settle=obs.settleDurationBucket&&obs.settleDurationBucket!=='immediate';
+    const delayed=obs.failureReason==='no-state-change-after-extended-settle'||settle;
+    const isMenu=/menu-toggle/.test(id)||obs.interactionType==='menu-toggle';
     const expected=obs.expectedState?.ariaExpanded||'a state change';
+    const controlKind=isMenu?'menu toggle':'disclosure';
     return{
       interpretation:inFrame
-        ?(settle
-          ?`This control is inside a same-origin embedded document. It was safely activated under WebQA’s allowlist, but the expected panel state did not appear during the bounded verification window (initial aria-expanded "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${expected}", observed "${obs.observedState?.ariaExpanded||'unchanged'}").`
-          :`This control is inside a same-origin embedded document. An allowlisted local disclosure was activated and the expected panel state did not change (initial aria-expanded "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${expected}", observed "${obs.observedState?.ariaExpanded||'no change'}").`)
-        :(settle
-          ?`This control was safely activated under WebQA’s allowlist, but the expected panel state did not appear during the bounded verification window. Initial aria-expanded was "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${expected}", observed "${obs.observedState?.ariaExpanded||'no change'}".`
-          :`An allowlisted local disclosure control was activated. Initial aria-expanded was "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${expected}", observed "${obs.observedState?.ariaExpanded||'no change'}".`),
-      impact:'Users may be unable to open or close accordion/menu panels even when the markup looks structurally complete. If the control only updates after a longer delay or animation, this may be a verification-window limit rather than a broken control.',
-      recommendation:'Reproduce the toggle manually and inspect the click/keyboard handler for that control.',
-      remediation:'Do not assume a specific script file is at fault unless separate runtime evidence points there. Verify the listener updates aria-expanded and panel visibility, then restore the prior collapsed/expanded state after testing.',
-      verify:'Activate the control with pointer and keyboard, confirm aria-expanded and panel visibility change, then confirm the control can return to its prior state.',
+        ?(delayed
+          ?`This ${controlKind} is inside a same-origin embedded document. It was safely activated under WebQA’s allowlist, but the expected local state did not appear during the bounded verification window (including a short extended settle for delayed UI). Initial aria-expanded "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${expected}", observed "${obs.observedState?.ariaExpanded||'unchanged'}".`
+          :`This ${controlKind} is inside a same-origin embedded document. An allowlisted local control was activated and the expected state did not change (initial aria-expanded "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${expected}", observed "${obs.observedState?.ariaExpanded||'no change'}").`)
+        :(delayed
+          ?`This ${controlKind} was safely tested, but the expected local state did not appear within the bounded verification window (including extended settle for delayed UI). Initial aria-expanded was "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${expected}", observed "${obs.observedState?.ariaExpanded||'no change'}".`
+          :`An allowlisted local ${controlKind} was activated. Initial aria-expanded was "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${expected}", observed "${obs.observedState?.ariaExpanded||'no change'}".`),
+      impact:isMenu
+        ?'Users may be unable to open or close the menu even when the markup looks structurally complete. Menu items inside the menu were not activated. If the control only updates after a longer delay or animation, this may be a verification-window limit rather than a broken control.'
+        :'Users may be unable to open or close accordion/menu panels even when the markup looks structurally complete. If the control only updates after a longer delay or animation, this may be a verification-window limit rather than a broken control.',
+      recommendation:'Reproduce the toggle manually and inspect the click/keyboard handler for that control. Treat this as an observation until separate evidence confirms a defect.',
+      remediation:'Do not assume a specific script file is at fault unless separate runtime evidence points there. Verify the listener updates aria-expanded and panel/menu visibility, then restore the prior state after testing.',
+      verify:'Activate the control with pointer and keyboard, confirm aria-expanded and visibility change, then confirm the control can return to its prior state.',
       limitations:inFrame
-        ?'Allowlisted activation is not a guarantee of zero side effects — page handlers may still run. This control lives inside a same-origin iframe; spotlight may be unavailable. Forms, navigation, purchases, downloads, and third-party widgets are never activated. Co-occurring script failures are correlated only as Worth Checking, not as proven causation.'
-        :'Allowlisted activation is not a guarantee of zero side effects — page handlers may still run (analytics, fetches, preference writes). Forms, navigation, purchases, downloads, and third-party widgets are never activated. Co-occurring script failures are correlated only as Worth Checking, not as proven causation.'
+        ?'Coverage limitation: allowlisted activation is not zero side effects — page handlers may still run. This control lives inside a same-origin iframe; spotlight may be unavailable. Forms, navigation, purchases, downloads, and third-party widgets are never activated. Co-occurring script failures are correlated only as Worth Checking, not as proven causation.'
+        :'Coverage limitation: allowlisted activation is not zero side effects — page handlers may still run (analytics, fetches, preference writes). Forms, navigation, purchases, downloads, and third-party widgets are never activated. Co-occurring script failures are correlated only as Worth Checking, not as proven causation.'
     };
   }
   if(/ux\.interaction-restoration-unproven/.test(id)){

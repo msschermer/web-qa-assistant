@@ -252,17 +252,42 @@ function projectFindings(report, includeContext) {
 
 function projectPerformance(report) {
   const perf = report?.browserPerformance || report?.page?.browserPerformance || {};
+  const labReady = perf.available === true && (
+    Number.isFinite(perf.largestContentfulPaintMs)
+    || Number.isFinite(perf.ttfbMs)
+    || Number.isFinite(perf.transferBytes)
+  );
+  const labCoverage = labReady ? 'available' : (perf.available === true ? 'partial' : 'unavailable');
+  const monitorReason = clip(report?.coverageReasons?.performance, 60);
+  const historical = /connector|not monitored|enrichment|unavailable/i.test(String(report?.coverage?.performance || '') + String(monitorReason || ''))
+    || String(report?.coverage?.performance || '') === 'not monitored'
+    ? 'unavailable'
+    : (String(report?.coverage?.performance || '') === 'complete' ? 'available' : 'unavailable');
   return {
     observationScope: 'current-page-lab',
     available: perf.available === true,
+    lab: {
+      coverage: labCoverage,
+      lcpMs: Number.isFinite(perf.largestContentfulPaintMs) ? perf.largestContentfulPaintMs : undefined,
+      ttfbMs: Number.isFinite(perf.ttfbMs) ? perf.ttfbMs : undefined,
+      cls: Number.isFinite(perf.cumulativeLayoutShift) ? perf.cumulativeLayoutShift : undefined,
+      transferBytes: Number.isFinite(perf.transferBytes) ? perf.transferBytes : undefined,
+      transferCount: Number.isFinite(perf.measuredTransferCount) ? perf.measuredTransferCount : undefined,
+      resourceCount: Number.isFinite(perf.resourceCount) ? perf.resourceCount : undefined
+    },
+    historicalMonitor: {
+      coverage: historical,
+      reason: monitorReason || (historical === 'unavailable' ? 'connector-unavailable' : undefined)
+    },
+    // Legacy flat fields retained for older readers.
     lcpMs: Number.isFinite(perf.largestContentfulPaintMs) ? perf.largestContentfulPaintMs : undefined,
     ttfbMs: Number.isFinite(perf.ttfbMs) ? perf.ttfbMs : undefined,
     cls: Number.isFinite(perf.cumulativeLayoutShift) ? perf.cumulativeLayoutShift : undefined,
     transferBytes: Number.isFinite(perf.transferBytes) ? perf.transferBytes : undefined,
     transferCount: Number.isFinite(perf.measuredTransferCount) ? perf.measuredTransferCount : undefined,
     resourceCount: Number.isFinite(perf.resourceCount) ? perf.resourceCount : undefined,
-    coverage: clip(report?.coverage?.performance, 40),
-    reason: clip(report?.coverageReasons?.performance, 60)
+    coverage: labReady ? 'current-page' : clip(report?.coverage?.performance, 40),
+    reason: monitorReason
   };
 }
 
@@ -362,9 +387,20 @@ function projectPageDiagnostics(report, includeContext) {
       passed: Number(interaction.passed || 0),
       failed: Number(interaction.failed || 0),
       inconclusive: Number(interaction.inconclusive || 0),
+      notApplicable: Number(interaction.notApplicable || 0),
       restorationFailures: Number(interaction.restorationFailures || 0),
       partialReason: clip(interaction.partialReason, 80) || undefined,
-      iframeDisclosures: clip(interaction.iframeDisclosures, 40) || undefined
+      iframeDisclosures: clip(interaction.iframeDisclosures, 40) || undefined,
+      accountingOk: Number(interaction.tested || interaction.safelyTested || 0)
+        === (Number(interaction.passed || 0) + Number(interaction.failed || 0)
+          + Number(interaction.inconclusive || 0)),
+      sideEffectLimitation: clip(interaction.sideEffectLimitation, 80) || undefined
+    },
+    resourceCounts: {
+      observedFailureEvents: Number(report?.diagnostics?.observedResourceFailureEvents
+        ?? (report?.diagnostics?.failedResources || []).length),
+      deduplicatedFailedResources: Number(report?.diagnostics?.deduplicatedFailedResources
+        ?? (report?.diagnostics?.failedResources || []).length)
     },
     psi: {
       enabled: psi.enabled === true,
@@ -482,9 +518,16 @@ function projectTimeline({ trace, report, lastDiagnostic }) {
     seq += 1;
     events.push({ seq, at: at || undefined, type, data: data || undefined });
   };
+  // Trace start / failure only — scan_completed is emitted LAST after synthesized pipeline stages.
+  let scanCompletedFromTrace = null;
   for (const row of trace || []) {
     if (!HIGH_SIGNAL_TRACE.has(row.type)) continue;
-    push(mapTraceEvent(row), row.data, row.at);
+    const mapped = mapTraceEvent(row);
+    if (mapped === 'scan_completed') {
+      scanCompletedFromTrace = { data: row.data, at: row.at };
+      continue;
+    }
+    push(mapped, row.data, row.at);
   }
   if (report) {
     const integrity = integrityState(report);
@@ -492,13 +535,32 @@ function projectTimeline({ trace, report, lastDiagnostic }) {
     else if (integrity === 'reached' || !integrity) push('target_reached', { state: integrity || 'reached' });
     if (report.coverage?.axe === 'complete') push('axe_completed');
     if (report.linkAudit) push('link_probe_completed', { coverage: clip(report.coverage?.links, 40) });
-    if (report.browserPerformance?.available) push('performance_collected', { coverage: clip(report.coverage?.performance, 40) });
+    if (report.browserPerformance?.available) {
+      push('performance_collected', {
+        coverage: 'current-page-lab',
+        historicalMonitor: clip(report.coverage?.performance, 40) || undefined
+      });
+    }
     if (report.coverageReasons && Object.keys(report.coverageReasons).length) push('coverage_degraded', { areas: Object.keys(report.coverageReasons).slice(0, 8) });
     if (report.attention) push('correlation_completed', { materialGroupCount: Number(report.attention.materialGroupCount || 0) });
     if ((report.pageDiagnostics?.errors || []).length) push('page_error', { count: report.pageDiagnostics.errors.length });
-    if ((report.diagnostics?.failedResources || []).length) push('resource_failure', { count: report.diagnostics.failedResources.length });
+    const deduped = Number(report.diagnostics?.deduplicatedFailedResources
+      ?? (report.diagnostics?.failedResources || []).length);
+    const observedEvents = Number(report.diagnostics?.observedResourceFailureEvents ?? deduped);
+    if (deduped || observedEvents) {
+      push('resource_failure', {
+        deduplicatedFailedResources: deduped,
+        observedFailureEvents: observedEvents
+      });
+    }
   }
   if (lastDiagnostic?.id) push('webqa_error', { operation: clip(lastDiagnostic.operation, 40), code: clip(lastDiagnostic.id, 80) }, lastDiagnostic.timestamp);
+  if (scanCompletedFromTrace || report) {
+    push('scan_completed', scanCompletedFromTrace?.data || {
+      findingCount: Number(report?.findings?.length || 0),
+      materialGroupCount: Number(report?.attention?.materialGroupCount || 0)
+    }, scanCompletedFromTrace?.at);
+  }
   return boundListTail(events, DIAGNOSTIC_CAPS.timeline);
 }
 
@@ -634,6 +696,8 @@ export function hardenReportBugArtifact(data) {
 
 export function buildBugReport({
   version = 'unknown',
+  buildRevision = '',
+  developmentTarget = '1.7.5',
   trace = [],
   readiness = {},
   report = null,
@@ -667,11 +731,17 @@ export function buildBugReport({
     schema: BUG_REPORT_SCHEMA_V2,
     reportVersion: 2,
     webqaVersion: clip(version, 30),
+    buildRevision: clip(buildRevision || reportForProjection?.buildRevision || globalThis.__WEBQA_BUILD_REVISION__ || '', 16) || undefined,
+    developmentTarget: clip(developmentTarget, 20) || undefined,
     createdAt,
     generatedAt: createdAt,
     includeContext: Boolean(includeContext),
     untrustedPageEvidence: true,
-    extension: { version: clip(version, 30) },
+    extension: {
+      version: clip(version, 30),
+      buildRevision: clip(buildRevision || reportForProjection?.buildRevision || globalThis.__WEBQA_BUILD_REVISION__ || '', 16) || undefined,
+      developmentTarget: clip(developmentTarget, 20) || undefined
+    },
     browser: { chromeVersion: chromeVersion(userAgent) },
     frankReadiness: sanitize({ status: readiness?.status, progress: readiness?.progress, code: readiness?.code }),
     scan: {
@@ -687,10 +757,13 @@ export function buildBugReport({
       ...(includeContext && reportForProjection?.page?.title ? { pageTitle: redactText(String(reportForProjection.page.title).replace(/\?[^\s]*/g, ''), 120) } : {}),
       coverage: reportForProjection?.coverage || undefined,
       coverageReasons,
-      mode: clip(lastScanAttempt?.mode || (reportForProjection ? 'current-tab' : ''), 40) || undefined
+      mode: clip(lastScanAttempt?.mode || (reportForProjection ? 'current-tab' : ''), 40) || undefined,
+      buildRevision: clip(buildRevision || reportForProjection?.buildRevision || globalThis.__WEBQA_BUILD_REVISION__ || '', 16) || undefined
     },
     environment: {
       extensionVersion: clip(version, 30),
+      buildRevision: clip(buildRevision || reportForProjection?.buildRevision || globalThis.__WEBQA_BUILD_REVISION__ || '', 16) || undefined,
+      developmentTarget: clip(developmentTarget, 20) || undefined,
       extensionStatus: lastDiagnostic ? 'error' : 'ok',
       gateway: clip(reportForProjection?.connectedMode, 40) || undefined,
       renderer: clip(reportForProjection?.coverage?.renderer || reportForProjection?.coverage?.runtime, 40) || undefined,
