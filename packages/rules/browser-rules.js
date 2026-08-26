@@ -27,7 +27,12 @@
   function sanitizeResourceUrl(raw,n=220){
     const value=String(raw||'').trim();
     if(!value)return'';
-    try{const u=new URL(value);u.search='';u.hash='';return clip(u.toString(),n)}
+    try{
+      const u=new URL(value);
+      u.username='';u.password='';
+      u.search='';u.hash='';
+      return clip(u.toString(),n);
+    }
     catch{return clip(value.split(/[?#]/)[0]||value,n)}
   }
   function sanitizeHttpUrl(raw,n=220){
@@ -1080,8 +1085,90 @@
     if(/\bskip-link\b/i.test(cls))return true;
     return/\bskip[- ]?link\b/i.test(cls)||/\bskip\b/i.test(cls);
   }
+  function effectiveDevicePixelRatio(){
+    try{
+      const dpr=Number(globalThis.devicePixelRatio||window.devicePixelRatio||1);
+      if(!Number.isFinite(dpr)||dpr<=0)return 1;
+      return Math.min(4,Math.max(1,dpr));
+    }catch{return 1}
+  }
+  function transferBytesForUrl(url){
+    if(!url)return undefined;
+    try{
+      const resources=performance.getEntriesByType('resource')||[];
+      for(const entry of resources){
+        if(sanitizeHttpUrl(entry.name)!==url&&sanitizeResourceUrl(entry.name)!==url)continue;
+        const bytes=Number(entry.transferSize);
+        if(Number.isFinite(bytes)&&bytes>0)return bytes;
+      }
+    }catch{}
+    return undefined;
+  }
+  function assessImageDelivery(img,{lcpUrl=''}={}){
+    if(!img||img.nodeType!==1)return null;
+    if(String(img.localName||'').toLowerCase()==='svg')return null;
+    if(!img.complete)return null;
+    const nw=Number(img.naturalWidth)||0,nh=Number(img.naturalHeight)||0;
+    const rect=img.getBoundingClientRect?.()||{width:0,height:0};
+    const rw=Math.round(rect.width||img.clientWidth||0);
+    const rh=Math.round(rect.height||img.clientHeight||0);
+    if(nw<2||nh<2||rw<40||rh<40)return null;
+    const selectedSource=sanitizeResourceUrl(img.currentSrc||img.src||'');
+    const httpSrc=sanitizeHttpUrl(img.currentSrc||img.src||'')||selectedSource;
+    if(!selectedSource||selectedSource.startsWith('data:'))return null;
+    if(/\.svg(\?|#|$)/i.test(selectedSource))return null;
+    const dpr=effectiveDevicePixelRatio();
+    const requiredPhysicalWidth=Math.max(1,Math.round(rw*dpr));
+    const requiredPhysicalHeight=Math.max(1,Math.round(rh*dpr));
+    const widthOversizeRatio=nw/requiredPhysicalWidth;
+    const heightOversizeRatio=nh/requiredPhysicalHeight;
+    const pixelAreaOversizeRatio=(nw*nh)/(requiredPhysicalWidth*requiredPhysicalHeight);
+    // Conservative floors: both axes must overshoot, or area must be clearly excessive.
+    let magnitude='appropriate';
+    if((widthOversizeRatio>=3&&heightOversizeRatio>=3)||pixelAreaOversizeRatio>=9)magnitude='severe';
+    else if((widthOversizeRatio>=2&&heightOversizeRatio>=2)||pixelAreaOversizeRatio>=4)magnitude='meaningful';
+    else if((widthOversizeRatio>=1.4&&heightOversizeRatio>=1.4)||pixelAreaOversizeRatio>=2)magnitude='mild';
+    else return null;
+    const srcset=attr(img,'srcset');
+    const sizes=attr(img,'sizes');
+    const inPicture=Boolean(img.closest?.('picture'));
+    const responsiveSourcePresent=Boolean(srcset||inPicture);
+    const transferBytes=transferBytesForUrl(httpSrc)||transferBytesForUrl(selectedSource);
+    const isLcpResource=Boolean(lcpUrl&&(lcpUrl===httpSrc||lcpUrl===selectedSource||sanitizeResourceUrl(lcpUrl)===selectedSource));
+    return{
+      intrinsicWidth:nw,
+      intrinsicHeight:nh,
+      renderedWidth:rw,
+      renderedHeight:rh,
+      devicePixelRatio:Math.round(dpr*100)/100,
+      requiredPhysicalWidth,
+      requiredPhysicalHeight,
+      widthOversizeRatio:Math.round(widthOversizeRatio*100)/100,
+      heightOversizeRatio:Math.round(heightOversizeRatio*100)/100,
+      pixelAreaOversizeRatio:Math.round(pixelAreaOversizeRatio*100)/100,
+      transferBytes:Number.isFinite(transferBytes)?transferBytes:undefined,
+      responsiveSourcePresent,
+      sizesPresent:Boolean(sizes),
+      selectedSource,
+      isLcpResource,
+      magnitude,
+      observationConfidence:'confirmed',
+      impactConfidence:(isLcpResource||Number.isFinite(transferBytes))?'inferred':'inferred'
+    };
+  }
+  function imageDeliveryDetail(m){
+    const need=`~${m.requiredPhysicalWidth}×${m.requiredPhysicalHeight} needed at ${m.devicePixelRatio}× DPR`;
+    const shown=`${m.intrinsicWidth}×${m.intrinsicHeight} source · displayed ${m.renderedWidth}×${m.renderedHeight} · ${need}`;
+    const transfer=Number.isFinite(m.transferBytes)?` · ${(m.transferBytes/1024).toFixed(0)} KB transfer`:'';
+    const responsive=m.responsiveSourcePresent
+      ?' Responsive markup is present; the currently selected candidate is still larger than the DPR-adjusted display need.'
+      :' No srcset/picture candidate set was observed for this image.';
+    const lcp=m.isLcpResource?' This is also the current LCP image.':'';
+    return`${shown}${transfer}.${responsive}${lcp}`;
+  }
   function imageResourceFindings(signals,skipBrokenUrls=new Set()){
     const out=[];
+    const lcpUrl=sanitizeResourceUrl(signals?.lcpElement?.url||'');
     // Broken / unloaded images where the browser completed decode with zero natural size.
     [...document.images].slice(0,80).forEach(img=>{
       if(!img.complete)return;
@@ -1093,22 +1180,61 @@
         out.push(finding({ruleId:'web.image-broken',title:'Image failed to load',detail:'An image element completed loading with naturalWidth 0, which usually means the resource is missing or undecodable.',category:'fix',severity:'medium',element:img,evidence:src,extra:{resourceUrl:src}}));
       }
     });
-    // Intrinsic vs rendered oversize — only when the image is meaningfully displayed.
+    const oversized=[];
     [...document.images].slice(0,60).forEach(img=>{
-      const nw=Number(img.naturalWidth)||0,nh=Number(img.naturalHeight)||0;
-      const rw=Math.round(img.clientWidth||0),rh=Math.round(img.clientHeight||0);
-      if(nw<2||nh<2||rw<40||rh<40)return;
-      if(nw>=rw*2.5&&nh>=rh*2.5&&(nw*nh)>=350000){
-        const src=sanitizeResourceUrl(img.currentSrc||img.src||'');
-        out.push(finding({ruleId:'performance.browser.image-oversized',title:'Image is much larger than its rendered size',detail:`This image is ${nw}×${nh} intrinsically but renders at about ${rw}×${rh}. Serving an appropriately sized asset reduces transfer and decode work.`,category:'review',severity:'medium',element:img,confidence:'inferred',evidence:`intrinsic=${nw}x${nh}; rendered=${rw}x${rh}; src=${src}`,extra:{resourceUrl:src,imageMetrics:{intrinsic:{width:nw,height:nh},rendered:{width:rw,height:rh}}}}));
-      }
+      const assessment=assessImageDelivery(img,{lcpUrl});
+      if(!assessment)return;
+      const src=assessment.selectedSource;
+      const httpSrc=sanitizeHttpUrl(src)||src;
+      if(skipBrokenUrls.has(src)||skipBrokenUrls.has(httpSrc))return;
+      oversized.push({img,assessment});
     });
-    // Correlate slow LCP with oversized LCP image dimensions when both are present.
-    if(signals?.available&&Number.isFinite(signals.largestContentfulPaintMs)&&signals.largestContentfulPaintMs>4000){
-      const el=signals.lcpElement;
-      if(el?.intrinsic?.width&&el?.rendered?.width&&el.intrinsic.width>=el.rendered.width*2.5){
-        out.push(finding({ruleId:'performance.browser.lcp-image-oversized',title:'LCP image is oversized for its display size',detail:`LCP was ${(signals.largestContentfulPaintMs/1000).toFixed(1)}s and the LCP image is ${el.intrinsic.width}×${el.intrinsic.height} while rendering near ${el.rendered.width}×${el.rendered.height}. Resize/compress/serve an appropriately sized modern asset.`,category:'review',severity:'medium',selector:el.selector||'',confidence:'inferred',evidence:`lcp=${signals.largestContentfulPaintMs}ms; intrinsic=${el.intrinsic.width}x${el.intrinsic.height}; rendered=${el.rendered.width}x${el.rendered.height}; resource=${el.url||''}`,extra:{resourceUrl:el.url||'',performanceObservation:signals,rootCauseKey:el.url?`lcp-resource:${hash(el.url)}`:undefined}}));
+    for(const {img,assessment:m} of oversized){
+      if(m.magnitude==='mild'){
+        out.push(finding({
+          ruleId:'performance.browser.image-oversized',
+          title:'Image source is mildly larger than display need',
+          detail:imageDeliveryDetail(m),
+          category:'review',severity:'low',confidence:'confirmed',element:img,
+          evidence:`intrinsic=${m.intrinsicWidth}x${m.intrinsicHeight}; rendered=${m.renderedWidth}x${m.renderedHeight}; dpr=${m.devicePixelRatio}; need=${m.requiredPhysicalWidth}x${m.requiredPhysicalHeight}; magnitude=mild`,
+          extra:{
+            worthChecking:true,frankVisible:false,resourceUrl:m.selectedSource,
+            imageMetrics:m,fixOwner:'frontend/content/CMS',
+            rootCauseKey:'images-oversized-mild'
+          }
+        }));
+        continue;
       }
+      if(m.isLcpResource){
+        const lcpMs=Number(signals?.largestContentfulPaintMs);
+        const slow=Number.isFinite(lcpMs)&&lcpMs>4000;
+        out.push(finding({
+          ruleId:'performance.browser.lcp-image-oversized',
+          title:slow?'LCP image is substantially oversized for its display':'Current LCP image is substantially oversized',
+          detail:`${imageDeliveryDetail(m)}${slow?` Lab LCP was ${(lcpMs/1000).toFixed(1)}s.`:''}`,
+          category:'review',severity:m.magnitude==='severe'||slow?'high':'medium',confidence:'confirmed',
+          element:img,selector:selectorFor(img),
+          evidence:`lcp=${Number.isFinite(lcpMs)?lcpMs:'observed'}; intrinsic=${m.intrinsicWidth}x${m.intrinsicHeight}; rendered=${m.renderedWidth}x${m.renderedHeight}; dpr=${m.devicePixelRatio}; need=${m.requiredPhysicalWidth}x${m.requiredPhysicalHeight}; magnitude=${m.magnitude}`,
+          extra:{
+            worthChecking:false,resourceUrl:m.selectedSource,imageMetrics:m,
+            performanceObservation:signals||undefined,
+            fixOwner:'frontend/template/CMS',
+            rootCauseKey:m.selectedSource?`lcp-resource:${hash(m.selectedSource)}`:'lcp-resource:unknown'
+          }
+        }));
+        continue;
+      }
+      out.push(finding({
+        ruleId:'performance.browser.image-oversized',
+        title:m.magnitude==='severe'?'Image is severely oversized for its display size':'Image is substantially oversized for its display size',
+        detail:imageDeliveryDetail(m),
+        category:'review',severity:m.magnitude==='severe'?'high':'medium',confidence:'confirmed',element:img,
+        evidence:`intrinsic=${m.intrinsicWidth}x${m.intrinsicHeight}; rendered=${m.renderedWidth}x${m.renderedHeight}; dpr=${m.devicePixelRatio}; need=${m.requiredPhysicalWidth}x${m.requiredPhysicalHeight}; magnitude=${m.magnitude}`,
+        extra:{
+          resourceUrl:m.selectedSource,imageMetrics:m,fixOwner:'frontend/content/CMS',
+          rootCauseKey:'images-oversized'
+        }
+      }));
     }
     return out;
   }
