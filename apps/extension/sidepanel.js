@@ -1,7 +1,36 @@
 import { localFrankRuntime, localFrankWalkthrough, probeLocalAi, setLocalAiTraceSink, localAiDiagnostics } from './local-ai.js';
 import { presentFinding, presentArea, QA_AREA_ORDER } from './presentation.js';
 import { RuntimeTrace, buildBugReport, bugReportPrivacySummary } from './bug-report.js';
+import { limitedCoverageLabels as coverageLimitationLabels, isStaleBuildRevision } from './coverage.js';
 const RELEASE_VERSION = '1.7.4';
+const DEVELOPMENT_TARGET = '1.7.5';
+function currentBuildRevision() {
+  return String(globalThis.__WEBQA_BUILD_REVISION__ || '').trim();
+}
+function stampReportIdentity(next) {
+  if (!next || typeof next !== 'object') return next;
+  next.buildRevision = currentBuildRevision() || next.buildRevision || '';
+  next.developmentTarget = DEVELOPMENT_TARGET;
+  next.webqaVersion = RELEASE_VERSION;
+  return next;
+}
+function limitedCoverageLabels(nextReport = report) {
+  return coverageLimitationLabels(nextReport || {});
+}
+/** Historical monitor availability from monitor evidence — not from lab-owned coverage strings. */
+function historicalMonitorAvailable(nextReport = report) {
+  if (!nextReport) return false;
+  const ctx = nextReport.context?.performance?.data
+    || nextReport.context?.services?.performance?.data
+    || nextReport.context?.performance
+    || nextReport.performanceMonitor;
+  if (ctx?.monitored === true || ctx?.available === true) return true;
+  if ((nextReport.findings || []).some(f => /^performance\.(mobile|desktop)(-|$)/.test(String(f.ruleId || '')))) return true;
+  // Without lab override, connector-complete coverage still means historical monitor.
+  const cov = String(nextReport.coverage?.performance || '').trim();
+  if (/^complete$/i.test(cov)) return true;
+  return false;
+}
 const runtimeTrace = new RuntimeTrace();
 setLocalAiTraceSink((type,data)=>runtimeTrace.record(`local-ai:${type}`,data));
 
@@ -222,8 +251,8 @@ function coverage() {
     const labLine = perf?.available
       ? 'Current-page lab observations available'
       : (/partial/i.test(perfCov) ? 'Current-page lab observations partial' : 'Current-page lab observations unavailable');
-    // Historical monitor only when coverage is explicitly monitor-complete — never infer from lab.
-    const histAvailable = /^complete$/i.test(perfCov.trim());
+    // Historical monitor from monitor evidence — never infer from lab-owned coverage.performance === current-page.
+    const histAvailable = historicalMonitorAvailable(report);
     const histLine = histAvailable ? 'Historical monitor available' : 'Historical monitor unavailable';
     const rowStatus = !perf?.available || !histAvailable ? 'partial' : 'complete';
     box.insertAdjacentHTML('beforeend', `<span>Performance</span><b data-status="${rowStatus}">${esc(`${labLine} · ${histLine}`)}</b>`);
@@ -339,6 +368,8 @@ function findingContext(f) {
   if (f.link?.text) parts.push(`“${f.link.text}”`);
   if (f.link?.location) parts.push(f.link.location);
   if (f.link?.prominence && f.link.prominence !== 'normal') parts.push(f.link.prominence);
+  if (f.fixOwner) parts.push(`Likely owner: ${f.fixOwner}`);
+  if (f.imageMetrics?.isLcpResource) parts.push('current LCP image');
   if (f.verification?.attempts > 1) parts.push(`${f.verification.attempts} verification attempts`);
   return parts.join(' · ');
 }
@@ -426,7 +457,10 @@ function render() {
     instanceChip.hidden = g.instanceCount < 2;
     instanceChip.textContent = `${g.instanceCount} instances`;
 
-    card.querySelector('h3').textContent = g.size > 1 ? `${presentation.title} (${g.instanceCount} instances)` : presentation.title;
+    const groupedImageTitle = /image-oversized/.test(String(f.ruleId || '')) && g.size > 1;
+    card.querySelector('h3').textContent = groupedImageTitle
+      ? (g.title || presentation.title)
+      : (g.size > 1 ? `${presentation.title} (${g.instanceCount} instances)` : presentation.title);
     card.querySelector('.detail').textContent = presentation.summary;
     const next = card.querySelector('.finding-next');
     const nextCopy = next.querySelector('p');
@@ -450,11 +484,19 @@ function render() {
     }
 
     const highlight = card.querySelector('.highlight');
-    highlight.hidden = f.targetType !== 'visual' || !f.targetId;
+    const highlightables = (g.instances || [f]).filter(row => row?.targetType === 'visual' && row?.targetId);
+    const highlightLead = highlightables[0] || f;
+    highlight.hidden = highlightLead.targetType !== 'visual' || !highlightLead.targetId;
     highlight.onclick = async () => {
       highlight.disabled = true;
-      const r = await send({ type: 'HIGHLIGHT', targetId: f.targetId, selector: f.selector, tabId: tab?.id }, 8000);
-      actionState(card, r.ok && r.found ? 'Highlighted on page.' : r.error || 'The element is no longer present.', r.ok && r.found ? 'ok' : 'error');
+      const rows = highlightables.length ? highlightables : [f];
+      const idx = Number(card.dataset.highlightIndex || 0) % rows.length;
+      const target = rows[idx] || f;
+      card.dataset.highlightIndex = String(idx + 1);
+      const r = await send({ type: 'HIGHLIGHT', targetId: target.targetId, selector: target.selector, tabId: tab?.id }, 8000);
+      const ok = r.ok && r.found;
+      const multi = rows.length > 1 ? ` Highlighted occurrence ${idx + 1} of ${rows.length}.` : '';
+      actionState(card, ok ? `Highlighted on page.${multi}` : r.error || 'The element is no longer present.', ok ? 'ok' : 'error');
       highlight.disabled = false;
     };
     const askFrank = card.querySelector('.ask-frank');
@@ -767,6 +809,7 @@ async function startFrank(finding, card, triggerButton = null) {
       windowId,
       pageUrl,
       report,
+      buildRevision: currentBuildRevision(),
       classFilter,
       showAllChecks,
       filter,
@@ -861,7 +904,7 @@ async function rescan() {
       showFailure(r, 'The page scan could not complete.');
       return;
     }
-    tab = r.tab; report = r.report;
+    tab = r.tab; report = stampReportIdentity(r.report);
     report.scanId = scanId;
     lastScanAttempt = { scanId, ok: true, mode: scanMode, at: new Date().toISOString() };
     $('#new-count').textContent = 'Local scan';
@@ -871,13 +914,13 @@ async function rescan() {
     notice('Local checks complete. Verifying published state, monitored performance and standards context…');
     const enriched = await send({ type: 'ENRICH', report, tabId: tab?.id }, 32000);
     if (enriched.ok) {
-      report = enriched.report;
+      report = stampReportIdentity(enriched.report);
       runtimeTrace.record('scan-complete', { findingCount: Number(report.findings?.length||0), materialGroupCount: Number(report.attention?.materialGroupCount||0), representedClasses: report.attention?.representedClasses||[], connectedMode: report.connectedMode||'unknown', scanId });
       const changed = [report.lifecycle?.newCount ? `${report.lifecycle.newCount} new` : '', report.lifecycle?.resolvedCount ? `${report.lifecycle.resolvedCount} resolved` : ''].filter(Boolean).join(' · ') || 'No changes';
       $('#new-count').textContent = changed;
       render();
       await loadSession();
-      const unavailable = Object.entries(report.coverage || {}).filter(([, v]) => /unavailable/i.test(String(v))).map(([k]) => k);
+      const limited = limitedCoverageLabels(report);
       if (report.connectedMode === 'auth-required') {
         const connection = $('#connection-settings'); if (connection) connection.open = true;
         notice('Browser QA completed locally. The assistant gateway requires an access key. Enter it under Connection settings to restore connected services.', 'warn');
@@ -885,7 +928,26 @@ async function rescan() {
         const connection = $('#connection-settings'); if (connection) connection.open = true;
         notice('Browser QA completed locally. The saved assistant access key was rejected. Verify the key under Connection settings to restore connected services.', 'warn');
       } else if (report.connectedMode === 'unavailable') notice('Browser QA completed. The assistant gateway could not be reached. Browser QA remains available with local evidence and verified guidance.', 'warn');
-      else notice(unavailable.length ? `Scan complete with limited coverage: ${unavailable.join(', ')}.` : `Scan complete at ${scanned}.`, unavailable.length ? 'warn' : 'ok');
+      else if (limited.length) notice(`Scan complete with limited coverage in ${limited.length} area${limited.length === 1 ? '' : 's'}: ${limited.slice(0, 4).join('; ')}.`, 'warn');
+      else notice(`Scan complete at ${scanned}.`, 'ok');
+      if (tab?.id && report?.page?.url) {
+        await send({
+          type: 'SAVE_WORKSPACE_SNAPSHOT',
+          workspace: {
+            tabId: tab.id,
+            windowId: tab.windowId,
+            pageUrl: report.page.url || tab.url,
+            report,
+            buildRevision: currentBuildRevision(),
+            classFilter,
+            showAllChecks,
+            filter,
+            findingId: '',
+            frankFocus: false,
+            pendingReturn: false
+          }
+        }, 4000).catch(() => {});
+      }
     } else {
       runtimeTrace.record('scan-enrichment-failed', { scanId, diagnosticId: enriched?.diagnostic?.id || '', operation: enriched?.diagnostic?.operation || 'ENRICH', code: enriched?.diagnostic?.id || '' });
       showFailure(enriched, 'Local scan completed, but connected context could not finish.');
@@ -1116,6 +1178,11 @@ function focusFindingCard(findingId) {
 
 function applyWorkspaceSnapshot(workspace, { fromFrankFocus = false } = {}) {
   if (!workspace?.report) return false;
+  const stored = String(workspace.buildRevision || workspace.report?.buildRevision || '').trim();
+  if (isStaleBuildRevision(currentBuildRevision(), stored)) {
+    notice('Extension updated. Refreshing this page assessment…', 'warn');
+    return false;
+  }
   report = workspace.report;
   classFilter = workspace.classFilter || '';
   showAllChecks = Boolean(workspace.showAllChecks);
@@ -1140,6 +1207,13 @@ async function restoreWorkspaceOrRescan({ tabId = null, pageUrl = '', preferRest
     const snap = await send({ type: 'GET_WORKSPACE_SNAPSHOT', tabId: useTabId }, 5000);
     const workspace = snap.ok ? snap.workspace : null;
     if (workspace?.report && (!useUrl || workspace.pageUrl === useUrl || (tab?.url && workspace.pageUrl === tab.url))) {
+      const stored = String(workspace.buildRevision || workspace.report?.buildRevision || '').trim();
+      if (isStaleBuildRevision(currentBuildRevision(), stored)) {
+        await send({ type: 'CLEAR_WORKSPACE_SNAPSHOT', tabId: useTabId }, 4000).catch(() => {});
+        notice('Extension updated. Refreshing this page assessment…', 'warn');
+        await rescan();
+        return { restored: false, staleBuild: true };
+      }
       const shouldRestore = Boolean(workspace.frankFocus || workspace.pendingReturn);
       if (!shouldRestore) {
         await rescan();
@@ -1147,7 +1221,11 @@ async function restoreWorkspaceOrRescan({ tabId = null, pageUrl = '', preferRest
       }
       const fromFrank = Boolean(workspace.frankFocus || workspace.pendingReturn);
       if (workspace.frankFocus && useTabId) await send({ type: 'FRANK_END', tabId: useTabId }, 4000).catch(() => {});
-      applyWorkspaceSnapshot(workspace, { fromFrankFocus: fromFrank });
+      if (!applyWorkspaceSnapshot(workspace, { fromFrankFocus: fromFrank })) {
+        await send({ type: 'CLEAR_WORKSPACE_SNAPSHOT', tabId: useTabId }, 4000).catch(() => {});
+        await rescan();
+        return { restored: false, staleBuild: true };
+      }
       await send({ type: 'PATCH_WORKSPACE_SNAPSHOT', tabId: useTabId, patch: { frankFocus: false, pendingReturn: false } }, 4000).catch(() => {});
       await loadSession();
       await updateWatch();

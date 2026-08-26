@@ -42,6 +42,7 @@ async function saveWorkspaceSnapshot(workspace) {
     windowId: Number(workspace.windowId) || 0,
     pageUrl: String(workspace.pageUrl),
     report: workspace.report,
+    buildRevision: String(workspace.buildRevision || workspace.report?.buildRevision || ''),
     classFilter: workspace.classFilter || '',
     showAllChecks: Boolean(workspace.showAllChecks),
     filter: workspace.filter || 'all',
@@ -73,7 +74,16 @@ async function getWorkspaceSnapshot(tabId) {
 async function patchWorkspaceSnapshot(tabId, patch = {}) {
   const current = (await getWorkspaceSnapshot(tabId)).workspace;
   if (!current) return { patched: false };
-  return saveWorkspaceSnapshot({ ...current, ...patch, tabId: current.tabId, pageUrl: current.pageUrl, report: current.report });
+  return saveWorkspaceSnapshot({
+    ...current,
+    ...patch,
+    tabId: current.tabId,
+    pageUrl: patch.pageUrl || current.pageUrl,
+    report: patch.report !== undefined ? patch.report : current.report,
+    buildRevision: patch.buildRevision !== undefined
+      ? String(patch.buildRevision || '')
+      : String(current.buildRevision || current.report?.buildRevision || '')
+  });
 }
 async function clearWorkspaceSnapshot(tabId) {
   const key = workspaceKey(tabId);
