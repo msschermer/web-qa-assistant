@@ -14,12 +14,17 @@ const installedAxe=path.join(root,'node_modules/axe-core/axe.min.js'),vendoredAx
 const axeBytes=fs.existsSync(installedAxe)?fs.readFileSync(installedAxe):fs.existsSync(vendoredAxe)?fs.readFileSync(vendoredAxe):null;
 if(!axeBytes)throw new Error('axe-core runtime is unavailable. Run npm ci, or start from a release source package that includes dist/extension/vendor/axe.min.js.');
 fs.rmSync(out,{recursive:true,force:true});fs.mkdirSync(out,{recursive:true});
-for(const name of ['manifest.json','background.js','content.js','page-diagnostics.js','sidepanel.html','sidepanel.css','sidepanel.js','local-ai.js'])fs.copyFileSync(path.join(src,name),path.join(out,name));
+for(const name of ['manifest.json','background.js','content.js','page-diagnostics.js','sidepanel.html','sidepanel.css','sidepanel.js'])fs.copyFileSync(path.join(src,name),path.join(out,name));
+const localAiSource=fs.readFileSync(path.join(src,'local-ai.js'),'utf8')
+  .replaceAll('../../packages/findings/evidence-ledger.js','./evidence-ledger.js');
+fs.writeFileSync(path.join(out,'local-ai.js'),localAiSource);
 const presentationSource=fs.readFileSync(path.join(root,'packages/presentation/present.js'),'utf8').replace("../frank/guidance.js","./guidance.js");fs.writeFileSync(path.join(out,'presentation.js'),presentationSource);
 fs.copyFileSync(path.join(root,'packages/findings/coverage.js'),path.join(out,'coverage.js'));
+fs.copyFileSync(path.join(root,'packages/findings/scan-lifecycle.js'),path.join(out,'scan-lifecycle.js'));
 const bugReportSource=fs.readFileSync(path.join(root,'packages/support/bug-report.js'),'utf8')
   .replaceAll('../ai/evidence-contract.js','./evidence-contract.js')
-  .replaceAll('../findings/coverage.js','./coverage.js');
+  .replaceAll('../findings/coverage.js','./coverage.js')
+  .replaceAll('../findings/evidence-ledger.js','./evidence-ledger.js');
 fs.writeFileSync(path.join(out,'bug-report.js'),bugReportSource);
 fs.copyFileSync(path.join(root,'packages/ui/tokens.css'),path.join(out,'ui-tokens.css'));
 fs.copyFileSync(path.join(root,'packages/ai/evidence-contract.js'),path.join(out,'evidence-contract.js'));
@@ -40,6 +45,7 @@ buildIntegrityBrowserBundle(root, out);
 fs.copyFileSync(path.join(root,'packages/findings/correlate.js'),path.join(out,'correlate.js'));
 fs.copyFileSync(path.join(root,'packages/findings/correlation.js'),path.join(out,'correlation.js'));
 fs.copyFileSync(path.join(root,'packages/findings/compose.js'),path.join(out,'compose.js'));
+fs.copyFileSync(path.join(root,'packages/findings/evidence-ledger.js'),path.join(out,'evidence-ledger.js'));
 fs.copyFileSync(path.join(root,'packages/findings/impact.js'),path.join(out,'impact.js'));
 fs.copyFileSync(path.join(root,'packages/findings/signals.js'),path.join(out,'signals.js'));
 fs.copyFileSync(path.join(root,'packages/findings/confidence.js'),path.join(out,'confidence.js'));

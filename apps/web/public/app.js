@@ -1,8 +1,10 @@
+import { buildCoverageAccounting } from '/assets/coverage.js';
+
 let report=null,filter='all',frank=null,showAllChecks=false,lastFocus=null;
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function visibleFindings(){return(report?.findings||[]).filter(f=>showAllChecks||f.frankVisible!==false)}
 function materialFindings(){return(report?.findings||[]).filter(f=>f.frankVisible!==false&&f.category!=='context'&&f.confidence!=='inconclusive')}
-function incompleteCoverage(){return Object.values(report?.coverage||{}).filter(v=>/partial|unavailable/i.test(String(v))).length+Number(report?.linkAudit?.inconclusive||0)}
+function incompleteCoverage(){return buildCoverageAccounting(report||{}).degradedAreas.length}
 function judgment(){const rows=materialFindings(),blockers=rows.filter(f=>f.frankPriority==='blocker').length;if(blockers)return{state:'blocker',title:`${rows.length} issue${rows.length===1?'':'s'} need your attention`};if(rows.length)return{state:'attention',title:`${rows.length} issue${rows.length===1?'':'s'} worth addressing`};if(incompleteCoverage())return{state:'incomplete',title:'No confirmed problems found'};return{state:'healthy',title:'Nothing material found'}}
 function counts(){const c={fix:0,review:0,context:0};for(const f of visibleFindings())c[f.category]=(c[f.category]||0)+1;for(const k of Object.keys(c))$(`#${k}-count`).textContent=c[k]}
 function md(){return`# Web QA report\n\n${report.page.url}\n\nEnvironment: ${report.environment?.type||'unknown'} (${report.environment?.confidenceLabel||'unconfirmed'})\n\n## Frank\n${report.priorityBrief||''}\n\n`+(report.findings||[]).map(f=>`### ${f.category.toUpperCase()}: ${f.title}\n${f.detail}\nConfidence: ${f.confidence||'confirmed'}\nSources: ${(f.sources||[]).join(', ')}${f.selector?`\nSelector: \`${f.selector}\``:''}`).join('\n\n')}

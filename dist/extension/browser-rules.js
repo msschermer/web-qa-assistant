@@ -8,7 +8,14 @@
   const TARGET_ATTR='data-web-qa-target';
   const targetFingerprints=new Map();
   const SHADOW_ROOT_BUDGET=80;
-  const SAME_ORIGIN_IFRAME_BUDGET=3;
+  const SAME_ORIGIN_IFRAME_HARD_CEILING=32;
+  const SAME_ORIGIN_IFRAME_MAX_DEPTH=3;
+  const LINK_PROBE_HARD_CEILING=500;
+  const LINK_PROBE_CONCURRENCY=10;
+  const LINK_PROBE_PER_HOST_CONCURRENCY=2;
+  const LINK_PROBE_TIMEOUT_MS=2500;
+  const LINK_PROBE_RETRY_TIMEOUT_MS=5000;
+  const LINK_PROBE_EMERGENCY_MS=60000;
   const SAFE_INTERACTION_BUDGET=6;
   const SAFE_INTERACTION_PER_FRAME=2;
   const INTERACTION_SETTLE_MAX_MS=120;
@@ -22,6 +29,7 @@
   let interactionsPrepared=false;
 
   function text(value){return String(value??'').trim()}
+  function nowMs(){try{if(typeof performance!=='undefined'&&performance.now)return performance.now()}catch{}return Date.now()}
   function attr(el,name){return text(el?.getAttribute?.(name))}
   function clip(value,n=420){const s=text(value).replace(/\s+/g,' ');return s.length>n?s.slice(0,n-1)+'…':s}
   function sanitizeResourceUrl(raw,n=220){
@@ -58,8 +66,48 @@
     return /^javascript:(?:void(?:\(0?\))?;?|void0;?|;)$/.test(h);
   }
   function hash(input){let h=2166136261;for(let i=0;i<input.length;i++){h^=input.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36)}
+  let lastFrameRecords=null;
+  function collectFrameRecords(){
+    const records=[];
+    const seenDocs=new Set();
+    const seenFrames=new Set();
+    const walk=(doc,depth)=>{
+      if(!doc||seenDocs.has(doc)||depth>SAME_ORIGIN_IFRAME_MAX_DEPTH)return;
+      seenDocs.add(doc);
+      let frames=[];
+      try{frames=[...doc.querySelectorAll('iframe')]}catch{return}
+      for(const frame of frames){
+        if(seenFrames.has(frame))continue;
+        seenFrames.add(frame);
+        let child=null;
+        try{child=frame.contentDocument}catch{child=null}
+        const src=attr(frame,'src');
+        const srcdoc=attr(frame,'srcdoc');
+        let sameOrigin=false;
+        try{
+          if(srcdoc||!src)sameOrigin=true;
+          else{
+            const base=doc.defaultView?.location?.href||location.href;
+            const u=new URL(src,base);
+            sameOrigin=u.protocol==='about:'||u.origin===location.origin;
+          }
+        }catch{sameOrigin=Boolean(child)}
+        // URL origin is authoritative. A test environment may leak contentDocument
+        // for a cross-origin src; never inspect those interiors.
+        const accessible=sameOrigin&&Boolean(child);
+        records.push({frame,doc:accessible?child:null,sameOrigin,accessible,depth,src,srcdoc});
+        if(accessible&&child)walk(child,depth+1);
+      }
+    };
+    try{walk(document,0)}catch{}
+    lastFrameRecords=records;
+    return records;
+  }
   function hostIframeFor(el){
     if(!el||!el.ownerDocument||el.ownerDocument===document)return null;
+    const records=lastFrameRecords||collectFrameRecords();
+    const mapped=records.find(r=>r.doc===el.ownerDocument);
+    if(mapped)return mapped.frame;
     try{
       return[...document.querySelectorAll('iframe')].find(frame=>{
         try{return frame.contentDocument===el.ownerDocument}catch{return false}
@@ -315,6 +363,41 @@
     blocks.forEach((block,index)=>{try{visit(JSON.parse(block.textContent||'null'))}catch(error){errors.push({index,message:error.message,selector:selectorFor(block),element:block})}});
     return{blockCount:blocks.length,types:[...types],errors};
   }
+  function pageInventory(){
+    const frames=lastFrameRecords||collectFrameRecords();
+    const accessibleDocs=frames.filter(r=>r.accessible&&r.doc).map(r=>r.doc);
+    const countIn=(sel)=>{
+      let n=0;
+      try{n+=document.querySelectorAll(sel).length}catch{}
+      for(const doc of accessibleDocs){
+        try{n+=doc.querySelectorAll(sel).length}catch{}
+      }
+      return n;
+    };
+    return{
+      links:countIn('a[href]'),
+      uniqueLinks:(()=>{
+        const seen=new Set();
+        for(const a of collectLinkAnchors()){
+          const classified=classifyLink(a);
+          if(classified?.url)seen.add(classified.url);
+        }
+        return seen.size;
+      })(),
+      linkOccurrences:countIn('a[href]'),
+      images:countIn('img'),
+      iframes:frames.length,
+      sameOriginFrames:frames.filter(r=>r.accessible).length,
+      crossOriginFrames:frames.filter(r=>!r.accessible).length,
+      forms:countIn('form'),
+      buttons:countIn('button,[role="button"]'),
+      disclosures:countIn('button[aria-expanded],[role="button"][aria-expanded]'),
+      headings:countIn('h1,h2,h3,h4,h5,h6'),
+      landmarks:countIn('nav,header,footer,main,aside,[role="navigation"],[role="banner"],[role="contentinfo"],[role="main"]'),
+      resources:(()=>{try{return(performance.getEntriesByType?.('resource')||[]).length}catch{return 0}})(),
+      interactiveCandidates:countIn('a,button,input,select,textarea,[role="button"],[tabindex]')
+    };
+  }
   function pageSummary(){
     const canonicalEl=document.querySelector('link[rel~="canonical"]'),descEl=document.querySelector('meta[name="description" i]'),robotsEl=document.querySelector('meta[name="robots" i]'),viewportEl=document.querySelector('meta[name="viewport" i]'),generatorEl=document.querySelector('meta[name="generator" i]'),h1s=[...document.querySelectorAll('h1')],schema=schemaState();
     let canonical='';try{canonical=canonicalEl?.href||''}catch{}
@@ -324,6 +407,8 @@
 
   function run(){
     clearTargetMarkers();targetRegistry.clear();targetFingerprints.clear();
+    lastEmbeddedInspection=null;lastFrameRecords=null;
+    const runStarted=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
     const findings=[],page=pageSummary(),titleEl=document.querySelector('title'),descEl=document.querySelector('meta[name="description" i]'),canonicalEl=document.querySelector('link[rel~="canonical"]'),robotsEl=document.querySelector('meta[name="robots" i]'),viewportEl=document.querySelector('meta[name="viewport" i]'),headings=[...document.querySelectorAll('h1,h2,h3,h4,h5,h6')],h1s=headings.filter(h=>h.tagName==='H1');
 
     if(!text(document.title))findings.push(finding({ruleId:'seo.title-missing',title:'Page title is missing',detail:'The rendered document has no usable title.',category:'fix',severity:'high',selector:'head > title',element:titleEl,targetType:'document',evidence:snippet(titleEl)}));
@@ -394,12 +479,19 @@
     findings.push(...runtimeErrorFindings());
     findings.push(...pageDiagnosticRuntimeFindings());
 
+    const tPerf=nowMs();
     const browserPerformance=performanceSignals();
     findings.push(...performanceFindings(browserPerformance));
     findings.push(...imageResourceFindings(browserPerformance,brokenImageUrls));
+    const performanceMs=Math.round(nowMs()-tPerf);
     findings.push(...fragmentFindings());
     findings.push(...malformedLinkFindings());
+    const tFrame=nowMs();
     findings.push(...embeddedFindings());
+    const frameInspectionMs=Math.round(nowMs()-tFrame);
+    page.embeddedCoverage=collectEmbeddedCoverage();
+    page.inventory=pageInventory();
+    const tIx=nowMs();
     findings.push(...interactionFindings());
     if(interactionsPrepared){
       findings.push(...(lastPreparedInteractionFindings||[]));
@@ -407,29 +499,52 @@
     }else{
       findings.push(...safeInteractionFindings());
     }
+    const interactionMs=Math.round(nowMs()-tIx);
     findings.push(...soft404Findings(page));
     findings.push(...schemaSemanticFindings(schemaState()));
 
     findings.sort((a,b)=>(CATEGORY_RANK[b.category]-CATEGORY_RANK[a.category])||(SEVERITY_RANK[b.severity]-SEVERITY_RANK[a.severity]));
+    const pageDiagBound = Boolean(globalThis.__WEBQA_PAGE_DIAG_BOUND__ || globalThis.__WEBQA_PAGE_DIAGNOSTICS__ || globalThis.__WEBQA_RUNTIME_ERRORS__);
+    const runtimeSource = globalThis.__WEBQA_RUNTIME_ERRORS__?.source;
+    let runtimeStatus = 'not applicable';
+    let coverageScope = {};
+    if (runtimeSource === 'renderer') runtimeStatus = 'renderer';
+    else if (pageDiagBound) {
+      // Extension observation succeeded within its normal post-injection window.
+      runtimeStatus = 'complete';
+      coverageScope = { runtime: 'post-injection-extension' };
+    }
     const coverageMeta={
       browser:'complete',links:'pending',axe:'pending',published:'pending',
       performance:browserPerformance.available?'current-page':'pending',wcag:'pending',ai:'pending',
-      runtime:globalThis.__WEBQA_RUNTIME_ERRORS__?.source==='renderer'
-        ?'renderer'
-        :(globalThis.__WEBQA_PAGE_DIAG_BOUND__||globalThis.__WEBQA_PAGE_DIAGNOSTICS__||globalThis.__WEBQA_RUNTIME_ERRORS__)
-          ?'extension-partial'
-          :'not applicable'
+      runtime:runtimeStatus
     };
     const failedResourceDiag=diagnosticFailedResources();
+    const scanTimings={
+      discoveryMs:Math.max(0,Math.round(nowMs()-runStarted)-performanceMs-frameInspectionMs-interactionMs),
+      axeMs:0,
+      linkProbeMs:0,
+      frameInspectionMs,
+      interactionMs,
+      performanceMs,
+      correlationMs:0,
+      totalMs:Math.round(nowMs()-runStarted)
+    };
     return{
-      scannedAt:new Date().toISOString(),page,findings,browserPerformance,
+      scannedAt:new Date().toISOString(),page,findings,browserPerformance,scanTimings,
       diagnostics:{
         failedResources:failedResourceDiag.items,
+        resourceAnomalies:failedResourceDiag.items,
         observedResourceFailureEvents:failedResourceDiag.observedFailureEvents,
-        deduplicatedFailedResources:failedResourceDiag.items.length
+        observedResourceAnomalyEvents:failedResourceDiag.observedFailureEvents,
+        deduplicatedFailedResources:failedResourceDiag.items.length,
+        deduplicatedResourceAnomalies:failedResourceDiag.items.length,
+        confirmedResourceFailures:failedResourceDiag.confirmedCount,
+        inconclusiveResourceObservations:failedResourceDiag.inconclusiveCount
       },
       pageDiagnostics:{errors:(globalThis.__WEBQA_PAGE_DIAGNOSTICS__?.errors||globalThis.__WEBQA_RUNTIME_ERRORS__?.samples||[]).slice(0,20)},
       coverage:coverageMeta,
+      coverageScope,
       interactionCoverage:lastInteractionCoverage,
       psi:{enabled:false,attempted:false,completed:false,unavailableReason:'deferred-native-lab-sufficient'}
     };
@@ -1033,8 +1148,10 @@
     const items=[];
     const seen=new Set();
     let observedFailureEvents=0;
+    let confirmedCount=0;
+    let inconclusiveCount=0;
     let resources=[];
-    try{resources=performance.getEntriesByType('resource')||[]}catch{return{items,observedFailureEvents:0}}
+    try{resources=performance.getEntriesByType('resource')||[]}catch{return{items,observedFailureEvents:0,confirmedCount:0,inconclusiveCount:0}}
     for(const entry of resources){
       const status=Number(entry.responseStatus);
       const opaque=!Number.isFinite(status)||status===0;
@@ -1054,15 +1171,20 @@
       if(opaque){disposition='inconclusive';failureClass='inconclusive'}
       else if(party.noise){disposition='diagnosticOnly';failureClass='diagnostic'}
       else if(parsed&&(parsed.origin===location.origin||ownership==='probable-first-party')){disposition='confirmed';failureClass='confirmed-failure'}
+      if(disposition==='confirmed')confirmedCount++;
+      else if(disposition==='inconclusive')inconclusiveCount++;
+      // Keep failedResources export name for compatibility; kind reflects evidence strength.
+      const evidenceKind=disposition==='confirmed'?'resource_failure':'resource_anomaly';
       items.push({
-        kind:'resource_failure',initiator:kind,status:opaque?0:status,source:url,
+        kind:evidenceKind,initiator:kind,status:opaque?0:status,source:url,
         sameOrigin:parsed?parsed.origin===location.origin:false,
         originClass:ownership,party:party.party,noise:Boolean(party.noise),
         disposition,failureClass,opaque:opaque||undefined,
-        roleHint:party.roleHint||undefined
+        roleHint:party.roleHint||undefined,
+        evidenceClass:disposition==='confirmed'?'confirmed-failure':'observation'
       });
     }
-    return{items,observedFailureEvents};
+    return{items,observedFailureEvents,confirmedCount,inconclusiveCount};
   }
   function runtimeErrorFindings(){
     const bucket=globalThis.__WEBQA_RUNTIME_ERRORS__;
@@ -1260,44 +1382,39 @@
     }
     return false;
   }
+  let lastEmbeddedInspection=null;
   function collectEmbeddedCoverage(){
-    const iframes=[...document.querySelectorAll('iframe')];
-    let sameOrigin=0,crossOrigin=0,accessible=0,frameBudgetExceeded=false;
-    let sameOriginChecked=0;
+    const records=lastFrameRecords||collectFrameRecords();
+    const accessible=records.filter(r=>r.accessible);
+    const sameOriginEligible=records.filter(r=>r.sameOrigin).length;
+    const crossOrigin=records.filter(r=>!r.sameOrigin).length;
+    const sameOriginChecked=lastEmbeddedInspection
+      ? Number(lastEmbeddedInspection.checked||0)
+      : 0;
+    const sameOriginUnprobed=Math.max(0,sameOriginEligible-sameOriginChecked);
+    const frameBudgetReached=sameOriginEligible>SAME_ORIGIN_IFRAME_HARD_CEILING||lastEmbeddedInspection?.deadlineStopped===true;
+    const frameBudgetPreventedCoverage=sameOriginUnprobed>0;
     const openShadowRoots=shadowRoots().length;
-    for(const frame of iframes){
-      const src=attr(frame,'src');
-      const srcdoc=attr(frame,'srcdoc');
-      // srcdoc / blank / about:blank are same-document embeds when contentDocument is readable.
-      if(!src&&!srcdoc){
-        try{
-          if(frame.contentDocument){sameOrigin++;accessible++;continue}
-        }catch{}
-        crossOrigin++;
-        continue;
-      }
-      try{
-        const u=src?new URL(src,location.href):null;
-        const isSame=srcdoc||(u&&(u.origin===location.origin||u.protocol==='about:'));
-        if(isSame){
-          sameOrigin++;
-          try{if(frame.contentDocument)accessible++}catch{}
-        }else crossOrigin++;
-      }catch{crossOrigin++}
-    }
-    sameOriginChecked=Math.min(accessible,SAME_ORIGIN_IFRAME_BUDGET);
-    if(accessible>SAME_ORIGIN_IFRAME_BUDGET)frameBudgetExceeded=true;
     return{
-      iframeCount:iframes.length,
-      sameOriginIframes:sameOrigin,
-      accessibleSameOriginIframes:accessible,
+      iframeCount:records.length,
+      framesDiscovered:records.length,
+      sameOriginIframes:sameOriginEligible,
+      accessibleSameOriginIframes:accessible.length,
+      sameOriginEligible,
+      sameOriginAttempted:sameOriginChecked,
       sameOriginFramesChecked:sameOriginChecked,
+      sameOriginUnprobed,
       crossOriginIframes:crossOrigin,
       crossOriginFramesNotInspectable:crossOrigin,
-      frameBudgetExceeded,
+      frameBudgetReached,
+      frameBudgetExceeded:frameBudgetPreventedCoverage,
+      frameBudgetPreventedCoverage,
+      accountingOk:sameOriginEligible===sameOriginChecked+sameOriginUnprobed,
       openShadowRoots,
       closedShadowRoots:'not observable',
-      fragmentTargets:'top-document, open shadow roots, and same-origin iframe documents when accessible'
+      fragmentTargets:'top-document, open shadow roots, and same-origin iframe documents when accessible',
+      maxDepth:SAME_ORIGIN_IFRAME_MAX_DEPTH,
+      hardCeiling:SAME_ORIGIN_IFRAME_HARD_CEILING
     };
   }
   function pageDiagnosticRuntimeFindings(){
@@ -1440,16 +1557,106 @@
     }catch{}
     return out;
   }
+  function frameExtras(frame,frameSel){
+    return{embeddedContext:'same-origin-iframe',frameSelector:frameSel,spotlightSafe:false};
+  }
+  function inspectSameOriginFrameDocument(doc,frame){
+    const out=[];
+    if(!doc||!frame)return out;
+    const frameSel=selectorFor(frame);
+    const extra=frameExtras(frame,frameSel);
+    const lang=attr(doc.documentElement,'lang');
+    if(!lang){
+      out.push(finding({
+        ruleId:'a11y.lang-missing',
+        title:'Embedded document language is missing',
+        detail:'Inside an embedded same-origin document, the root html element has no lang attribute.',
+        category:'fix',severity:'medium',confidence:'confirmed',element:doc.documentElement,targetType:'document',
+        evidence:'iframe-html-lang-missing',wcag:['3.1.1'],extra
+      }));
+    }else{
+      try{new Intl.Locale(lang)}catch{
+        out.push(finding({
+          ruleId:'a11y.lang-invalid',
+          title:'Embedded document language is not a valid language tag',
+          detail:`Inside an embedded same-origin document, html lang="${clip(lang,40)}" is not a valid BCP 47 language tag.`,
+          category:'fix',severity:'medium',confidence:'confirmed',element:doc.documentElement,targetType:'document',
+          evidence:lang,wcag:['3.1.1'],extra
+        }));
+      }
+    }
+    if(!text(doc.title)){
+      out.push(finding({
+        ruleId:'web.iframe-title-missing',
+        title:'Embedded document has no title',
+        detail:'Inside an embedded same-origin document, the document title is empty. This affects assistive technology context for the framed experience.',
+        category:'review',severity:'low',confidence:'inferred',targetType:'document',
+        evidence:'iframe-document-title-empty',extra:{worthChecking:true,...extra}
+      }));
+    }
+    out.push(...formFindingsInDocument(doc,{frame,budget:8}));
+    const headings=[...doc.querySelectorAll('h1,h2,h3,h4,h5,h6')];
+    const h1s=headings.filter(h=>h.tagName==='H1');
+    if(!h1s.length){
+      out.push(finding({
+        ruleId:'structure.h1-missing',
+        title:'Embedded document has no H1 heading',
+        confidence:'inferred',
+        detail:'Inside an embedded same-origin document, no H1 heading was observed.',
+        category:'review',severity:'low',targetType:'document',extra:{worthChecking:true,...extra}
+      }));
+    }
+    const broken=[...doc.querySelectorAll('img[src]')].filter(img=>img.complete&&Number(img.naturalWidth)===0&&Number(img.naturalHeight)===0).slice(0,8);
+    for(const img of broken){
+      out.push(finding({
+        ruleId:'web.image-broken',
+        title:'Image failed to load inside same-origin iframe',
+        detail:'Inside an embedded same-origin document, an image completed loading with naturalWidth 0.',
+        category:'fix',severity:'medium',confidence:'confirmed',element:img,targetType:'document',
+        evidence:sanitizeResourceUrl(img.currentSrc||img.src||''),
+        extra:{resourceUrl:sanitizeResourceUrl(img.currentSrc||img.src||''),...extra}
+      }));
+    }
+    for(const a of doc.querySelectorAll('a[target="_blank"]')){
+      const rel=attr(a,'rel').toLowerCase();
+      if(!rel.includes('noopener')&&!rel.includes('noreferrer')){
+        out.push(finding({
+          ruleId:'security.blank-opener',
+          title:'New-tab link can retain opener access',
+          detail:'Inside an embedded same-origin document, a target=_blank link does not declare noopener or noreferrer.',
+          category:'review',severity:'low',element:a,evidence:snippet(a),extra
+        }));
+      }
+    }
+    for(const btn of doc.querySelectorAll('button[aria-expanded], [role="button"][aria-expanded]')){
+      const expanded=attr(btn,'aria-expanded');
+      const panelId=attr(btn,'aria-controls');
+      if(!panelId||expanded!=='false')continue;
+      let present=false;
+      try{present=!!(doc.getElementById(panelId)||doc.querySelector(`[name="${CSS.escape(panelId)}"]`))}catch{}
+      if(present)continue;
+      out.push(finding({
+        ruleId:'ux.disclosure-target-missing',
+        title:'Collapsed control points at a missing panel',
+        detail:'Inside an embedded same-origin document, a disclosure control is collapsed but its aria-controls target was not found.',
+        category:'review',severity:'medium',confidence:'inferred',element:btn,targetType:'document',
+        evidence:`aria-controls=${panelId}`,extra:{worthChecking:true,...extra}
+      }));
+    }
+    return out;
+  }
   function embeddedFindings(){
-    const out=[],seen=new Set();
+    const out=[];
+    const records=collectFrameRecords();
     let framesInspected=0;
-    for(const frame of document.querySelectorAll('iframe')){
-      const src=attr(frame,'src');
-      const srcdoc=attr(frame,'srcdoc');
-      if(src&&seen.has(src))continue;
-      if(src)seen.add(src);
+    const started=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
+    const deadline=started+15000;
+    for(const rec of records){
+      const frame=rec.frame;
+      const src=rec.src||attr(frame,'src');
+      const srcdoc=rec.srcdoc||attr(frame,'srcdoc');
       let parsed=null;
-      if(src){try{parsed=new URL(src,location.href)}catch{continue}}
+      if(src){try{parsed=new URL(src,location.href)}catch{parsed=null}}
       const title=attr(frame,'title');
       const meaningful=srcdoc||(parsed&&(parsed.pathname.length>1||parsed.search));
       if(meaningful&&!title.trim()&&Number(frame.clientWidth||0)>=120&&Number(frame.clientHeight||0)>=80){
@@ -1463,73 +1670,18 @@
           extra:{worthChecking:true,originClass:party.originClass,party:party.party,embedRole:party.roleHint||'iframe'}
         }));
       }
-      let doc=null;
-      try{doc=frame.contentDocument}catch{doc=null}
-      if(!doc)continue;
-      if(framesInspected>=SAME_ORIGIN_IFRAME_BUDGET)continue;
+      if(!rec.accessible||!rec.doc)continue;
+      const now=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
+      if(framesInspected>=SAME_ORIGIN_IFRAME_HARD_CEILING||now>deadline)continue;
       framesInspected++;
-      const frameSel=selectorFor(frame);
-      const lang=attr(doc.documentElement,'lang');
-      if(!lang){
-        out.push(finding({
-          ruleId:'a11y.lang-missing',
-          title:'Embedded document language is missing',
-          detail:'Inside an embedded same-origin document, the root html element has no lang attribute.',
-          category:'fix',severity:'medium',confidence:'confirmed',element:doc.documentElement,targetType:'document',
-          evidence:'iframe-html-lang-missing',wcag:['3.1.1'],
-          extra:{embeddedContext:'same-origin-iframe',frameSelector:frameSel,spotlightSafe:false}
-        }));
-      }else{
-        try{new Intl.Locale(lang)}catch{
-          out.push(finding({
-            ruleId:'a11y.lang-invalid',
-            title:'Embedded document language is not a valid language tag',
-            detail:`Inside an embedded same-origin document, html lang="${clip(lang,40)}" is not a valid BCP 47 language tag.`,
-            category:'fix',severity:'medium',confidence:'confirmed',element:doc.documentElement,targetType:'document',
-            evidence:lang,wcag:['3.1.1'],
-            extra:{embeddedContext:'same-origin-iframe',frameSelector:frameSel,spotlightSafe:false}
-          }));
-        }
-      }
-      if(!text(doc.title)){
-        out.push(finding({
-          ruleId:'web.iframe-title-missing',
-          title:'Embedded document has no title',
-          detail:'Inside an embedded same-origin document, the document title is empty. This affects assistive technology context for the framed experience.',
-          category:'review',severity:'low',confidence:'inferred',targetType:'document',
-          evidence:'iframe-document-title-empty',
-          extra:{worthChecking:true,embeddedContext:'same-origin-iframe',frameSelector:frameSel,spotlightSafe:false}
-        }));
-      }
-      out.push(...formFindingsInDocument(doc,{frame,budget:4}));
-      const broken=[...doc.querySelectorAll('img[src]')].filter(img=>img.complete&&Number(img.naturalWidth)===0&&Number(img.naturalHeight)===0).slice(0,2);
-      for(const img of broken){
-        out.push(finding({
-          ruleId:'web.image-broken',
-          title:'Image failed to load inside same-origin iframe',
-          detail:'Inside an embedded same-origin document, an image completed loading with naturalWidth 0.',
-          category:'fix',severity:'medium',confidence:'confirmed',element:img,targetType:'document',
-          evidence:sanitizeResourceUrl(img.currentSrc||img.src||''),
-          extra:{resourceUrl:sanitizeResourceUrl(img.currentSrc||img.src||''),embeddedContext:'same-origin-iframe',frameSelector:frameSel,spotlightSafe:false}
-        }));
-      }
-      for(const btn of doc.querySelectorAll('button[aria-expanded], [role="button"][aria-expanded]')){
-        const expanded=attr(btn,'aria-expanded');
-        const panelId=attr(btn,'aria-controls');
-        if(!panelId||expanded!=='false')continue;
-        let present=false;
-        try{present=!!(doc.getElementById(panelId)||doc.querySelector(`[name="${CSS.escape(panelId)}"]`))}catch{}
-        if(present)continue;
-        out.push(finding({
-          ruleId:'ux.disclosure-target-missing',
-          title:'Collapsed control points at a missing panel',
-          detail:'Inside an embedded same-origin document, a disclosure control is collapsed but its aria-controls target was not found.',
-          category:'review',severity:'medium',confidence:'inferred',element:btn,targetType:'document',
-          evidence:`aria-controls=${panelId}`,
-          extra:{worthChecking:true,embeddedContext:'same-origin-iframe',frameSelector:frameSel,spotlightSafe:false}
-        }));
-      }
+      out.push(...inspectSameOriginFrameDocument(rec.doc,frame));
     }
+    const now=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
+    lastEmbeddedInspection={
+      checked:framesInspected,
+      eligible:records.filter(r=>r.sameOrigin).length,
+      deadlineStopped:now>deadline&&records.filter(r=>r.sameOrigin).length>framesInspected
+    };
     return out;
   }
   const UNSAFE_INTERACTION_RE=/\b(buy|purchase|checkout|pay|payment|delete|remove|logout|log[\s-]?out|sign[\s-]?out|sign[\s-]?in|signin|log[\s-]?in|login|auth|authenticate|unsubscribe|submit|send|contact|apply|book|reserve|download|install|share|tweet|post|add[\s-]?to[\s-]?cart|place[\s-]?order|donate|subscribe|register|create[\s-]?account|upload|confirm|accept|password|billing|credit[\s-]?card)\b/i;
@@ -2148,7 +2300,7 @@
   }
   function emptyInteractionCoverage(){
     return{
-      candidates:0,eligible:0,safelyTested:0,tested:0,skippedUnsafe:0,skippedIneligible:0,
+      candidates:0,eligible:0,safelyTested:0,tested:0,skippedUnsafe:0,skippedIneligible:0,skippedSafetyPolicy:0,
       passed:0,failed:0,inconclusive:0,notApplicable:0,restorationFailures:0,
       partialReason:'',topDocumentOnly:true,iframeDisclosures:'none',
       contexts:{top:0,iframe:0},
@@ -2164,12 +2316,14 @@
 
     function noteObservation(obs){
       if(!obs)return;
-      // Accounting invariant: tested == passed + failed + inconclusive (+ other tested outcomes).
-      // not-applicable and skipped-unsafe are not tested activations.
-      if(obs.outcome==='not-applicable'||obs.outcome==='skipped-unsafe'){
+      // Accounting invariant: tested == passed + failed + inconclusive.
+      // not-applicable and skipped-unsafe/safety-policy are not tested activations.
+      if(obs.outcome==='not-applicable'||obs.outcome==='skipped-unsafe'||obs.outcome==='skipped-safety-policy'){
         if(coverage.tested>0)coverage.tested--;
         if(coverage.safelyTested>0)coverage.safelyTested--;
+        if(coverage.eligible>0)coverage.eligible--;
         if(obs.outcome==='not-applicable')coverage.notApplicable++;
+        else if(obs.outcome==='skipped-safety-policy')coverage.skippedSafetyPolicy++;
         else coverage.skippedUnsafe++;
         return;
       }
@@ -2305,25 +2459,45 @@
       }
     }
 
-    // Same-origin iframe disclosures
+    // Same-origin iframe disclosures (nested accessible frames included)
     let framesUsed=0;
-    let iframeActivated=false;
-    for(const frame of document.querySelectorAll('iframe')){
-      if(stopAll||coverage.safelyTested>=SAFE_INTERACTION_BUDGET)break;
-      if(framesUsed>=SAME_ORIGIN_IFRAME_BUDGET){
-        coverage.partialReason=coverage.partialReason||'frame-budget-exceeded';
+    let iframeInteractionsUnprobed=0;
+    const frameRecords=(lastFrameRecords||collectFrameRecords()).filter(r=>r.accessible&&r.doc);
+    let iframeEligible=0;
+    let iframeTested=0;
+    let iframeDisclosuresPresent=false;
+    for(let fi=0;fi<frameRecords.length;fi++){
+      const rec=frameRecords[fi];
+      const frame=rec.frame;
+      if(stopAll)break;
+      if(coverage.safelyTested>=SAFE_INTERACTION_BUDGET){
+        coverage.partialReason=coverage.partialReason||'interaction-budget-exceeded';
         break;
       }
-      let doc=null;
-      try{doc=frame.contentDocument}catch{doc=null}
-      if(!doc)continue;
-      // Frame still attached?
-      if(!frame.isConnected)break;
+      if(framesUsed>=SAME_ORIGIN_IFRAME_HARD_CEILING){
+        for(let rj=fi;rj<frameRecords.length;rj++){
+          const restDoc=frameRecords[rj].doc;
+          if(!restDoc)continue;
+          const remaining=[...restDoc.querySelectorAll('button[aria-expanded][aria-controls], [role="button"][aria-expanded][aria-controls]')]
+            .filter(el=>!isMenuToggleCandidate(el,restDoc));
+          if(remaining.some(el=>isKnownSafeDisclosureControl(el,restDoc)))iframeInteractionsUnprobed++;
+        }
+        if(iframeInteractionsUnprobed>0){
+          coverage.partialReason=coverage.partialReason||'frame-budget-exceeded';
+          coverage.iframeInteractionsUnprobed=iframeInteractionsUnprobed;
+        }
+        break;
+      }
+      const doc=rec.doc;
+      if(!frame.isConnected)continue;
       framesUsed++;
       coverage.topDocumentOnly=false;
       const frameSel=selectorFor(frame);
       const disclosures=[...doc.querySelectorAll('button[aria-expanded][aria-controls], [role="button"][aria-expanded][aria-controls]')]
         .filter(el=>!isMenuToggleCandidate(el,doc));
+      if(disclosures.length)iframeDisclosuresPresent=true;
+      const eligibleHere=disclosures.filter(el=>isKnownSafeDisclosureControl(el,doc)).length;
+      iframeEligible+=eligibleHere;
       const testedBefore=coverage.safelyTested;
       await runDisclosureList(disclosures,{
         doc,
@@ -2331,7 +2505,7 @@
         frameSelector:frameSel,
         frameLimit:SAFE_INTERACTION_PER_FRAME
       });
-      if(coverage.safelyTested>testedBefore)iframeActivated=true;
+      iframeTested+=Math.max(0,coverage.safelyTested-testedBefore);
       try{
         if(frame.contentDocument!==doc){
           coverage.partialReason=coverage.partialReason||'frame-replaced';
@@ -2344,11 +2518,16 @@
         break;
       }
     }
-    coverage.iframeDisclosures=iframeActivated?'tested':(framesUsed?'present-not-tested':'none');
+    if(iframeTested>0)coverage.iframeDisclosures='tested';
+    else if(iframeEligible>0)coverage.iframeDisclosures='present-not-tested';
+    else if(iframeDisclosuresPresent)coverage.iframeDisclosures='present-not-eligible';
+    else coverage.iframeDisclosures='none';
+    if(iframeInteractionsUnprobed>0)coverage.iframeInteractionsUnprobed=iframeInteractionsUnprobed;
 
     if(!coverage.partialReason){
-      if(!coverage.safelyTested)coverage.partialReason=coverage.candidates?'no-safe-reversible-candidates':'no-disclosure-candidates';
-      else if(coverage.restorationFailures)coverage.partialReason='restoration-unproven';
+      if(coverage.restorationFailures)coverage.partialReason='restoration-unproven';
+      else if(coverage.skippedSafetyPolicy&&!coverage.safelyTested)coverage.partialReason='no-safe-reversible-candidates';
+      else if(!coverage.safelyTested)coverage.partialReason=coverage.candidates?'no-safe-reversible-candidates':'no-disclosure-candidates';
       else if(!coverage.topDocumentOnly)coverage.partialReason='top-and-iframe-disclosures';
       else coverage.partialReason='top-document-interactions';
     }
@@ -2629,7 +2808,12 @@
   }
   function cacheLinkResult(url,result){
     const ttl=result.verificationState==='healthy'?60000:result.verificationState==='confirmed-failure'?30000:10000;
-    linkVerificationCache.set(url,{result:{...result,cached:false},expiresAt:Date.now()+ttl});
+    const stored={result:{...result,cached:false},expiresAt:Date.now()+ttl};
+    linkVerificationCache.set(url,stored);
+    const finalUrl=result.result?.finalUrl;
+    if(finalUrl&&finalUrl!==url&&result.verificationState==='healthy'){
+      linkVerificationCache.set(finalUrl,stored);
+    }
   }
   async function probeUrl(url,{timeoutMs=3500,internal=true}={}){
     const controller=new AbortController(),started=performance.now();
@@ -2652,26 +2836,186 @@
     if(result.status>=400)return'inconclusive';
     return'inconclusive';
   }
-  async function runQueue(entries,{concurrency,timeoutMs,deadlineAt=Infinity}){
-    const out=new Array(entries.length);let cursor=0;
+  function hostOfUrl(url){
+    try{return new URL(url).host}catch{return ''}
+  }
+  function emptyHostProbeState(){
+    return{state:'healthy',inFlight:0,consecutive429:0,consecutive403:0,consecutiveTimeout:0,inferCause:''};
+  }
+  async function runPrimaryVerificationQueue(entries,{
+    globalConcurrency=LINK_PROBE_CONCURRENCY,
+    perHostConcurrency=LINK_PROBE_PER_HOST_CONCURRENCY,
+    timeoutMs=LINK_PROBE_TIMEOUT_MS,
+    retryTimeoutMs=LINK_PROBE_RETRY_TIMEOUT_MS,
+    emergencyMs=LINK_PROBE_EMERGENCY_MS,
+    onProgress=null
+  }={}){
+    const n=entries.length;
+    const results=new Array(n);
+    const claimed=new Uint8Array(n);
+    let pendingCount=n;
+    let globalInFlight=0;
+    let maxGlobalInFlight=0;
+    let maxPerHostInFlight=0;
+    let completed=0;
+    let emergencyFired=false;
+    const emergencyAt=performance.now()+Number(emergencyMs||LINK_PROBE_EMERGENCY_MS);
+    const hosts=new Map();
+    let waiters=[];
+    function hostState(host){
+      if(!hosts.has(host))hosts.set(host,emptyHostProbeState());
+      return hosts.get(host);
+    }
+    function notify(){
+      const q=waiters;waiters=[];
+      for(const resolve of q)resolve();
+    }
+    function waitForSlot(){
+      return new Promise(resolve=>{waiters.push(resolve)});
+    }
+    function noteHostOutcome(host,verified){
+      const hs=hostState(host);
+      const status=Number(verified?.result?.status||0);
+      const cause=String(verified?.cause||'');
+      if(status===429||cause==='rate-limited'){
+        hs.consecutive429++;
+        if(hs.consecutive429>=3){hs.state='throttled';hs.inferCause='rate-limited'}
+      }else hs.consecutive429=0;
+      if([401,403].includes(status)||cause==='remote-blocked'){
+        hs.consecutive403++;
+        if(hs.consecutive403>=3){hs.state='remote-blocked';hs.inferCause='remote-blocked'}
+      }else hs.consecutive403=0;
+      if(verified?.result?.state==='timeout'||cause==='scanner-timeout'){
+        hs.consecutiveTimeout++;
+        if(hs.consecutiveTimeout>=4&&hs.state==='healthy'){hs.state='throttled';hs.inferCause='scanner-timeout'}
+      }else hs.consecutiveTimeout=0;
+    }
+    function claimJob(){
+      if(!pendingCount)return null;
+      let blockedByHost=false;
+      for(let i=0;i<n;i++){
+        if(claimed[i])continue;
+        const job=entries[i];
+        const host=hostOfUrl(job.url);
+        const hs=hostState(host);
+        if(hs.state==='throttled'||hs.state==='remote-blocked'){
+          claimed[i]=1;pendingCount--;
+          return{index:i,job,host,hs,inferred:true};
+        }
+        if(hs.inFlight>=perHostConcurrency){blockedByHost=true;continue}
+        claimed[i]=1;pendingCount--;
+        return{index:i,job,host,hs,inferred:false};
+      }
+      return blockedByHost?null:null;
+    }
+    async function verifyOne(job){
+      const cached=cachedLinkResult(job.url);
+      if(cached)return cached;
+      const first=await probeUrl(job.url,{timeoutMs,internal:job.internal!==false});
+      if(probeClass(first)==='healthy'){
+        const verified={verificationState:'healthy',confidence:'confirmed',result:first,attempts:[first]};
+        cacheLinkResult(job.url,verified);
+        return verified;
+      }
+      const verified=await verifyLink(job.url,first,{
+        retryTimeoutMs,
+        thirdTimeoutMs:retryTimeoutMs,
+        degraded:false,
+        internal:job.internal!==false
+      });
+      cacheLinkResult(job.url,verified);
+      return verified;
+    }
     async function worker(){
-      while(cursor<entries.length){
-        const i=cursor++;
-        const remaining=deadlineAt-performance.now();
-        if(remaining<500){
-          out[i]={state:'budget-exhausted',status:0,error:'link audit time budget exhausted',finalUrl:entries[i].url,durationMs:0};
+      while(pendingCount>0||globalInFlight>0){
+        if(performance.now()>=emergencyAt){emergencyFired=true;notify();break}
+        const claimedJob=claimJob();
+        if(!claimedJob){
+          if(!pendingCount&&!globalInFlight)break;
+          if(!pendingCount)break;
+          const wait=waitForSlot();
+          const timeout=new Promise(resolve=>setTimeout(resolve,12));
+          await Promise.race([wait,timeout]);
           continue;
         }
-        out[i]=await probeUrl(entries[i].url,{timeoutMs:Math.max(500,Math.min(timeoutMs,remaining)),internal:entries[i].internal!==false});
+        const {index,job,host,hs,inferred}=claimedJob;
+        if(inferred){
+          const cause=hs.state==='remote-blocked'?'remote-blocked':hs.inferCause||(hs.state==='throttled'?'rate-limited':'scanner-timeout');
+          results[index]={
+            verificationState:'inconclusive',
+            confidence:'inconclusive',
+            result:{state:'host-throttled',status:0,finalUrl:job.url,durationMs:0},
+            attempts:[],
+            cause,
+            hostInferred:true
+          };
+          completed++;
+          onProgress?.({queued:n,completed,inFlight:globalInFlight,pending:pendingCount});
+          continue;
+        }
+        hs.inFlight++;
+        globalInFlight++;
+        maxGlobalInFlight=Math.max(maxGlobalInFlight,globalInFlight);
+        maxPerHostInFlight=Math.max(maxPerHostInFlight,hs.inFlight);
+        try{
+          const verified=await verifyOne(job);
+          results[index]=verified;
+          noteHostOutcome(host,verified);
+        }catch{
+          results[index]={
+            verificationState:'inconclusive',
+            confidence:'inconclusive',
+            result:{state:'unavailable',status:0,finalUrl:job.url,durationMs:0,error:'probe-failed'},
+            attempts:[],
+            cause:'network-failure'
+          };
+        }finally{
+          hs.inFlight--;
+          globalInFlight--;
+          completed++;
+          onProgress?.({queued:n,completed,inFlight:globalInFlight,pending:pendingCount});
+          notify();
+        }
       }
     }
-    await Promise.all(Array.from({length:Math.min(concurrency,entries.length)},()=>worker()));
-    return out;
+    const workers=Math.min(Math.max(1,globalConcurrency),Math.max(1,n));
+    if(n)await Promise.all(Array.from({length:workers},()=>worker()));
+    for(let i=0;i<n;i++){
+      if(results[i])continue;
+      results[i]={
+        verificationState:'unprobed',
+        confidence:'unprobed',
+        result:null,
+        attempts:[],
+        budgetExhausted:true,
+        cause:'scanner-budget-aborted'
+      };
+    }
+    return{
+      results,
+      metrics:{
+        maxGlobalInFlight,
+        maxPerHostInFlight,
+        emergencyFired,
+        completed:results.filter(r=>r&&r.verificationState!=='unprobed').length,
+        pendingAtEnd:results.filter(r=>r?.verificationState==='unprobed').length,
+        completion:emergencyFired?'emergency':'queue-empty'
+      }
+    };
   }
   async function verifyLink(url,first,{retryTimeoutMs=7000,thirdTimeoutMs=8000,degraded=false,internal=true}={}){
     const attempts=[first];
     const firstClass=probeClass(first);
     if(firstClass==='healthy')return{verificationState:'healthy',confidence:'confirmed',result:first,attempts};
+    const firstStatus=Number(first?.status||0);
+    if([401,403,429].includes(firstStatus)){
+      return{verificationState:'inconclusive',confidence:'inconclusive',result:first,attempts,cause:firstStatus===429?'rate-limited':'remote-blocked'};
+    }
+    // External timeout/opaque failures rarely gain evidence from a same-origin browser retry.
+    if(!internal&&(first.state==='timeout'||first.state==='unavailable'||firstStatus===0)){
+      const cause=first.state==='timeout'?'scanner-timeout':/cors|opaque|failed to fetch|typeerror/i.test(String(first.error||''))?'cors-or-opaque':'network-failure';
+      return{verificationState:'inconclusive',confidence:'inconclusive',result:first,attempts,cause};
+    }
     const second=await probeUrl(url,{timeoutMs:degraded?Math.max(retryTimeoutMs,8000):retryTimeoutMs,internal});
     attempts.push(second);
     const secondClass=probeClass(second);
@@ -2693,7 +3037,8 @@
         return{verificationState:'confirmed-failure',confidence:'confirmed',failureClass:thirdClass,result:third,attempts};
       }
     }
-    return{verificationState:'inconclusive',confidence:'inconclusive',result:attempts[attempts.length-1],attempts};
+    const last=attempts[attempts.length-1];
+    return{verificationState:'inconclusive',confidence:'inconclusive',result:last,attempts,cause:inconclusiveCause({},{...last},{internal})};
   }
   async function recheckLink(url,{timeoutMs=4500,retryTimeoutMs=8000}={}){
     let internal=true;try{internal=new URL(url).origin===location.origin}catch{}
@@ -2711,78 +3056,123 @@
     };
   }
 
-  async function auditLinks({limit=36,concurrency=6,timeoutMs=3000,retryTimeoutMs=7000,budgetMs=15000}={}){
-    const groups=new Map();
-    for(const a of document.querySelectorAll('a[href]')){
+  function inconclusiveCause(verified={},result={},{internal=true}={}){
+    if(verified.budgetExhausted||result.state==='budget-exhausted')return'scanner-budget-aborted';
+    if(result.state==='timeout')return'scanner-timeout';
+    const status=Number(result.status||0);
+    if(status===429)return'rate-limited';
+    if([401,403].includes(status))return'remote-blocked';
+    const err=String(result.error||'');
+    if(!internal&&(result.state==='unavailable'||status===0)){
+      if(/failed to fetch|networkerror|cors|opaque|typeerror/i.test(err))return'cors-or-opaque';
+      return'network-failure';
+    }
+    if(result.state==='unavailable'||status===0)return'network-failure';
+    if(/not supported|unsupported/i.test(err))return'unsupported-probe';
+    if(status>0)return'ambiguous-response';
+    return'other';
+  }
+
+  function collectLinkAnchors(){
+    const anchors=[];
+    const pushDoc=(doc)=>{
+      if(!doc)return;
+      try{anchors.push(...doc.querySelectorAll('a[href]'))}catch{}
+    };
+    pushDoc(document);
+    for(const rec of (lastFrameRecords||collectFrameRecords())){
+      if(rec.accessible&&rec.doc)pushDoc(rec.doc);
+    }
+    return anchors;
+  }
+
+  async function auditLinks({
+    limit=LINK_PROBE_HARD_CEILING,
+    concurrency=LINK_PROBE_CONCURRENCY,
+    perHostConcurrency=LINK_PROBE_PER_HOST_CONCURRENCY,
+    timeoutMs=LINK_PROBE_TIMEOUT_MS,
+    retryTimeoutMs=LINK_PROBE_RETRY_TIMEOUT_MS,
+    budgetMs,
+    emergencyMs,
+    onProgress=null
+  }={}){
+    const allGroups=new Map();
+    for(const a of collectLinkAnchors()){
       const classified=classifyLink(a);if(!classified)continue;
       const {url,internal}=classified;
-      if(!groups.has(url))groups.set(url,{url,internal,anchors:[]});
-      groups.get(url).anchors.push(a);
-      if(groups.size>=limit)break;
+      if(!allGroups.has(url))allGroups.set(url,{url,internal,anchors:[],frames:new Set()});
+      const group=allGroups.get(url);
+      group.anchors.push(a);
+      const frameCtx=frameContextFor(a);
+      group.frames.add(frameCtx?.embeddedContext||'top-document');
     }
-    const entries=[...groups.values()];
-    const deadlineAt=performance.now()+budgetMs;
-    const firstResults=new Array(entries.length);
-    const uncached=[];
-    entries.forEach((entry,i)=>{
-      const cached=cachedLinkResult(entry.url);
-      if(cached)firstResults[i]=cached;
-      else uncached.push({index:i,url:entry.url,internal:entry.internal});
+    const discovered=allGroups.size;
+    const reachedLimit=discovered>limit;
+    const entries=[...allGroups.values()].slice(0,limit);
+    const unprobedByLimit=Math.max(0,discovered-entries.length);
+    const emergencyDeadline=Number(emergencyMs??budgetMs??LINK_PROBE_EMERGENCY_MS);
+    const startedAt=performance.now();
+    const queued=await runPrimaryVerificationQueue(entries,{
+      globalConcurrency:concurrency,
+      perHostConcurrency,
+      timeoutMs,
+      retryTimeoutMs,
+      emergencyMs:emergencyDeadline,
+      onProgress
     });
-    if(uncached.length){
-      const probed=await runQueue(uncached,{concurrency,timeoutMs,deadlineAt});
-      uncached.forEach((entry,i)=>firstResults[entry.index]=probed[i]);
-    }
+    const verificationResults=queued.results;
+    const primaryLinkMs=Math.round(performance.now()-startedAt);
 
-    const initialInconclusive=firstResults.filter(r=>!r?.verificationState&&probeClass(r)==='inconclusive').length;
-    const degraded=entries.length>=4&&initialInconclusive/Math.max(1,entries.length)>=.25;
-    const verificationResults=new Array(entries.length);
-    const pending=[];
-    entries.forEach((entry,i)=>{
-      const first=firstResults[i];
-      if(first?.verificationState)verificationResults[i]=first;
-      else if(probeClass(first)==='healthy'){
-        verificationResults[i]={verificationState:'healthy',confidence:'confirmed',result:first,attempts:[first]};
-        cacheLinkResult(entry.url,verificationResults[i]);
-      } else pending.push({index:i,url:entry.url,first,internal:entry.internal});
-    });
-
-    let pendingCursor=0;
-    const retryConcurrency=degraded?1:2;
-    async function retryWorker(){
-      while(pendingCursor<pending.length){
-        const item=pending[pendingCursor++];
-        const remaining=deadlineAt-performance.now();
-        if(remaining<700){
-          verificationResults[item.index]={verificationState:'inconclusive',confidence:'inconclusive',result:item.first,attempts:[item.first],budgetExhausted:true};
-          continue;
-        }
-        const effectiveRetry=Math.max(700,Math.min(retryTimeoutMs,remaining));
-        const verified=await verifyLink(item.url,item.first,{retryTimeoutMs:effectiveRetry,thirdTimeoutMs:Math.max(700,Math.min(8000,deadlineAt-performance.now())),degraded,internal:item.internal!==false});
-        verificationResults[item.index]=verified;
-        cacheLinkResult(item.url,verified);
-      }
-    }
-    await Promise.all(Array.from({length:Math.min(retryConcurrency,pending.length)},()=>retryWorker()));
-
-    const findings=[],incompleteChecks=[],externalCandidates=[];
-    let healthy=0,confirmedIssues=0,cachedCount=0;
+    const findings=[],incompleteChecks=[],externalCandidates=[],unprobedChecks=[];
+    let healthy=0,confirmedIssues=0,cachedCount=0,inconclusiveCount=0,scannerAborted=0;
+    const inconclusiveByCause={
+      total:0,
+      scannerBudgetAborted:0,
+      scannerTimeout:0,
+      remoteBlocked:0,
+      rateLimited:0,
+      corsOrOpaque:0,
+      networkFailure:0,
+      unsupportedProbe:0,
+      ambiguousResponse:0,
+      other:0
+    };
+    const causeKey=cause=>{
+      if(cause==='scanner-budget-aborted')return'scannerBudgetAborted';
+      if(cause==='scanner-timeout')return'scannerTimeout';
+      if(cause==='remote-blocked')return'remoteBlocked';
+      if(cause==='rate-limited')return'rateLimited';
+      if(cause==='cors-or-opaque')return'corsOrOpaque';
+      if(cause==='network-failure')return'networkFailure';
+      if(cause==='unsupported-probe')return'unsupportedProbe';
+      if(cause==='ambiguous-response')return'ambiguousResponse';
+      return'other';
+    };
     entries.forEach((entry,i)=>{
       const verified=verificationResults[i]||{verificationState:'inconclusive',confidence:'inconclusive',attempts:[]};
       if(verified.cached)cachedCount++;
+      if(verified.verificationState==='unprobed'){
+        let path='';try{path=new URL(entry.url).pathname}catch{path=entry.url}
+        unprobedChecks.push({kind:entry.internal?'internal-link':'external-link',url:entry.url,path,text:'',reason:'probe-budget-exhausted',cause:'scanner-budget-aborted',status:0,attempts:[]});
+        return;
+      }
       const first=entry.anchors[0],ctx=linkContext(first);
-      const sources=entry.anchors.slice(0,12).map(a=>({...linkContext(a),selector:selectorFor(a)}));
+      const sources=entry.anchors.slice(0,12).map(a=>({...linkContext(a),selector:selectorFor(a),scope:frameContextFor(a)?.embeddedContext||'top-document'}));
       const result=verified.result||verified.attempts?.[verified.attempts.length-1]||{status:0,state:'unavailable',finalUrl:entry.url};
       const attemptEvidence=(verified.attempts||[]).map((a,index)=>({attempt:index+1,state:a.state,status:a.status||0,durationMs:a.durationMs||0,finalUrl:a.finalUrl||entry.url}));
       const method=entry.internal?'same-origin browser GET with independent retry':'cross-origin GET with independent retry';
-      const extra={link:{url:entry.url,internal:!!entry.internal,sourceUrl:location.href,status:result.status||0,state:result.state||'unknown',finalUrl:result.finalUrl||entry.url,redirected:!!result.redirected,occurrences:entry.anchors.length,sources,...ctx},verification:{state:verified.verificationState,method,attempts:attemptEvidence.length,evidence:attemptEvidence}};
+      const extra={link:{url:entry.url,internal:!!entry.internal,sourceUrl:location.href,status:result.status||0,state:result.state||'unknown',finalUrl:result.finalUrl||entry.url,redirected:!!result.redirected,occurrences:entry.anchors.length,sources,scope:[...entry.frames][0]||'top-document',frames:[...entry.frames],...ctx},verification:{state:verified.verificationState,method,attempts:attemptEvidence.length,evidence:attemptEvidence}};
       if(verified.verificationState==='healthy'){healthy++;return}
       if(verified.verificationState==='inconclusive'){
+        inconclusiveCount++;
+        const cause=verified.cause||inconclusiveCause(verified,result,{internal:entry.internal!==false});
+        inconclusiveByCause.total++;
+        inconclusiveByCause[causeKey(cause)]++;
+        if(cause==='scanner-budget-aborted')scannerAborted++;
         const kind=entry.internal?'internal-link':'external-link';
         let path='';try{path=new URL(entry.url).pathname}catch{path=entry.url}
-        // Prefer HTTP status over probe-transport state so 403/429 never surface as reason "complete".
         const inconclusiveReason=result.status?`http-${result.status}`:(result.state&&result.state!=='complete'?result.state:'unavailable');
-        incompleteChecks.push({kind,url:entry.url,path,text:ctx.text||'',reason:inconclusiveReason,status:result.status||0,attempts:attemptEvidence,prominence:ctx.prominence||'',location:ctx.location||''});
+        incompleteChecks.push({kind,url:entry.url,path,text:ctx.text||'',reason:inconclusiveReason,cause,status:result.status||0,attempts:attemptEvidence,prominence:ctx.prominence||'',location:ctx.location||''});
         const reviewStatus=Number(result.status||0);
         if([401,403,429].includes(reviewStatus)){
           const dest=entry.internal?path:entry.url;
@@ -2795,7 +3185,7 @@
             confidence:'inconclusive',verification:{...extra.verification,state:'inconclusive'},extra
           }));
         }
-        if(!entry.internal&&(result.state==='unavailable'||result.status===0||result.state==='timeout')){
+        if(!entry.internal&&!verified.hostInferred&&(result.state==='unavailable'||result.status===0||result.state==='timeout')){
           externalCandidates.push({url:entry.url,text:ctx.text||'',occurrences:entry.anchors.length,sources,prominence:ctx.prominence||'',location:ctx.location||'',selector:selectorFor(first)});
         }
         return;
@@ -2813,13 +3203,29 @@
         findings.push(finding({ruleId:entry.internal?'navigation.link-redirect-error':'navigation.link-redirect-error-external',title:entry.internal?'Internal link has a confirmed redirect failure':'External link has a confirmed redirect failure',detail:`${ctx.text?`"${ctx.text}" `:''}points to ${entry.internal?new URL(entry.url).pathname:entry.url}, and repeated requests could not complete its redirect sequence.`,category:'fix',severity:'high',element:first,evidence:`confirmed redirect failure ${entry.url}`,count:entry.anchors.length,confidence:'confirmed',verification:extra.verification,extra}));
       }
     });
-    const coverageState=incompleteChecks.length?'partial':'complete';
+    const attempted=healthy+confirmedIssues+inconclusiveCount;
+    const unprobed=unprobedByLimit+unprobedChecks.length;
+    const eligible=discovered;
+    const explicitlySkipped=0;
+    const probeBudgetPreventedCoverage=unprobed>0||scannerAborted>0;
+    const coverageState=probeBudgetPreventedCoverage?'partial':'complete';
+    const emptyRefinement={eligible:0,queued:0,attempted:0,resolvedHealthy:0,resolvedBroken:0,stillInconclusive:0,notAttempted:0,budgetAborted:0,truncated:false};
     return{
-      findings,checked:entries.length,verifiedHealthy:healthy,confirmedIssues,inconclusive:incompleteChecks.length,
-      incompleteChecks,externalCandidates,limit,reachedLimit:groups.size>=limit,degraded,cached:cachedCount,budgetExhausted:incompleteChecks.some(x=>x.reason==='budget-exhausted'),status:coverageState
+      findings,
+      discovered,eligible,attempted,checked:attempted,verifiedHealthy:healthy,confirmedIssues,
+      inconclusive:inconclusiveCount,unprobed,explicitlySkipped,scannerAborted,
+      inconclusiveByCause,
+      incompleteChecks,unprobedChecks,externalCandidates,limit,reachedLimit,cached:cachedCount,
+      budgetExhausted:probeBudgetPreventedCoverage,
+      probeBudgetReached:reachedLimit||unprobed>0||queued.metrics.emergencyFired,
+      probeBudgetPreventedCoverage,
+      status:coverageState,
+      queueMetrics:queued.metrics,
+      primaryLinkMs,
+      refinementLinkMs:0,
+      refinement:emptyRefinement
     };
   }
-
   function applyExternalProbeResults(candidates=[], probeRows=[]){
     const byUrl=new Map((probeRows||[]).map(r=>[String(r.url||''),r]));
     const findings=[],incompleteChecks=[],resolvedUrls=new Set();
@@ -2849,7 +3255,7 @@
         resolvedUrls.add(candidate.url);continue;
       }
       if(status>=200&&status<400){resolvedUrls.add(candidate.url);continue}
-      incompleteChecks.push({kind:'external-link',url:candidate.url,path:candidate.url,text:candidate.text||'',reason:status?`http-${status}`:(row.error||'unavailable'),status,attempts:[attempt],prominence:candidate.prominence||'',location:candidate.location||''});
+      incompleteChecks.push({kind:'external-link',url:candidate.url,path:candidate.url,text:candidate.text||'',reason:status?`http-${status}`:(row.error||'unavailable'),cause:status===429?'rate-limited':[401,403].includes(status)?'remote-blocked':(!status&&/cors|opaque|failed to fetch/i.test(String(row.error||'')))?'cors-or-opaque':(!status?'network-failure':'ambiguous-response'),status,attempts:[attempt],prominence:candidate.prominence||'',location:candidate.location||''});
       if([401,403,429].includes(status)){
         const label=status===429?'rate-limited':status===401?'unauthorized':'forbidden';
         findings.push(finding({
@@ -2868,11 +3274,53 @@
   function merge(local,axeResults,linkResult={findings:[],checked:0}){
     const findings=[...local.findings,...axeFindings(axeResults),...(linkResult.findings||[])],seen=new Map();
     for(const f of findings){const key=`${f.ruleId}|${f.selector}|${f.evidence}`;if(!seen.has(key))seen.set(key,f)}
-    const linksStatus=linkResult.status==='partial'?'partial':linkResult.status==='unavailable'?'unavailable':Number(linkResult.checked||0)===0?'none_checked':'complete';
-    const diagCount=globalThis.__WEBQA_PAGE_DIAGNOSTICS__?.errors?.length||0;
+    const unprobed=Number(linkResult.unprobed||0);
+    const attempted=Number(linkResult.attempted ?? linkResult.checked ?? 0);
+    const scannerAborted=Number(linkResult.scannerAborted||0);
+    const probeBudgetPreventedCoverage=linkResult.probeBudgetPreventedCoverage===true
+      || unprobed>0
+      || scannerAborted>0;
+    const linksStatus=linkResult.status==='unavailable'?'unavailable'
+      :probeBudgetPreventedCoverage?'partial'
+      :attempted===0&&Number(linkResult.discovered||linkResult.eligible||0)===0?'none_checked'
+      :Number(linkResult.checked||0)===0&&!linkResult.discovered?'none_checked'
+      :'complete';
+    const diagBound=Boolean(globalThis.__WEBQA_PAGE_DIAG_BOUND__||globalThis.__WEBQA_PAGE_DIAGNOSTICS__||globalThis.__WEBQA_RUNTIME_ERRORS__);
     const bucket=globalThis.__WEBQA_RUNTIME_ERRORS__;
-    const runtimeStatus=bucket?.source==='renderer'?'renderer':(bucket||diagCount)?'extension-partial':(local.coverage?.runtime||'not applicable');
-    return{...local,browserPerformance:local.browserPerformance||null,findings:[...seen.values()],linkAudit:{checked:linkResult.checked||0,verifiedHealthy:linkResult.verifiedHealthy||0,confirmedIssues:linkResult.confirmedIssues||0,inconclusive:linkResult.inconclusive||0,incompleteChecks:linkResult.incompleteChecks||[],reachedLimit:!!linkResult.reachedLimit,degraded:!!linkResult.degraded,cached:linkResult.cached||0},coverage:{...local.coverage,links:linksStatus,axe:axeResults?'complete':'unavailable',runtime:runtimeStatus},diagnostics:local.diagnostics||null,pageDiagnostics:local.pageDiagnostics||null};
+    let runtimeStatus=local.coverage?.runtime||'not applicable';
+    let coverageScope={...(local.coverageScope||{})};
+    if(bucket?.source==='renderer')runtimeStatus='renderer';
+    else if(diagBound||bucket){
+      runtimeStatus='complete';
+      coverageScope={...coverageScope,runtime:'post-injection-extension'};
+    }
+    const linkAudit={
+      discovered:Number(linkResult.discovered ?? linkResult.checked ?? 0),
+      eligible:Number(linkResult.eligible ?? linkResult.discovered ?? linkResult.checked ?? 0),
+      attempted,
+      checked:attempted,
+      verifiedHealthy:linkResult.verifiedHealthy||0,
+      confirmedIssues:linkResult.confirmedIssues||0,
+      inconclusive:linkResult.inconclusive||0,
+      unprobed,
+      explicitlySkipped:Number(linkResult.explicitlySkipped||0),
+      scannerAborted,
+      inconclusiveByCause:linkResult.inconclusiveByCause||undefined,
+      incompleteChecks:linkResult.incompleteChecks||[],
+      unprobedChecks:linkResult.unprobedChecks||[],
+      reachedLimit:!!linkResult.reachedLimit,
+      degraded:!!linkResult.degraded,
+      cached:linkResult.cached||0,
+      budgetExhausted:probeBudgetPreventedCoverage,
+      probeBudgetReached:!!linkResult.probeBudgetReached||!!linkResult.reachedLimit||unprobed>0,
+      probeBudgetPreventedCoverage,
+      privilegedFallback:linkResult.privilegedFallback,
+      refinement:linkResult.refinement,
+      queueMetrics:linkResult.queueMetrics,
+      primaryLinkMs:Number(linkResult.primaryLinkMs||0)||undefined,
+      refinementLinkMs:Number(linkResult.refinementLinkMs||0)||undefined
+    };
+    return{...local,browserPerformance:local.browserPerformance||null,findings:[...seen.values()],linkAudit,coverage:{...local.coverage,links:linksStatus,axe:axeResults?'complete':'unavailable',runtime:runtimeStatus},coverageScope,diagnostics:local.diagnostics||null,pageDiagnostics:local.pageDiagnostics||null};
   }
 
   function recordRuntimeErrors(payload){

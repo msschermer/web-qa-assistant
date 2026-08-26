@@ -11,7 +11,7 @@ import { sanitizeUrl } from '../ai/evidence-contract.js';
 export const PROBE_DEFAULTS = Object.freeze({
   timeoutMs: 4500,
   maxRedirects: 5,
-  maxCandidates: 12,
+  maxCandidates: 80,
   concurrency: 4,
   maxBodyBytes: 8192,
   totalBudgetMs: 18000
@@ -445,6 +445,7 @@ export function mapExternalProbeRows(candidates = [], probeRows = []) {
   for (const candidate of candidates || []) {
     const row = byUrl.get(candidate.url);
     if (!row) continue;
+    if (String(row.error || '') === 'budget-exhausted' || Number(row.attempts || 0) === 0) continue;
     const status = Number(row.status || 0);
     const text = candidate.text || '';
     const occurrences = Number(candidate.occurrences || 1);
@@ -533,6 +534,13 @@ export function mapExternalProbeRows(candidates = [], probeRows = []) {
       path: candidate.url,
       text,
       reason: status ? `http-${status}` : (row.error || 'unavailable'),
+      cause: status === 429
+        ? 'rate-limited'
+        : [401, 403].includes(status)
+          ? 'remote-blocked'
+          : (!status && /cors|opaque|failed to fetch|budget-exhausted/i.test(String(row.error || '')))
+            ? (/budget-exhausted/i.test(String(row.error || '')) ? 'other' : 'cors-or-opaque')
+            : (!status ? 'network-failure' : 'ambiguous-response'),
       status,
       attempts: [attempt],
       prominence: candidate.prominence || '',

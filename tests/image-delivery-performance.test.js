@@ -343,25 +343,36 @@ test('hydration: mismatched or missing buildRevision is treated as stale', () =>
 test('coverage banner labels prefer historical performance wording over raw unavailable keys', () => {
   const labels = limitedCoverageLabels({
     coverageReasons: {
-      performance: 'connector-unavailable',
+      performance: 'lab-partial',
       links: 'probe-budget-exhausted',
-      runtime: 'runtime-partial-in-extension',
       published: 'enrichment-failed'
     },
     coverage: {
       browser: 'complete',
       links: 'partial',
       axe: 'complete',
-      performance: 'current-page',
-      runtime: 'extension-partial',
+      performance: 'partial',
+      runtime: 'complete',
       published: 'unavailable'
+    },
+    coverageScope: { runtime: 'post-injection-extension' },
+    linkAudit: {
+      discovered: 10,
+      eligible: 10,
+      attempted: 4,
+      checked: 4,
+      verifiedHealthy: 4,
+      confirmedIssues: 0,
+      inconclusive: 0,
+      unprobed: 6,
+      explicitlySkipped: 0
     }
   });
-  assert.ok(labels.includes('historical performance unavailable'));
-  assert.ok(labels.includes('links partially checked'));
-  assert.ok(labels.includes('runtime partially observed'));
+  assert.ok(labels.some(l => /checked 4 of 10 eligible links/i.test(l)));
+  assert.ok(labels.includes('current-page performance partial'));
   assert.ok(labels.includes('published-state unavailable'));
+  // Expected runtime scope must not appear in the degraded banner.
+  assert.equal(labels.some(l => /runtime/i.test(l)), false);
   assert.equal(labels.some(l => l === 'performance' || /^performance$/i.test(l)), false);
-  // Current-page lab coverage must not be described as "not monitored".
   assert.equal(labels.some(l => /not monitored/i.test(l)), false);
 });

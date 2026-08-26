@@ -495,7 +495,7 @@ if (fs.existsSync(distManifestPath)) {
     bad++;
     console.error(`stale extension build: dist is ${distManifest.version}, source is ${manifest.version}. Run npm run build:extension.`);
   }
-  for (const name of ['confidence.js', 'compose.js', 'impact.js', 'image-purpose.js', 'local-ai.js']) {
+  for (const name of ['confidence.js', 'compose.js', 'impact.js', 'image-purpose.js', 'local-ai.js', 'scan-lifecycle.js']) {
     if (!fs.existsSync(`dist/extension/${name}`)) {
       bad++;
       console.error(`stale extension build: ${name} is missing from dist/extension.`);
@@ -597,6 +597,9 @@ function validateRelativeImports(entryPath) {
 
 if (fs.existsSync('dist/extension/background.js')) {
   validateRelativeImports('dist/extension/background.js');
+}
+if (fs.existsSync('dist/extension/sidepanel.js')) {
+  validateRelativeImports('dist/extension/sidepanel.js');
 }
 
 console.log(`Checked ${files.length} JavaScript files`);

@@ -112,13 +112,14 @@ test('page diagnostics are not duplicated in scan output', () => {
   assert.equal(report.pageDiagnostics.errors[0].message, 'early fail');
 });
 
-test('extension-partial runtime maps to partial capture reason', () => {
+test('extension runtime maps to post-injection scope reason, not degradation', () => {
   const { report } = scan(cleanHtml, {
     pageDiagnostics: [{ kind: 'page_error', message: 'early fail', source: '', line: 0 }]
   });
   report.coverageReasons = explainCoverageReasons(report);
-  assert.equal(report.coverage.runtime, 'extension-partial');
-  assert.equal(report.coverageReasons.runtime, COVERAGE_REASON.RUNTIME_EXTENSION_PARTIAL);
+  assert.equal(report.coverage.runtime, 'complete');
+  assert.equal(report.coverageScope?.runtime, 'post-injection-extension');
+  assert.equal(report.coverageReasons.runtime, COVERAGE_REASON.RUNTIME_SCOPE_POST_INJECTION);
 });
 
 test('runtime and script failures share a root cause when correlated', () => {
@@ -141,14 +142,15 @@ test('Frank guidance covers soft-404 and resource failures without scanner jargo
   const script = guidanceFor({ ruleId: 'runtime.script-failed', resourceUrl: 'https://example.com/a.js', title: 'script', detail: '', category: 'fix' });
   assert.match(script.remediation, /script/i);
   const uncaught = guidanceFor({ ruleId: 'runtime.uncaught-error', title: 'err', detail: '', category: 'fix' });
-  assert.match(uncaught.limitations, /extension-partial/i);
+  assert.match(uncaught.limitations, /post-injection/i);
   assert.doesNotMatch(uncaught.limitations, /do not collect this family/i);
 });
 
-test('extension partial runtime coverage when page diagnostics exist', () => {
+test('extension runtime coverage is complete with post-injection scope when page diagnostics exist', () => {
   const { report, context } = scan(cleanHtml, {
     pageDiagnostics: [{ kind: 'page_error', message: 'early fail', source: 'https://example.com/a.js', line: 1 }]
   });
   const merged = context.WebQARules.merge(report, null, { findings: [], checked: 0 });
-  assert.equal(merged.coverage.runtime, 'extension-partial');
+  assert.equal(merged.coverage.runtime, 'complete');
+  assert.equal(merged.coverageScope?.runtime, 'post-injection-extension');
 });

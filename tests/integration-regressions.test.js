@@ -119,8 +119,8 @@ test('web and extension surfaces lead with Frank judgment while preserving quiet
   const webHtml = read('apps/web/public/index.html');
   const panel = read('apps/extension/sidepanel.js');
   const panelHtml = read('apps/extension/sidepanel.html');
-  assert.match(web, /visibleFindings/);
-  assert.match(web, /f\.frankVisible!==false/);
+  assert.match(web, /buildCoverageAccounting/);
+  assert.match(panel, /labDegraded|Historical monitor from monitor evidence/);
   assert.match(webHtml, /Show all checks/);
   assert.match(panel, /judgment\(\)/);
   assert.match(panelHtml, /id="frank-overview"/);
@@ -137,6 +137,7 @@ test('local development serves the complete stack on port 3000', () => {
   assert.ok(dev.includes('localhost:${port}'));
   assert.ok(dev.includes('services/renderer/server.js'));
   assert.ok(dev.includes('services/egress-proxy/server.js'));
+  assert.match(read('services/api/server.js'), /\/assets\/coverage\.js/);
   assert.ok(bg.includes('http://localhost:3000'));
 });
 

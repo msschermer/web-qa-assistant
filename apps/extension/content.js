@@ -39,15 +39,29 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   }
 
   async function scan() {
+    const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const now = () => (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const progress = (phase, extra = {}) => {
+      try { chrome.runtime.sendMessage({ type: 'SCAN_PROGRESS', phase, ...extra }).catch(() => {}); } catch {}
+    };
+    progress('DISCOVERING');
     try { await window.WebQARules.preparePerformanceSignals?.(); } catch {}
+    const tIx = now();
+    progress('CHECKING');
     try { await window.WebQARules.prepareSafeInteractions?.(); } catch {}
+    const interactionPrepareMs = Math.round(now() - tIx);
+    progress('INSPECTING_FRAMES');
     const local = window.WebQARules.run();
     let axeResults = null;
+    const tAxe = now();
+    progress('CHECKING');
     try {
       axeResults = await window.axe.run(document, {
-        runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] }
+        runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] },
+        iframes: true
       });
     } catch {}
+    const axeMs = Math.round(now() - tAxe);
     const report = window.WebQARules.merge(local, axeResults, { findings: [], checked: 0 });
     report.page.requestedUrl = location.href;
     report.page.finalUrl = location.href;
@@ -65,17 +79,43 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       });
     }
     report.coverage.links = 'pending';
+    report.scanTimings = {
+      ...(report.scanTimings || {}),
+      axeMs,
+      interactionMs: Number(report.scanTimings?.interactionMs || 0) + interactionPrepareMs,
+      totalMs: Math.round(now() - t0)
+    };
     return report;
   }
   async function auditLinks() {
+    const started = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     try {
-      return await window.WebQARules.auditLinks({
-        limit: 36,
-        concurrency: 6,
-        timeoutMs: 3000,
-        retryTimeoutMs: 7000,
-        budgetMs: 15000
+      chrome.runtime.sendMessage({ type: 'SCAN_PROGRESS', phase: 'VERIFYING_LINKS', queued: 0, completed: 0 }).catch(() => {});
+    } catch {}
+    try {
+      const result = await window.WebQARules.auditLinks({
+        limit: 500,
+        concurrency: 10,
+        perHostConcurrency: 2,
+        timeoutMs: 2500,
+        retryTimeoutMs: 5000,
+        emergencyMs: 60000,
+        onProgress: (metrics) => {
+          try {
+            chrome.runtime.sendMessage({
+              type: 'SCAN_PROGRESS',
+              phase: 'VERIFYING_LINKS',
+              queued: metrics.queued,
+              completed: metrics.completed,
+              inFlight: metrics.inFlight,
+              pending: metrics.pending
+            }).catch(() => {});
+          } catch {}
+        }
       });
+      result.linkProbeMs = Math.round(((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - started);
+      result.primaryLinkMs = Number(result.primaryLinkMs || result.linkProbeMs || 0);
+      return result;
     } catch (error) {
       return {
         findings: [],

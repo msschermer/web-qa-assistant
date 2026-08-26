@@ -10,7 +10,8 @@ import { buildEvidenceGraph, evidenceHash } from '../../packages/frank/evidence.
 import { deterministicFrankPlan, validateFrankPlan } from '../../packages/frank/plan.js';
 import { classifyEnvironment } from '../../packages/environment/classify.js';
 import { applyFindingPolicy } from '../../packages/findings/policy.js';
-import { resolvePerformanceCoverage } from '../../packages/findings/coverage.js';
+import { resolvePerformanceCoverage, applyPrivilegedProbeAccounting, reconcilePerformanceCoverage } from '../../packages/findings/coverage.js';
+import { buildEvidenceLedger } from '../../packages/findings/evidence-ledger.js';
 import { applyTargetIntegrityReport, attachTargetIntegrity, finalizeBlockedTargetReport } from '../../packages/integrity/apply-report.js';
 import { targetIntegrityLimitsAudit, targetIntegrityBlocksAudit } from '../../packages/integrity/target-integrity.js';
 import { issueInstallationToken, verifyInstallationToken } from '../../packages/auth/install-access.js';
@@ -125,53 +126,18 @@ async function applyServerExternalLinkProbes(report) {
     allCandidates.push(row);
   }
   const candidateTotal = Math.max(Number(report.externalLinkCandidateTotal || 0), allCandidates.length);
-  const candidates = allCandidates.slice(0, 12);
+  const candidates = allCandidates.slice(0, 80);
   if (!candidates.length) return report;
 
-  const rows = await probeExternalCandidates(candidates);
+  const rows = await probeExternalCandidates(candidates, { maxCandidates: 80, concurrency: 6, totalBudgetMs: 20000 });
   const applied = mapExternalProbeRows(candidates, rows);
-  const resolved = new Set(applied.resolvedUrls || []);
-  const priorIncomplete = (report.linkAudit?.incompleteChecks || [])
-    .filter((c) => !(c.kind === 'external-link' && resolved.has(c.url)));
-  const incompleteChecks = [...priorIncomplete, ...(applied.incompleteChecks || [])];
   const truncated = candidateTotal > candidates.length;
-  if (truncated) {
-    incompleteChecks.push({
-      kind: 'external-link',
-      url: '',
-      path: '',
-      text: '',
-      reason: 'candidate-budget',
-      status: 0,
-      attempts: [],
-      prominence: '',
-      location: ''
-    });
-  }
-  const findings = [...(report.findings || []), ...(applied.findings || [])];
-  const confirmedIssues = findings.filter((f) => /navigation\.link-(404|410|5xx)/.test(String(f.ruleId || ''))).length;
-  const checked = Math.max(Number(report.linkAudit?.checked || 0), candidates.length);
-  const linksCoverage = incompleteChecks.length
-    ? 'partial'
-    : checked > 0
-      ? 'complete'
-      : (report.coverage?.links || 'none_checked');
-  return {
-    ...report,
-    findings,
-    externalLinkCandidates: undefined,
-    externalLinkCandidateTotal: undefined,
-    linkAudit: {
-      ...(report.linkAudit || {}),
-      checked,
-      confirmedIssues: Math.max(Number(report.linkAudit?.confirmedIssues || 0), confirmedIssues),
-      inconclusive: incompleteChecks.length,
-      incompleteChecks,
-      reachedLimit: Boolean(report.linkAudit?.reachedLimit) || truncated,
-      privilegedProbe: 'gateway'
-    },
-    coverage: { ...(report.coverage || {}), links: linksCoverage }
-  };
+  return applyPrivilegedProbeAccounting(report, {
+    applied,
+    truncated,
+    candidateTotal,
+    candidatesProbed: candidates.length
+  });
 }
 
 async function enrich(local, requestId = '', { allowAi = true } = {}) {
@@ -218,6 +184,11 @@ async function enrich(local, requestId = '', { allowAi = true } = {}) {
           score: g.score, leadId: g.lead.id, selectors: g.selectors, instanceIds: g.instances.map(x => x.id),
           rootCauseKey: g.lead.rootCauseKey || g.key, targetability: g.lead.targetability || '', lenses: g.lead.lenses || []
         })),
+        allGroups: (attention.allGroups || []).map(g => ({
+          key: g.key, impactClass: g.impactClass, title: g.title, size: g.size, instanceCount: g.instanceCount,
+          score: g.score, leadId: g.lead?.id, targetability: g.lead?.targetability || '', confidence: g.lead?.confidence || '',
+          ruleId: g.lead?.ruleId || ''
+        })),
         worthChecking: (attention.worthChecking || []).map(w => ({
           key: w.key, title: w.title, scope: w.scope, lens: w.lens, fixOwner: w.fixOwner,
           size: w.size, instanceCount: w.instanceCount, findingIds: w.findings.map(f => f.id)
@@ -227,6 +198,7 @@ async function enrich(local, requestId = '', { allowAi = true } = {}) {
         materialFindingCount: attention.materialFindingCount,
         representedClasses: attention.representedClasses
       },
+      evidenceLedger: buildEvidenceLedger({ ...finalized, coverage: { ...finalized.coverage, ai: coverage.ai } }, { uiLimit: 8, composition: attention, findings: finalized.findings }),
       coverage: { ...finalized.coverage, ai: coverage.ai },
       context: {
         performance: context.performance?.data || null,
@@ -317,7 +289,7 @@ app.post('/api/frank/start', async (req, res) => {
   if (!finding?.title || !validReport(report)) return res.status(400).json({ ok: false, error: 'Finding and current report are required.', requestId: req.webQaRequestId });
   if (privateLike(report.page?.hostname)) return res.status(400).json({ ok: false, error: 'Private page evidence must stay local.', requestId: req.webQaRequestId });
   try {
-    const graph = buildEvidenceGraph({ finding, page: report.page, coverage: report.coverage || {}, context: report.context || {}, targetContext: targetContext || null, environment: report.environment || report.page?.environment });
+    const graph = buildEvidenceGraph({ finding, page: report.page, coverage: report.coverage || {}, context: report.context || {}, targetContext: targetContext || null, environment: report.environment || report.page?.environment, evidenceLedger: report.evidenceLedger || null, linkAudit: report.linkAudit || null });
     let plan = deterministicFrankPlan(graph), reasoning = { status: 'disabled', mode: 'deterministic', message: 'Public connected reasoning is disabled.' };
     if (publicAiEnabled()) {
       try { plan = await frankWalkthrough(graph); reasoning = { status: 'operational', mode: 'ai', model: process.env.OPENAI_MODEL || 'gpt-5.6-terra' }; }
@@ -351,6 +323,9 @@ app.use((err, req, res, next) => {
 });
 
 app.use('/assets/ui', express.static(path.resolve(__dirname, '../../packages/ui'), { maxAge: '1h' }));
+app.get('/assets/coverage.js', (_req, res) => {
+  res.type('application/javascript').sendFile(path.resolve(__dirname, '../../packages/findings/coverage.js'));
+});
 const web = path.resolve(__dirname, '../../apps/web/public');
 app.use(express.static(web, { extensions: ['html'], maxAge: '5m' }));
 app.use((req, res) => res.sendFile(path.join(web, 'index.html')));

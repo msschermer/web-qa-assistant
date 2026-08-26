@@ -13,6 +13,10 @@ test('side panel is organized as a SaaS QA workspace rather than a scanner stack
   assert.match(css,/\.workspace-section/); assert.match(css,/\.tool-grid/); assert.match(css,/\.ledger-cell/); assert.match(css,/\.bug-dialog/);
   assert.match(css,/\.idle-state/);
   assert.match(css,/data-scanning=true/);
+  assert.match(css,/data-result-ready=true/);
+  assert.match(js,/resultReadyFromReport/);
+  assert.match(js,/revealResultsUi/);
+  assert.match(js,/SCAN_PHASE/);
   assert.match(js,/Recommended only/);
   assert.match(js,/section\.hidden = true/);
   assert.match(js,/dataset\.scanning/);

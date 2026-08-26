@@ -13,6 +13,18 @@ test('gateway not-monitored coverage cannot erase current-page lab evidence', ()
       runtime: 'extension-partial'
     },
     coverageReasons: { performance: 'connector-unavailable', links: 'probe-budget-exhausted' },
+    linkAudit: {
+      discovered: 48,
+      eligible: 48,
+      attempted: 36,
+      checked: 36,
+      verifiedHealthy: 30,
+      confirmedIssues: 0,
+      inconclusive: 6,
+      unprobed: 12,
+      scannerAborted: 0,
+      probeBudgetPreventedCoverage: true
+    },
     browserPerformance: {
       available: true,
       largestContentfulPaintMs: 312,
@@ -25,7 +37,9 @@ test('gateway not-monitored coverage cannot erase current-page lab evidence', ()
   assert.equal(reconciled.coverageReasons.performance, undefined);
   const labels = limitedCoverageLabels(reconciled);
   assert.equal(labels.includes('historical performance unavailable'), false);
-  assert.ok(labels.includes('links partially checked') || labels.includes('runtime partially observed'));
+  // Runtime scope and historical monitor must not inflate the degraded banner.
+  assert.equal(labels.includes('runtime partially observed'), false);
+  assert.ok(labels.some(l => /checked|links partially/i.test(l)));
   const artifact = buildBugReport({
     version: '1.7.4',
     report: reconciled,

@@ -1,8 +1,9 @@
-globalThis.__WEBQA_BUILD_REVISION__="a01857689cef";
+globalThis.__WEBQA_BUILD_REVISION__="04eb556e3f2a";
 import { localFrankRuntime, localFrankWalkthrough, probeLocalAi, setLocalAiTraceSink, localAiDiagnostics } from './local-ai.js';
 import { presentFinding, presentArea, QA_AREA_ORDER } from './presentation.js';
 import { RuntimeTrace, buildBugReport, bugReportPrivacySummary } from './bug-report.js';
-import { limitedCoverageLabels as coverageLimitationLabels, isStaleBuildRevision } from './coverage.js';
+import { limitedCoverageLabels as coverageLimitationLabels, isStaleBuildRevision, scopeCoverageNotes, buildCoverageAccounting } from './coverage.js';
+import { SCAN_PHASE, resultReadyFromReport, scanProgressCopy, shouldRevealResults, emptyResultReady } from './scan-lifecycle.js';
 const RELEASE_VERSION = '1.7.4';
 const DEVELOPMENT_TARGET = '1.7.5';
 function currentBuildRevision() {
@@ -36,10 +37,19 @@ const runtimeTrace = new RuntimeTrace();
 setLocalAiTraceSink((type,data)=>runtimeTrace.record(`local-ai:${type}`,data));
 
 let report = null, filter = 'all', tab = null, scanInFlight = false, frank = null, lastFrank = null,
-    showAllChecks = false, lastDiagnostic = null, lastScanAttempt = null, siteSession = null, classFilter = '', cloudAiFallback = false, frankReturnFocus = null, frankRequestSeq = 0, pendingFrankCancel = null;
+    showAllChecks = false, lastDiagnostic = null, lastScanAttempt = null, siteSession = null, classFilter = '', cloudAiFallback = false, frankReturnFocus = null, frankRequestSeq = 0, pendingFrankCancel = null,
+    scanPhase = SCAN_PHASE.IDLE, resultFlags = emptyResultReady();
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function notice(message, kind = 'info') {
+  const el = $('#notice');
+  if (!el) return;
+  el.textContent = String(message || '');
+  if (kind && kind !== 'info') el.dataset.kind = kind;
+  else delete el.dataset.kind;
+}
 
 function send(msg, timeoutMs = 25000) {
   return new Promise(resolve => {
@@ -54,7 +64,40 @@ function send(msg, timeoutMs = 25000) {
   });
 }
 
-function notice(message = '', kind = '') { const el = $('#notice'); el.textContent = message; el.dataset.kind = kind; }
+function applyScanProgress(msg = {}) {
+  if (!scanInFlight) return;
+  if (scanPhase === SCAN_PHASE.READY || scanPhase === SCAN_PHASE.FAILED) return;
+  if (msg.phase === SCAN_PHASE.CORRELATING || msg.phase === SCAN_PHASE.FRANK_ANALYZING) {
+    if (String(report?.coverage?.links || '') === 'pending' && scanPhase !== SCAN_PHASE.CORRELATING && scanPhase !== SCAN_PHASE.FRANK_ANALYZING) {
+      return;
+    }
+  }
+  if (msg.phase) scanPhase = msg.phase;
+  const copy = scanProgressCopy(scanPhase, msg);
+  notice(copy);
+  const overview = $('#frank-overview');
+  if (overview && overview.dataset.state === 'loading') {
+    $('#judgment-title').textContent = copy;
+    const brief = $('#brief');
+    if (brief) brief.textContent = 'Results stay hidden until the scan and Frank’s initial review finish.';
+  }
+}
+
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === 'SCAN_PROGRESS') applyScanProgress(msg);
+});
+
+function lockResultsUi() {
+  document.body.dataset.scanning = 'true';
+  delete document.body.dataset.resultReady;
+  const newCount = $('#new-count');
+  if (newCount) newCount.textContent = '';
+}
+
+function revealResultsUi() {
+  document.body.dataset.resultReady = 'true';
+  delete document.body.dataset.scanning;
+}
 function connectionVerificationNotice(result) {
   if (!result) return notice('Connection settings saved, but verification could not complete.', 'warn');
   if (!result.ok) return notice(`Connection settings saved, but verification failed${result.error ? `: ${result.error}` : '.'}`, 'warn');
@@ -141,17 +184,8 @@ const LEDGER_ORDER = QA_AREA_ORDER;
 function findingById(id) { return (report?.findings || []).find(f => f.id === id) || null; }
 function materialFindings() { return (report?.findings || []).filter(f => f.lifecycle !== 'ignored' && f.frankVisible !== false && f.category !== 'context' && f.confidence !== 'inconclusive'); }
 function incompleteCoverage() {
-  const statuses = Object.values(report?.coverage || {}).filter(v => /partial|unavailable/i.test(String(v))).length;
-  const ix = report?.interactionCoverage;
-  const embed = report?.page?.embeddedCoverage;
-  const interactionGaps = ix && (
-    Number(ix.inconclusive || 0) > 0
-    || Number(ix.restorationFailures || 0) > 0
-    || Number(ix.eligible || 0) > Number(ix.safelyTested || ix.tested || 0)
-    || /budget|restoration|prepare-failed|time-budget|frame-budget/i.test(String(ix.partialReason || ''))
-  ) ? 1 : 0;
-  const embedGaps = embed && Number(embed.crossOriginFramesNotInspectable || embed.crossOriginIframes || 0) > 0 ? 1 : 0;
-  return statuses + Number(report?.linkAudit?.inconclusive || 0) + interactionGaps + embedGaps;
+  // Only genuinely degraded areas — not expected scope limitations or inconclusive probes.
+  return buildCoverageAccounting(report || {}).degradedAreas.length;
 }
 function targetBlocked() {
   return Boolean(report?.targetIntegrityBlocked || report?.page?.targetIntegrity === 'blocked' || report?.priorityMode === 'target-integrity');
@@ -218,34 +252,40 @@ function coverage() {
   const links = report.linkAudit;
   if (links) {
     const linkCov = String(report.coverage?.links || '');
-    const linkLine = `${links.checked || 0} checked · ${links.verifiedHealthy || 0} healthy · ${links.confirmedIssues || 0} broken · ${links.inconclusive || 0} inconclusive`;
-    box.insertAdjacentHTML('beforeend', `<span>Links</span><b data-status="${/partial|unavailable/i.test(linkCov) || links.inconclusive ? 'partial' : 'complete'}">${esc(linkLine)}</b>`);
+    const attempted = Number(links.attempted ?? links.checked ?? 0);
+    const eligible = Number(links.eligible ?? links.discovered ?? attempted);
+    const unprobed = Number(links.unprobed || 0);
+    const scannerAborted = Number(links.scannerAborted || 0);
+    const linkDegraded = unprobed > 0 || scannerAborted > 0 || /unavailable|none/i.test(linkCov);
+    const linkLine = eligible > attempted || unprobed > 0
+      ? `${attempted} of ${eligible} eligible checked · ${links.verifiedHealthy || 0} healthy · ${links.confirmedIssues || 0} broken · ${links.inconclusive || 0} inconclusive · ${unprobed} unprobed`
+      : `${attempted} checked · ${links.verifiedHealthy || 0} healthy · ${links.confirmedIssues || 0} broken · ${links.inconclusive || 0} inconclusive`;
+    box.insertAdjacentHTML('beforeend', `<span>Links</span><b data-status="${linkDegraded ? 'partial' : 'complete'}">${esc(linkLine)}</b>`);
   }
   const perf = report.browserPerformance;
   if (perf?.available) box.insertAdjacentHTML('beforeend', `<span>this page, in this browser</span><b>${esc(perf.largestContentfulPaintMs != null ? `LCP ${(perf.largestContentfulPaintMs / 1000).toFixed(1)}s` : `TTFB ${perf.ttfbMs}ms`)}</b>`);
 
   const ix = report.interactionCoverage;
-  if (ix && (ix.candidates > 0 || ix.safelyTested > 0 || ix.skippedUnsafe > 0 || ix.skippedIneligible > 0)) {
+  if (ix && (ix.candidates > 0 || ix.safelyTested > 0 || ix.skippedUnsafe > 0 || ix.skippedIneligible > 0 || ix.skippedSafetyPolicy > 0)) {
     const tested = Number(ix.safelyTested || ix.tested || 0);
-    const eligible = Number(ix.eligible || ix.candidates || 0);
+    const eligible = Number(ix.eligible ?? 0);
     const passed = Number(ix.passed || 0);
     const needReview = Number(ix.inconclusive || 0) + Number(ix.failed || 0);
-    const skipped = Number(ix.skippedUnsafe || 0) + Number(ix.skippedIneligible || 0);
+    const skipped = Number(ix.skippedUnsafe || 0) + Number(ix.skippedIneligible || 0) + Number(ix.skippedSafetyPolicy || 0);
     const line = `${tested} of ${eligible || tested} safely tested · ${passed} passed · ${needReview} need review · ${skipped} skipped for safety`;
-    const ixPartial = Boolean(
-      ix.failed
-      || ix.restorationFailures
-      || ix.inconclusive
-      || Number(ix.eligible || 0) > Number(ix.safelyTested || ix.tested || 0)
-      || /budget|restoration|prepare-failed|time-budget|frame-budget/i.test(String(ix.partialReason || ''))
+    const ixDegraded = Boolean(
+      ix.restorationFailures
+      || /restoration-unproven|prepare-failed/i.test(String(ix.partialReason || ''))
     );
-    box.insertAdjacentHTML('beforeend', `<span>Interactions</span><b data-status="${ixPartial ? 'partial' : 'complete'}">${esc(line)}</b>`);
+    box.insertAdjacentHTML('beforeend', `<span>Interactions</span><b data-status="${ixDegraded ? 'partial' : 'complete'}">${esc(line)}</b>`);
   }
   const embed = report.page?.embeddedCoverage;
-  if (embed && (embed.sameOriginFramesChecked > 0 || embed.crossOriginFramesNotInspectable > 0 || embed.crossOriginIframes > 0)) {
+  if (embed && (embed.sameOriginFramesChecked > 0 || embed.crossOriginFramesNotInspectable > 0 || embed.crossOriginIframes > 0 || embed.frameBudgetExceeded)) {
     const so = Number(embed.sameOriginFramesChecked || 0);
     const xo = Number(embed.crossOriginFramesNotInspectable || embed.crossOriginIframes || 0);
-    box.insertAdjacentHTML('beforeend', `<span>Embedded content</span><b data-status="${xo ? 'partial' : 'complete'}">${esc(`${so} same-origin checked · ${xo} cross-origin not inspectable`)}</b>`);
+    const embedDegraded = embed.frameBudgetPreventedCoverage === true
+      || Number(embed.sameOriginUnprobed || 0) > 0;
+    box.insertAdjacentHTML('beforeend', `<span>Embedded content</span><b data-status="${embedDegraded ? 'partial' : 'complete'}">${esc(`${so} same-origin checked · ${xo} cross-origin not inspectable`)}</b>`);
   }
   const perfCov = String(report.coverage?.performance || '');
   if (perf?.available || /current-page|partial|not monitored|unavailable|local-only|complete/i.test(perfCov)) {
@@ -255,40 +295,41 @@ function coverage() {
     // Historical monitor from monitor evidence — never infer from lab-owned coverage.performance === current-page.
     const histAvailable = historicalMonitorAvailable(report);
     const histLine = histAvailable ? 'Historical monitor available' : 'Historical monitor unavailable';
-    const rowStatus = !perf?.available || !histAvailable ? 'partial' : 'complete';
+    // Lab row status only — historical monitor absence is scope metadata, not degradation.
+    const labDegraded = !perf?.available || (/partial|unavailable|pending/i.test(perfCov) && !/current-page/i.test(perfCov));
+    const rowStatus = labDegraded ? 'partial' : 'complete';
     box.insertAdjacentHTML('beforeend', `<span>Performance</span><b data-status="${rowStatus}">${esc(`${labLine} · ${histLine}`)}</b>`);
   }
   const runtime = String(report.coverage?.runtime || '');
+  const runtimeScope = String(report.coverageScope?.runtime || '');
   if (runtime) {
-    const runtimeLine = /extension-partial/i.test(runtime)
-      ? 'Partial capture (post-injection)'
-      : /renderer/i.test(runtime)
-        ? 'Renderer session capture'
-        : /not applicable/i.test(runtime)
-          ? 'Not applicable'
-          : runtime;
-    box.insertAdjacentHTML('beforeend', `<span>Runtime</span><b data-status="${/partial/i.test(runtime) ? 'partial' : 'complete'}">${esc(runtimeLine)}</b>`);
+    const runtimeLine = /renderer/i.test(runtime)
+      ? 'Renderer session capture'
+      : (/not applicable/i.test(runtime)
+        ? 'Not applicable'
+        : (runtimeScope === 'post-injection-extension' || /extension-partial/i.test(runtime)
+          ? 'Complete (post-injection scope)'
+          : (/partial|unavailable/i.test(runtime) ? runtime : 'Complete')));
+    const runtimeDegraded = /partial|unavailable/i.test(runtime) && !/extension-partial/i.test(runtime);
+    box.insertAdjacentHTML('beforeend', `<span>Runtime</span><b data-status="${runtimeDegraded ? 'partial' : 'complete'}">${esc(runtimeLine)}</b>`);
   }
 
   $('#coverage-summary').textContent = `${complete}/${total} accounted`;
 
   const notes = $('#coverage-notes'); notes.innerHTML = '';
   if (perf?.available) notes.insertAdjacentHTML('beforeend', `<b>Current-page performance is a lab measurement.</b><span>Measured on this machine and network, so it shows direction rather than a field score. Monitored history is the source for regression claims.</span>`);
-  if (String(report.coverage?.runtime) === 'not applicable') notes.insertAdjacentHTML('beforeend', `<b>Uncaught script errors are renderer-only.</b><span>Extension scans do not collect this family, so runtime coverage is not applicable rather than incomplete.</span>`);
+  for (const note of scopeCoverageNotes(report)) {
+    notes.insertAdjacentHTML('beforeend', `<b>Coverage scope.</b><span>${esc(note)}</span>`);
+  }
   if (String(report.coverage?.runtime) === 'renderer') notes.insertAdjacentHTML('beforeend', `<b>Renderer runtime coverage is count-only.</b><span>Uncaught errors are recorded as a count. Error text is untrusted and is not treated as instructions.</span>`);
-  if (String(report.coverage?.runtime) === 'extension-partial') notes.insertAdjacentHTML('beforeend', `<b>Runtime capture is partial.</b><span>Extension diagnostics began after injection, so earlier script errors may be missing.</span>`);
   if (ix && ix.safelyTested > 0) {
-    const eligible = Number(ix.eligible || ix.candidates || 0);
+    const eligible = Number(ix.eligible ?? 0);
     const tested = Number(ix.safelyTested || 0);
     const sideFx = ix.sideEffectLimitation
       ? ' Allowlisted activation may still run page handlers (fetch, analytics, navigation).'
       : ' Allowlisted clicks can still run page handlers.';
     if (eligible > tested) notes.insertAdjacentHTML('beforeend', `<b>WebQA safely tested ${esc(tested)} of ${esc(eligible)} eligible controls.</b><span>Skipped or budget-limited controls are coverage limits, not proof that remaining controls work.${sideFx}</span>`);
     else notes.insertAdjacentHTML('beforeend', `<b>WebQA safely tested ${esc(tested)} eligible control${tested === 1 ? '' : 's'}.</b><span>Forms, navigation, purchases, and high-risk actions are never activated.${sideFx}</span>`);
-  }
-  if (embed && Number(embed.crossOriginFramesNotInspectable || embed.crossOriginIframes || 0) > 0) {
-    const xo = Number(embed.crossOriginFramesNotInspectable || embed.crossOriginIframes || 0);
-    notes.insertAdjacentHTML('beforeend', `<b>${esc(xo)} cross-origin embedded document${xo === 1 ? '' : 's'} could not be inspected.</b><span>That is a coverage limit — not evidence that those embeds are free of issues.</span>`);
   }
   if (ix?.restorationFailures) notes.insertAdjacentHTML('beforeend', `<b>Interaction testing stopped after restoration could not be verified.</b><span>Later controls were not activated to avoid leaving the page in an altered state.</span>`);
   if (links?.inconclusive) {
@@ -299,6 +340,9 @@ function coverage() {
       for (const row of rows) { const li = document.createElement('li'); li.textContent = `${row.path || row.url}${row.reason ? ` (${row.reason})` : ''}`; ul.appendChild(li); }
       notes.appendChild(ul);
     }
+  }
+  if (Number(links?.unprobed || 0) > 0) {
+    notes.insertAdjacentHTML('beforeend', `<b>${esc(links.unprobed)} eligible link${links.unprobed === 1 ? '' : 's'} were not probed.</b><span>The probe budget or candidate limit was reached before every eligible destination could be attempted.</span>`);
   }
 }
 
@@ -414,6 +458,12 @@ function renderOverviewOnly() {
 
 function render() {
   if (!report) return;
+  if (scanInFlight && !shouldRevealResults({
+    phase: scanPhase,
+    flags: resultFlags
+  })) {
+    return;
+  }
   try {
     renderUnsafe();
   } catch (error) {
@@ -902,8 +952,10 @@ async function rescan() {
   pendingFrankCancel?.(); pendingFrankCancel = null; frankRequestSeq++;
   if (frank) await endFrank();
   scanInFlight = true; classFilter = '';
+  scanPhase = SCAN_PHASE.DISCOVERING;
+  resultFlags = emptyResultReady();
   const button = $('#scan'); button.disabled = true; button.textContent = 'Scanning';
-  document.body.dataset.scanning = 'true';
+  lockResultsUi();
   $('#idle-state').hidden = true;
   $('#summary').hidden = false;
   const qaSection = document.querySelector('.qa-section');
@@ -913,34 +965,48 @@ async function rescan() {
   const overview = $('#frank-overview');
   if (overview) {
     overview.dataset.state = 'loading';
-    $('#judgment-title').textContent = 'Inspecting this page…';
-    $('#brief').textContent = 'Gathering verified evidence across QA areas…';
+    $('#judgment-title').textContent = 'Scanning current page…';
+    $('#brief').textContent = 'Results stay hidden until the scan and Frank’s initial review finish.';
     $('#material-count').textContent = '';
     $('#coverage-state').textContent = '';
   }
-  clearDiagnostic(); notice('Inspecting the current page…');
+  clearDiagnostic(); notice('Scanning current page…');
   try {
-    const r = await send(tab?.id ? { type: 'SCAN_TAB', tabId: tab.id } : { type: 'SCAN_ACTIVE' }, 20000);
+    const r = await send(tab?.id ? { type: 'SCAN_TAB', tabId: tab.id } : { type: 'SCAN_ACTIVE' }, 45000);
     if (!r.ok) {
       lastScanAttempt = { ...lastScanAttempt, ok: false, operation: r.diagnostic?.operation || 'SCAN', code: r.diagnostic?.id || '' };
       runtimeTrace.record('scan-failed', { scanId, diagnosticId: r.diagnostic?.id || '', operation: r.diagnostic?.operation || 'SCAN' });
+      scanPhase = SCAN_PHASE.FAILED;
       showFailure(r, 'The page scan could not complete.');
       return;
     }
-    tab = r.tab; report = stampReportIdentity(r.report);
-    report.scanId = scanId;
+    tab = r.tab;
+    const collected = stampReportIdentity(r.report);
+    collected.scanId = scanId;
     lastScanAttempt = { scanId, ok: true, mode: scanMode, at: new Date().toISOString() };
-    $('#new-count').textContent = 'Local scan';
-    report.priorityBrief = 'Local evidence is ready. Connected context is still running.';
-    render();
-    const scanned = new Date(report.scannedAt || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    notice('Local checks complete. Verifying published state, monitored performance and standards context…');
-    const enriched = await send({ type: 'ENRICH', report, tabId: tab?.id }, 32000);
+    resultFlags.scanCollectionComplete = true;
+    applyScanProgress({ phase: SCAN_PHASE.VERIFYING_LINKS });
+    const scanned = new Date(collected.scannedAt || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const enriched = await send({ type: 'ENRICH', report: collected, tabId: tab?.id }, 120000);
     if (enriched.ok) {
       report = stampReportIdentity(enriched.report);
-      runtimeTrace.record('scan-complete', { findingCount: Number(report.findings?.length||0), materialGroupCount: Number(report.attention?.materialGroupCount||0), representedClasses: report.attention?.representedClasses||[], connectedMode: report.connectedMode||'unknown', scanId });
+      resultFlags = {
+        scanCollectionComplete: true,
+        primaryVerificationComplete: String(report.coverage?.links || '') !== 'pending' && Boolean(report.linkAudit),
+        evidenceLedgerReady: Boolean(report.evidenceLedger),
+        correlationComplete: Boolean(report.attention),
+        frankInitialReviewComplete: typeof report.priorityBrief === 'string' && report.priorityBrief.length > 0
+      };
+      scanPhase = SCAN_PHASE.READY;
+      runtimeTrace.record('scan-complete', { findingCount: Number(report.findings?.length||0), materialGroupCount: Number(report.attention?.materialGroupCount||0), representedClasses: report.attention?.representedClasses||[], connectedMode: report.connectedMode||'unknown', scanId, resultReady: resultReadyFromReport(report) });
       const changed = [report.lifecycle?.newCount ? `${report.lifecycle.newCount} new` : '', report.lifecycle?.resolvedCount ? `${report.lifecycle.resolvedCount} resolved` : ''].filter(Boolean).join(' · ') || 'No changes';
       $('#new-count').textContent = changed;
+      if (!resultReadyFromReport(report)) {
+        scanPhase = SCAN_PHASE.FAILED;
+        showFailure({ error: 'The scan finished collecting evidence, but the final review was not ready to show.' }, 'The scan could not finish.');
+        return;
+      }
+      revealResultsUi();
       render();
       await loadSession();
       const limited = limitedCoverageLabels(report);
@@ -973,14 +1039,30 @@ async function rescan() {
       }
     } else {
       runtimeTrace.record('scan-enrichment-failed', { scanId, diagnosticId: enriched?.diagnostic?.id || '', operation: enriched?.diagnostic?.operation || 'ENRICH', code: enriched?.diagnostic?.id || '' });
-      showFailure(enriched, 'Local scan completed, but connected context could not finish.');
+      scanPhase = SCAN_PHASE.FAILED;
+      showFailure(enriched, report
+        ? 'This scan could not finish. Showing your last complete results.'
+        : 'This scan could not finish. Nothing to show yet.');
+      if (report && resultReadyFromReport(report)) {
+        resultFlags = {
+          scanCollectionComplete: true,
+          primaryVerificationComplete: true,
+          evidenceLedgerReady: Boolean(report.evidenceLedger),
+          correlationComplete: Boolean(report.attention),
+          frankInitialReviewComplete: Boolean(report.priorityBrief)
+        };
+        scanPhase = SCAN_PHASE.READY;
+        revealResultsUi();
+        render();
+      }
     }
     await updateWatch();
   } finally {
     scanInFlight = false;
-    delete document.body.dataset.scanning;
+    if (document.body.dataset.resultReady !== 'true') delete document.body.dataset.scanning;
     button.disabled = false;
-    button.textContent = report ? 'Rescan' : 'Scan page';
+    button.textContent = report && document.body.dataset.resultReady === 'true' ? 'Rescan' : (report ? 'Scan page' : 'Scan page');
+    if (document.body.dataset.resultReady === 'true') button.textContent = 'Rescan';
     if (!report) {
       if (lastDiagnostic) {
         $('#summary').hidden = false;
@@ -1212,6 +1294,15 @@ function applyWorkspaceSnapshot(workspace, { fromFrankFocus = false } = {}) {
   filter = workspace.filter || 'all';
   if (workspace.tabId) tab = { ...(tab || {}), id: workspace.tabId, windowId: workspace.windowId || tab?.windowId, url: workspace.pageUrl || tab?.url };
   leaveFrankLocal();
+  scanPhase = SCAN_PHASE.READY;
+  resultFlags = {
+    scanCollectionComplete: true,
+    primaryVerificationComplete: true,
+    evidenceLedgerReady: Boolean(report.evidenceLedger),
+    correlationComplete: Boolean(report.attention),
+    frankInitialReviewComplete: Boolean(report.priorityBrief)
+  };
+  revealResultsUi();
   render();
   focusFindingCard(workspace.findingId || '');
   notice(fromFrankFocus ? 'Returned to QA with your previous scan.' : 'Restored your previous scan.', 'ok');

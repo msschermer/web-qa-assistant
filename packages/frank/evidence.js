@@ -46,7 +46,7 @@ function targetSizeFacts(axe){
 }
 export function targetIdForFinding(finding){return finding?.targetType==='visual'&&finding?.targetId?finding.targetId:''}
 
-export function buildEvidenceGraph({finding,page={},coverage={},context={},targetContext=null,environment=null}){
+export function buildEvidenceGraph({finding,page={},coverage={},context={},targetContext=null,environment=null,evidenceLedger=null,linkAudit=null}){
   const evidence=[],signal=finding.signal||signalForFinding(finding),requestedTargetId=targetIdForFinding(finding),targetId=requestedTargetId&&targetContext?.found?requestedTargetId:'',primarySource=(finding.sources||[])[0]||'browser';
   push(evidence,{source:primarySource,kind:'finding',label:finding.confidence==='inconclusive'?'Observed finding':'Verified finding',value:finding.detail,scope:'current-page',targetId,confidence:finding.confidence||'confirmed'});
   push(evidence,{source:primarySource,kind:'rule',label:'Rule',value:finding.ruleId,scope:'current-page',targetId});
@@ -152,8 +152,54 @@ export function buildEvidenceGraph({finding,page={},coverage={},context={},targe
   if(performanceRelevant(signal)&&perf?.monitored){
     push(evidence,{source:'performance-monitor',kind:'mobile-score',label:'Latest mobile score',value:perf.mobile,scope:'history'});push(evidence,{source:'performance-monitor',kind:'desktop-score',label:'Latest desktop score',value:perf.desktop,scope:'history'});push(evidence,{source:'performance-monitor',kind:'threshold',label:'Configured target',value:perf.threshold,scope:'history'});push(evidence,{source:'performance-monitor',kind:'mobile-change',label:'Recent mobile change',value:perf.mobileChange,scope:'history'});push(evidence,{source:'performance-monitor',kind:'desktop-change',label:'Recent desktop change',value:perf.desktopChange,scope:'history'});push(evidence,{source:'performance-monitor',kind:'last-checked',label:'Last checked',value:perf.lastChecked,scope:'history'});
   }
+  if(finding.embeddedContext||finding.frameSelector){
+    push(evidence,{source:'browser',kind:'frame-context',label:'Finding source context',value:finding.embeddedContext||'same-origin-iframe',scope:'current-page',targetId});
+    if(finding.frameSelector)push(evidence,{source:'browser',kind:'frame-selector',label:'Host frame',value:finding.frameSelector,scope:'current-page',targetId});
+  }
+  const ledger=evidenceLedger||page.evidenceLedger||null;
+  if(ledger?.groups){
+    push(evidence,{source:'browser',kind:'evidence-ledger',label:'Current-page material groups',value:{
+      materialGroupCount:Number(ledger.materialGroupCount||ledger.groups.length||0),
+      uiShown:Number(ledger.uiShown||0),
+      representedClasses:ledger.representedClasses||[],
+      classCounts:ledger.classCounts||{},
+      groupsOmitted:0,
+      truncated:false,
+      detailTier:ledger.compression?.detailTier||'',
+      groups:(ledger.groups||[]).map(g=>({
+        ruleId:g.ruleId,
+        impactClass:g.impactClass,
+        count:Number(g.count||1),
+        confidence:g.confidence,
+        targetability:g.targetability||'',
+        scope:g.scope||'top-document',
+        title:g.title||undefined,
+        frames:g.frames
+      })),
+      inconclusive:ledger.inconclusive||[]
+    },scope:'page-ledger'});
+    if(ledger.inventory&&Object.keys(ledger.inventory).length){
+      push(evidence,{source:'browser',kind:'page-inventory',label:'Page inventory',value:ledger.inventory,scope:'page-ledger'});
+    }
+    if(ledger.coverage){
+      push(evidence,{source:'browser',kind:'coverage-ledger',label:'Coverage accounting',value:{
+        degradedAreas:ledger.coverage.degradedAreas||[],
+        scopeLimitedAreas:ledger.coverage.scopeLimitedAreas||[],
+        links:ledger.coverage.links||null,
+        iframes:ledger.coverage.iframes||null
+      },scope:'page-ledger'});
+    }
+  }else if(linkAudit){
+    push(evidence,{source:'browser',kind:'link-coverage',label:'Link verification',value:{
+      eligible:Number(linkAudit.eligible||0),
+      attempted:Number(linkAudit.attempted||0),
+      unprobed:Number(linkAudit.unprobed||0),
+      inconclusive:Number(linkAudit.inconclusive||0),
+      scannerAborted:Number(linkAudit.scannerAborted||0)
+    },scope:'page-ledger'});
+  }
   const sources=[...new Set(evidence.map(e=>e.source))],targets={};
   if(targetId&&targetContext?.found)targets[targetId]={selector:finding.selector,context:targetContext};
-  return{version:3,findingId:finding.id||finding.fingerprint||finding.ruleId,finding:{id:finding.id,ruleId:finding.ruleId,title:finding.title,detail:finding.detail,category:finding.category,severity:finding.severity,confidence:finding.confidence||'confirmed',verification:finding.verification||null,selector:finding.selector||'',targetId,targetType:finding.targetType==='visual'&&!targetId?'page':(finding.targetType||'page'),targetability:finding.targetability||'',scope:finding.scope||'',rootCauseKey:finding.rootCauseKey||'',lenses:[...(finding.lenses||[])],fixOwner:finding.fixOwner||'',markupSnippet:finding.markupSnippet||'',signal,frankPriority:finding.frankPriority||'',policyReason:finding.policyReason||'',impactClass:finding.impactClass||'',semantics:semantics||null,performanceObservation:browserPerf||null,axe:finding.axe||null,link:finding.link||null,wcagExplanation:finding.wcagExplanation||'',sources:[...(finding.sources||[])],wcag:[...(finding.wcag||[])],remediationContext:finding.remediationContext||null},page:{url:page.url||'',hostname:page.hostname||'',title:page.title||''},environment:environment||page.environment||{type:'unknown',confidence:0},coverage:{...coverage},targets,evidence,sources};
+  return{version:3,findingId:finding.id||finding.fingerprint||finding.ruleId,finding:{id:finding.id,ruleId:finding.ruleId,title:finding.title,detail:finding.detail,category:finding.category,severity:finding.severity,confidence:finding.confidence||'confirmed',verification:finding.verification||null,selector:finding.selector||'',targetId,targetType:finding.targetType==='visual'&&!targetId?'page':(finding.targetType||'page'),targetability:finding.targetability||'',scope:finding.scope||'',rootCauseKey:finding.rootCauseKey||'',lenses:[...(finding.lenses||[])],fixOwner:finding.fixOwner||'',markupSnippet:finding.markupSnippet||'',signal,frankPriority:finding.frankPriority||'',policyReason:finding.policyReason||'',impactClass:finding.impactClass||'',semantics:semantics||null,performanceObservation:browserPerf||null,axe:finding.axe||null,link:finding.link||null,wcagExplanation:finding.wcagExplanation||'',sources:[...(finding.sources||[])],wcag:[...(finding.wcag||[])],remediationContext:finding.remediationContext||null},page:{url:page.url||'',hostname:page.hostname||'',title:page.title||''},environment:environment||page.environment||{type:'unknown',confidence:0},coverage:{...coverage},evidenceLedger:ledger||null,targets,evidence,sources};
 }
 export function evidenceHash(graph){return hash(JSON.stringify({finding:graph.finding,evidence:graph.evidence,coverage:graph.coverage,environment:graph.environment}))}

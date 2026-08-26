@@ -69,7 +69,7 @@ Diagnostic MCP acceptance: **PASS** — live catalog exposes `webqa_latest_diagn
 ## Known gaps
 
 - PSI / field CWV enrichment not implemented (see `docs/DEV-BATCH-PSI.md` for deferral rationale).
-- Runtime observable window: document_start diagnostics when host permission allows; extension scans mark `runtime: extension-partial` when early errors are captured; renderer remains authoritative for uncaught-error findings.
+- Runtime observable window: document_start diagnostics when host permission allows; extension scans set `coverage.runtime: complete` with `coverageScope.runtime: post-injection-extension` when early diagnostics bind (legacy `extension-partial` remains scope-limited for old artifacts); renderer remains authoritative for uncaught-error findings.
 - Embedded context: open shadow roots and same-origin iframe documents are included in fragment/disclosure resolution; cross-origin iframe interiors and closed shadow roots remain not observable.
 - Shadow-root and iframe targeting limits from earlier releases remain.
 - Cloudflare-gated sites may remain blocked at the gateway renderer while a normal browser session reaches the real page.

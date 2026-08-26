@@ -22,6 +22,14 @@ main{padding:14px 14px 28px}
 body:not([data-has-report=true]):not([data-scanning=true]) #summary{display:none}
 body[data-has-report=true] #idle-state{display:none}
 body[data-scanning=true] #idle-state{display:none}
+body[data-scanning=true]:not([data-result-ready=true]) .recommendations-section,
+body[data-scanning=true]:not([data-result-ready=true]) .qa-section,
+body[data-scanning=true]:not([data-result-ready=true]) details.panel:has(#coverage),
+body[data-scanning=true]:not([data-result-ready=true]) #coverage-summary,
+body[data-scanning=true]:not([data-result-ready=true]) #resolved-panel,
+body[data-scanning=true]:not([data-result-ready=true]) #copy-md,
+body[data-scanning=true]:not([data-result-ready=true]) #copy-json,
+body[data-scanning=true]:not([data-result-ready=true]) #session-panel{display:none!important}
 body[data-mode=frank] #idle-state{display:none}
 .qa-section[hidden]{display:none!important}
 

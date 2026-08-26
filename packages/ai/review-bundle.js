@@ -13,6 +13,7 @@ import {
 import { composeAttention, composedBrief } from '../findings/compose.js';
 import { applyFindingPolicy } from '../findings/policy.js';
 import { finalizeCorrelatedFindings, composeReportAttention } from '../findings/correlate.js';
+import { buildEvidenceLedger, compactFrankPageLedger } from '../findings/evidence-ledger.js';
 import { resolvePerformanceCoverage } from '../findings/coverage.js';
 import { materialityScore } from '../findings/impact.js';
 import { QA_AREA_META, presentFinding } from '../presentation/present.js';
@@ -238,6 +239,7 @@ export function buildReviewBundle(report = {}, {
   }
 
   const composition = composeReportAttention(findings, { limit: maxGroups });
+  const ledger = buildEvidenceLedger({ ...report, findings, coverage: report.coverage }, { uiLimit: maxGroups, composition, findings });
   const classLabels = Object.fromEntries(
     Object.keys(QA_AREA_META).map(id => [id, QA_AREA_META[id].label])
   );
@@ -343,7 +345,27 @@ export function buildReviewBundle(report = {}, {
       representedClasses: [...(composition.representedClasses || [])],
       classCounts: { ...(composition.classCounts || {}) },
       classLabels,
-      groups
+      groups,
+      allGroups: (ledger.groups || []).map(g => ({
+        key: sanitizeText(g.key, 220),
+        impactClass: sanitizeText(g.impactClass, 80),
+        areaLabel: areaLabel(g.impactClass),
+        title: sanitizeText(g.title, 220),
+        size: Number(g.size || 1),
+        instanceCount: Number(g.count || g.size || 1),
+        confidence: sanitizeText(g.confidence, 40),
+        targetability: sanitizeText(g.targetability, 40),
+        scope: sanitizeText(g.scope, 80),
+        ruleId: sanitizeText(g.ruleId, 180)
+      })),
+      uiShown: groups.length
+    },
+    evidenceLedger: {
+      provenance: REVIEW_PROVENANCE.webqa_evidence,
+      ...compactFrankPageLedger(ledger),
+      inconclusive: ledger.inconclusive || [],
+      inventory: ledger.inventory || {},
+      compression: ledger.compression || null
     },
     findings: {
       provenance: REVIEW_PROVENANCE.webqa_evidence,
@@ -657,7 +679,9 @@ export function frankPlanFromReview(review = {}, findingIdValue = '') {
     page: { url: page.url, hostname: page.hostname, title: page.title },
     coverage: review.coverage || {},
     environment,
-    targetContext: null
+    targetContext: null,
+    evidenceLedger: review.evidenceLedger || null,
+    linkAudit: review.links || review.linkAudit || null
   });
   const plan = deterministicFrankPlan(graph);
   const valid = validateFrankPlan(plan, graph);

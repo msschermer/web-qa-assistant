@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { applyTargetIntegrityReport } from '../../packages/integrity/apply-report.js';
 import { probeExternalCandidates, mapExternalProbeRows } from '../../packages/security/safe-probe.js';
+import { applyPrivilegedProbeAccounting } from '../../packages/findings/coverage.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -117,6 +118,7 @@ app.post('/scan', async (req, res) => {
     const errorCount = Math.max(0, Math.min(20, Number(runtimeErrors?.count || 0)));
     const errorSamples = Array.isArray(runtimeErrors?.samples) ? runtimeErrors.samples.slice(0, 20) : [];
     const httpStatus = response?.status() || null;
+    page.setDefaultTimeout(180000);
     const report = await page.evaluate(async ({ runtimeErrorCount, samples, httpStatus }) => {
       try { globalThis.__WEBQA_HTTP_STATUS__ = httpStatus; } catch {}
       try { window.WebQARules.recordRuntimeErrors?.({ count: runtimeErrorCount, samples }); } catch {}
@@ -124,25 +126,37 @@ app.post('/scan', async (req, res) => {
       try { await window.WebQARules.prepareSafeInteractions?.(); } catch {}
       const local = window.WebQARules.run(); let axe = null; let links = { findings: [], checked: 0 };
       try { axe = await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] } }); } catch {}
-      try { links = await window.WebQARules.auditLinks({ limit: 30, concurrency: 6, timeoutMs: 3000, retryTimeoutMs: 6000, budgetMs: 10000 }); } catch {}
+      try { links = await window.WebQARules.auditLinks({ limit: 500, concurrency: 10, perHostConcurrency: 2, timeoutMs: 2500, retryTimeoutMs: 5000, emergencyMs: 60000 }); } catch {}
       if (runtimeErrorCount >= 0) local.coverage = { ...local.coverage, runtime: 'renderer' };
       return { local, axe, links };
     }, { runtimeErrorCount: errorCount, samples: errorSamples, httpStatus });
     const { local, axe, links } = report;
     // Gateway-authoritative privileged probes (SSRF+DNS per hop). No browser host permissions.
-    const externalCandidates = Array.isArray(links?.externalCandidates) ? links.externalCandidates.slice(0, 12) : [];
+    const externalCandidates = Array.isArray(links?.externalCandidates) ? links.externalCandidates.slice(0, 80) : [];
     if (externalCandidates.length) {
-      const probeRows = await probeExternalCandidates(externalCandidates);
+      const probeRows = await probeExternalCandidates(externalCandidates, { maxCandidates: 80, concurrency: 6, totalBudgetMs: 20000 });
       const applied = mapExternalProbeRows(externalCandidates, probeRows);
+      const probedCount = probeRows.filter((row) => Number(row.attempts || 0) > 0 && String(row.error || '') !== 'budget-exhausted').length;
+      const accounted = applyPrivilegedProbeAccounting({
+        findings: [...(local.findings || []), ...(links.findings || [])],
+        linkAudit: links,
+        coverage: { ...(local.coverage || {}), links: links.status }
+      }, {
+        applied,
+        truncated: Number(links.externalCandidates?.length || 0) > externalCandidates.length || probedCount < externalCandidates.length,
+        candidateTotal: Array.isArray(links.externalCandidates) ? links.externalCandidates.length : externalCandidates.length,
+        candidatesProbed: probedCount
+      });
       if (applied?.findings?.length) links.findings = [...(links.findings || []), ...applied.findings];
-      if (applied?.resolvedUrls?.length) {
-        const resolved = new Set(applied.resolvedUrls);
-        links.incompleteChecks = (links.incompleteChecks || []).filter(c => !(c.kind === 'external-link' && resolved.has(c.url)));
-        links.incompleteChecks.push(...(applied.incompleteChecks || []));
-        links.inconclusive = links.incompleteChecks.length;
-        links.confirmedIssues = (links.findings || []).length;
-        links.status = links.incompleteChecks.length ? 'partial' : 'complete';
-      }
+      links.incompleteChecks = accounted.linkAudit.incompleteChecks;
+      links.inconclusive = accounted.linkAudit.inconclusive;
+      links.verifiedHealthy = accounted.linkAudit.verifiedHealthy;
+      links.confirmedIssues = accounted.linkAudit.confirmedIssues;
+      links.attempted = accounted.linkAudit.attempted;
+      links.privilegedFallback = accounted.linkAudit.privilegedFallback;
+      links.refinement = accounted.linkAudit.refinement;
+      links.probeBudgetPreventedCoverage = accounted.linkAudit.probeBudgetPreventedCoverage;
+      links.status = accounted.coverage.links;
     }
     const merged = await page.evaluate(({ local, axe, links }) => window.WebQARules.merge(local, axe, links), { local, axe, links });
     merged.page.httpStatus = response?.status() || null;

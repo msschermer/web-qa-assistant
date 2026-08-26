@@ -1,5 +1,6 @@
 import { sanitizeUrlOriginPath } from '../ai/evidence-contract.js';
-import { explainCoverageReasons } from '../findings/coverage.js';
+import { explainCoverageReasons, buildCoverageAccounting, classifyCoverageReason, COVERAGE_CLASS } from '../findings/coverage.js';
+import { compactFrankPageLedger } from '../findings/evidence-ledger.js';
 
 export const BUG_REPORT_SCHEMA_V1 = 'web-qa-assistant-bug-report/v1';
 export const BUG_REPORT_SCHEMA_V2 = 'web-qa-assistant-bug-report/v2';
@@ -304,15 +305,33 @@ function projectPerformance(report) {
 }
 
 function projectLinks(report) {
-  const audit = report?.linkAudit || {};
+  const accounting = buildCoverageAccounting(report || {}).links;
+  const unavailable = /unavailable/i.test(String(report?.coverage?.links || ''));
+  const coverage = unavailable
+    ? 'unavailable'
+    : (accounting.probeBudgetPreventedCoverage ? 'partial' : 'complete');
   return {
-    checked: Number(audit.checked || 0),
-    verifiedHealthy: Number(audit.verifiedHealthy || 0),
-    confirmedBroken: Number(audit.confirmedIssues || 0),
-    inconclusive: Number(audit.inconclusive || 0),
-    privilegedProbe: clip(audit.privilegedProbe, 40) || undefined,
-    coverage: clip(report?.coverage?.links, 40),
-    reason: clip(report?.coverageReasons?.links, 60)
+    discovered: accounting.discovered,
+    eligible: accounting.eligible,
+    attempted: accounting.attempted,
+    checked: accounting.attempted,
+    verifiedHealthy: accounting.verifiedHealthy,
+    confirmedBroken: accounting.confirmedBroken,
+    inconclusive: accounting.inconclusive,
+    unprobed: accounting.unprobed,
+    explicitlySkipped: accounting.explicitlySkipped,
+    scannerAborted: accounting.scannerAborted,
+    inconclusiveByCause: accounting.inconclusiveByCause,
+    probeBudgetReached: accounting.probeBudgetReached === true,
+    probeBudgetPreventedCoverage: accounting.probeBudgetPreventedCoverage === true,
+    privilegedProbe: clip(report?.linkAudit?.privilegedProbe, 40) || undefined,
+    privilegedFallback: accounting.privilegedFallback || undefined,
+    refinement: accounting.refinement || undefined,
+    coverage,
+    reason: accounting.probeBudgetPreventedCoverage
+      ? (clip(report?.coverageReasons?.links, 60) || 'probe-budget-exhausted')
+      : undefined,
+    accountingOk: accounting.accountingOk === true
   };
 }
 
@@ -360,15 +379,17 @@ function projectPageDiagnostics(report, includeContext) {
     }
   }
   for (const row of report?.diagnostics?.failedResources || report?.pageDiagnostics?.failedResources || []) {
+    const disposition = clip(row.disposition, 40) || undefined;
     pushResource({
-      kind: 'resource_failure',
+      kind: disposition === 'confirmed' ? 'resource_failure' : (clip(row.kind, 40) || 'resource_anomaly'),
       initiator: clip(row.initiator, 40),
       status: Number(row.status) || undefined,
       source: diagnosticUrl(row.source || row.url),
       sameOrigin: row.sameOrigin === true,
       originClass: clip(row.originClass, 40) || undefined,
       party: clip(row.party, 40) || undefined,
-      disposition: clip(row.disposition, 40) || undefined
+      disposition,
+      evidenceClass: clip(row.evidenceClass, 40) || (disposition === 'confirmed' ? 'confirmed-failure' : 'observation')
     });
   }
   const securityCount = (report?.linkAudit?.incompleteChecks || []).filter(c => /destination-not-allowed|not-allowed|private-destination/i.test(String(c.reason || ''))).length;
@@ -379,40 +400,81 @@ function projectPageDiagnostics(report, includeContext) {
   const embed = report?.page?.embeddedCoverage || {};
   const interaction = report?.interactionCoverage || {};
   const psi = report?.psi || {};
+  const tested = Number(interaction.tested ?? interaction.safelyTested ?? 0);
+  const passed = Number(interaction.passed || 0);
+  const failed = Number(interaction.failed || 0);
+  const inconclusiveIx = Number(interaction.inconclusive || 0);
+  const skippedUnsafe = Number(interaction.skippedUnsafe || 0);
+  const skippedIneligible = Number(interaction.skippedIneligible || 0);
+  const skippedSafetyPolicy = Number(interaction.skippedSafetyPolicy || 0);
+  const notApplicable = Number(interaction.notApplicable || 0);
+  const candidates = Number(interaction.candidates || 0);
+  const eligible = Number(interaction.eligible ?? 0);
+  const confirmedResources = resources.filter(r => r.disposition === 'confirmed').length;
+  const inconclusiveResources = resources.filter(r => r.disposition === 'inconclusive').length;
   return {
     pageErrors: errorBound,
     failedResources: resourceBound,
+    resourceAnomalies: resourceBound,
     expectedInconclusive: boundList(expectedInconclusive, DIAGNOSTIC_CAPS.links),
     securityBlocks: boundList(securityBlocks, 8),
-    coverageLimitation: report?.coverageReasons?.runtime ? { kind: 'coverage_limitation', reason: report.coverageReasons.runtime } : undefined,
+    coverageLimitation: report?.coverageReasons?.runtime
+      || report?.coverageScope?.runtime
+      ? {
+        kind: 'coverage_limitation',
+        reason: clip(report?.coverageReasons?.runtime || report?.coverageScope?.runtime, 80),
+        class: classifyCoverageReason(report?.coverageReasons?.runtime || 'runtime-scope-post-injection')
+      }
+      : undefined,
     iframeCoverage: {
+      framesDiscovered: Number(embed.framesDiscovered ?? embed.iframeCount ?? 0),
+      sameOriginEligible: Number(embed.sameOriginEligible ?? embed.accessibleSameOriginIframes ?? embed.sameOriginFramesChecked ?? 0),
+      sameOriginAttempted: Number(embed.sameOriginAttempted ?? embed.sameOriginFramesChecked ?? 0),
       sameOriginFramesChecked: Number(embed.sameOriginFramesChecked || 0),
+      sameOriginUnprobed: Number(embed.sameOriginUnprobed ?? Math.max(0, Number(embed.sameOriginEligible ?? embed.accessibleSameOriginIframes ?? 0) - Number(embed.sameOriginFramesChecked || 0))),
       crossOriginFramesNotInspectable: Number(embed.crossOriginFramesNotInspectable || embed.crossOriginIframes || 0),
-      frameBudgetExceeded: embed.frameBudgetExceeded === true
+      frameBudgetReached: embed.frameBudgetReached === true || embed.frameBudgetExceeded === true,
+      frameBudgetExceeded: embed.frameBudgetExceeded === true,
+      frameBudgetPreventedCoverage: embed.frameBudgetPreventedCoverage === true
+        || Number(embed.sameOriginUnprobed || 0) > 0,
+      accountingOk: embed.accountingOk !== false
     },
     interactionCoverage: {
-      candidates: Number(interaction.candidates || 0),
-      eligible: Number(interaction.eligible || interaction.candidates || 0),
-      safelyTested: Number(interaction.safelyTested || interaction.tested || 0),
-      tested: Number(interaction.tested || interaction.safelyTested || 0),
-      skippedUnsafe: Number(interaction.skippedUnsafe || 0),
-      passed: Number(interaction.passed || 0),
-      failed: Number(interaction.failed || 0),
-      inconclusive: Number(interaction.inconclusive || 0),
-      notApplicable: Number(interaction.notApplicable || 0),
+      candidates,
+      eligible,
+      safelyTested: Number(interaction.safelyTested ?? tested),
+      tested,
+      skippedUnsafe,
+      skippedIneligible,
+      skippedSafetyPolicy,
+      passed,
+      failed,
+      inconclusive: inconclusiveIx,
+      notApplicable,
       restorationFailures: Number(interaction.restorationFailures || 0),
       partialReason: clip(interaction.partialReason, 80) || undefined,
       iframeDisclosures: clip(interaction.iframeDisclosures, 40) || undefined,
-      accountingOk: Number(interaction.tested || interaction.safelyTested || 0)
-        === (Number(interaction.passed || 0) + Number(interaction.failed || 0)
-          + Number(interaction.inconclusive || 0)),
+      iframeInteractionsUnprobed: Number(interaction.iframeInteractionsUnprobed || 0),
+      accountingOk: tested === passed + failed + inconclusiveIx
+        && (candidates === 0 || candidates === tested + skippedUnsafe + skippedIneligible + skippedSafetyPolicy + notApplicable
+          || candidates === eligible + skippedUnsafe + skippedIneligible),
       sideEffectLimitation: clip(interaction.sideEffectLimitation, 80) || undefined
     },
     resourceCounts: {
       observedFailureEvents: Number(report?.diagnostics?.observedResourceFailureEvents
+        ?? report?.diagnostics?.observedResourceAnomalyEvents
         ?? (report?.diagnostics?.failedResources || []).length),
       deduplicatedFailedResources: Number(report?.diagnostics?.deduplicatedFailedResources
-        ?? (report?.diagnostics?.failedResources || []).length)
+        ?? report?.diagnostics?.deduplicatedResourceAnomalies
+        ?? (report?.diagnostics?.failedResources || []).length),
+      observedAnomalyEvents: Number(report?.diagnostics?.observedResourceAnomalyEvents
+        ?? report?.diagnostics?.observedResourceFailureEvents
+        ?? (report?.diagnostics?.failedResources || []).length),
+      deduplicatedAnomalies: Number(report?.diagnostics?.deduplicatedResourceAnomalies
+        ?? report?.diagnostics?.deduplicatedFailedResources
+        ?? (report?.diagnostics?.failedResources || []).length),
+      confirmedFailures: Number(report?.diagnostics?.confirmedResourceFailures ?? confirmedResources),
+      inconclusiveObservations: Number(report?.diagnostics?.inconclusiveResourceObservations ?? inconclusiveResources)
     },
     psi: {
       enabled: psi.enabled === true,
@@ -425,7 +487,7 @@ function projectPageDiagnostics(report, includeContext) {
       pageErrors: report?.coverage?.runtime === 'renderer'
         ? 'renderer-pageerror-session'
         : 'post-injection-samples-only',
-      failedResources: 'resource-timing-status-ge-400-only; empty-is-not-proof'
+      failedResources: 'resource-timing-status-ge-400-or-opaque; disposition-required; empty-is-not-proof'
     }
   };
 }
@@ -558,14 +620,34 @@ function projectTimeline({ trace, report, lastDiagnostic }) {
     if (report.targetIntegrityBlocked || integrity === 'blocked') push('target_blocked', { state: integrity });
     else if (integrity === 'reached' || !integrity) push('target_reached', { state: integrity || 'reached' });
     if (report.coverage?.axe === 'complete') push('axe_completed');
-    if (report.linkAudit) push('link_probe_completed', { coverage: clip(report.coverage?.links, 40) });
+    if (report.linkAudit) {
+      const links = buildCoverageAccounting(report).links;
+      const unavailable = /unavailable/i.test(String(report.coverage?.links || ''));
+      push('link_probe_completed', {
+        coverage: unavailable ? 'unavailable' : (links.probeBudgetPreventedCoverage ? 'partial' : 'complete'),
+        eligible: links.eligible,
+        attempted: links.attempted,
+        unprobed: links.unprobed,
+        inconclusive: links.inconclusive,
+        scannerAborted: links.scannerAborted,
+        probeBudgetPreventedCoverage: links.probeBudgetPreventedCoverage === true
+      });
+    }
     if (report.browserPerformance?.available) {
       push('performance_collected', {
         coverage: 'current-page-lab',
         historicalMonitor: clip(report.coverage?.performance, 40) || undefined
       });
     }
-    if (report.coverageReasons && Object.keys(report.coverageReasons).length) push('coverage_degraded', { areas: Object.keys(report.coverageReasons).slice(0, 8) });
+    if (report.coverageReasons && Object.keys(report.coverageReasons).length) {
+      const accounting = buildCoverageAccounting(report);
+      if (accounting.degradedAreas.length) {
+        push('coverage_degraded', { areas: accounting.degradedAreas.slice(0, 8) });
+      }
+      if (accounting.scopeLimitedAreas.length) {
+        push('coverage_scope_limited', { areas: accounting.scopeLimitedAreas.slice(0, 8) });
+      }
+    }
     if (report.attention) push('correlation_completed', { materialGroupCount: Number(report.attention.materialGroupCount || 0) });
     if ((report.pageDiagnostics?.errors || []).length) push('page_error', { count: report.pageDiagnostics.errors.length });
     const deduped = Number(report.diagnostics?.deduplicatedFailedResources
@@ -706,7 +788,14 @@ export function selectDiagnosticSection(artifact, section = 'index') {
   if (!DIAGNOSTIC_SECTIONS.includes(key)) {
     throw new Error(`Unknown diagnostic section "${key}". Use ${DIAGNOSTIC_SECTIONS.join('|')}.`);
   }
-  if (key === 'coverage') return { coverage: artifact.coverage, reasons: artifact.coverageReasons || artifact.scan?.coverageReasons };
+  if (key === 'coverage') {
+    return {
+      coverage: artifact.coverage,
+      reasons: artifact.coverageReasons || artifact.scan?.coverageReasons,
+      coverageAccounting: artifact.coverageAccounting || undefined,
+      scopeNotes: artifact.coverageAccounting?.scopeLimitedAreas || undefined
+    };
+  }
   return artifact[key];
 }
 
@@ -737,6 +826,7 @@ export function buildBugReport({
   const extras = extrasFromFailure(lastDiagnostic, lastScanAttempt);
   const coverageReasons = report ? (report.coverageReasons || explainCoverageReasons(report, extras)) : {};
   const reportForProjection = report ? { ...report, coverageReasons } : null;
+  const coverageAccounting = reportForProjection ? buildCoverageAccounting(reportForProjection) : null;
   const status = scanStatusFor({ report: reportForProjection, lastScanAttempt, lastDiagnostic });
   const mismatch = Boolean(
     lastScanAttempt?.scanId && reportForProjection?.scanId && lastScanAttempt.scanId !== reportForProjection.scanId
@@ -796,6 +886,40 @@ export function buildBugReport({
     },
     coverage: reportForProjection?.coverage || undefined,
     coverageReasons,
+    coverageAccounting: coverageAccounting ? {
+      degradedAreas: coverageAccounting.degradedAreas,
+      scopeLimitedAreas: coverageAccounting.scopeLimitedAreas,
+      completeAreas: coverageAccounting.completeAreas,
+      accountingOk: coverageAccounting.accountingOk === true,
+      reasons: coverageAccounting.reasons,
+      links: coverageAccounting.links,
+      iframes: coverageAccounting.iframes,
+      interactions: {
+        candidates: coverageAccounting.interactions.candidates,
+        eligible: coverageAccounting.interactions.eligible,
+        tested: coverageAccounting.interactions.tested,
+        skippedSafetyPolicy: coverageAccounting.interactions.skippedSafetyPolicy,
+        restorationFailures: coverageAccounting.interactions.restorationFailures,
+        iframeInteractionsUnprobed: coverageAccounting.interactions.iframeInteractionsUnprobed || 0,
+        partialReason: coverageAccounting.interactions.partialReason || undefined,
+        accountingOk: coverageAccounting.interactions.accountingOk === true
+      }
+    } : undefined,
+    scanTimings: reportForProjection?.scanTimings ? {
+      discoveryMs: Number(reportForProjection.scanTimings.discoveryMs || 0) || undefined,
+      axeMs: Number(reportForProjection.scanTimings.axeMs || 0) || undefined,
+      linkProbeMs: Number(reportForProjection.scanTimings.linkProbeMs || 0) || undefined,
+      primaryLinkMs: Number(reportForProjection.scanTimings.primaryLinkMs || 0) || undefined,
+      refinementLinkMs: Number(reportForProjection.scanTimings.refinementLinkMs || 0) || undefined,
+      frameInspectionMs: Number(reportForProjection.scanTimings.frameInspectionMs || 0) || undefined,
+      interactionMs: Number(reportForProjection.scanTimings.interactionMs || 0) || undefined,
+      performanceMs: Number(reportForProjection.scanTimings.performanceMs || 0) || undefined,
+      correlationMs: Number(reportForProjection.scanTimings.correlationMs || 0) || undefined,
+      frankReviewMs: Number(reportForProjection.scanTimings.frankReviewMs || 0) || undefined,
+      totalMs: Number(reportForProjection.scanTimings.totalMs || 0) || undefined
+    } : undefined,
+    inventory: reportForProjection?.page?.inventory || reportForProjection?.evidenceLedger?.inventory || undefined,
+    evidenceLedger: reportForProjection?.evidenceLedger ? compactFrankPageLedger(reportForProjection.evidenceLedger) : undefined,
     findings,
     performance: projectPerformance(reportForProjection),
     links: projectLinks(reportForProjection),

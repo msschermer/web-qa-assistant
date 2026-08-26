@@ -103,7 +103,18 @@ test('diagnostic contract: blocked target records coverage reasons without prete
 test('diagnostic contract: partial coverage explains probe budget', () => {
   const report = reachedReport({
     coverage: { browser: 'complete', links: 'partial', axe: 'complete', performance: 'partial' },
-    linkAudit: { checked: 36, verifiedHealthy: 20, confirmedIssues: 0, inconclusive: 12, reachedLimit: true }
+    linkAudit: {
+      discovered: 50,
+      eligible: 50,
+      attempted: 36,
+      checked: 36,
+      verifiedHealthy: 20,
+      confirmedIssues: 0,
+      inconclusive: 12,
+      unprobed: 14,
+      reachedLimit: true,
+      probeBudgetPreventedCoverage: true
+    }
   });
   report.coverageReasons = explainCoverageReasons(report);
   const artifact = buildBugReport({ report });
@@ -236,7 +247,20 @@ test('section reader has no full dump and rejects unknown sections', () => {
 
 test('hardened MCP read path preserves timeline coverage_degraded area names', () => {
   const report = reachedReport({
-    coverage: { browser: 'complete', links: 'partial', axe: 'complete', performance: 'current-page', runtime: 'not applicable' }
+    coverage: { browser: 'complete', links: 'partial', axe: 'complete', performance: 'current-page', runtime: 'not applicable' },
+    linkAudit: {
+      discovered: 40,
+      eligible: 40,
+      attempted: 36,
+      checked: 36,
+      verifiedHealthy: 30,
+      confirmedIssues: 0,
+      inconclusive: 6,
+      unprobed: 4,
+      scannerAborted: 0,
+      probeBudgetPreventedCoverage: true,
+      reachedLimit: true
+    }
   });
   report.coverageReasons = explainCoverageReasons(report);
   const artifact = buildBugReport({ report });
@@ -244,6 +268,9 @@ test('hardened MCP read path preserves timeline coverage_degraded area names', (
   const timeline = selectDiagnosticSection(hardened, 'timeline');
   const degraded = timeline.items.find(e => e.type === 'coverage_degraded');
   assert.ok(degraded, 'expected coverage_degraded timeline event');
-  assert.deepEqual(degraded.data.areas, ['links', 'runtime']);
+  assert.deepEqual(degraded.data.areas, ['links']);
+  const scoped = timeline.items.find(e => e.type === 'coverage_scope_limited');
+  assert.ok(scoped, 'expected coverage_scope_limited timeline event');
+  assert.ok(scoped.data.areas.includes('runtime'));
   assert.doesNotMatch(JSON.stringify(degraded.data), /\[truncated\]/);
 });

@@ -183,15 +183,16 @@ test('interaction accounting: tested equals passed+failed+inconclusive; skips ar
   assert.equal(artifact.pageDiagnostics.interactionCoverage.accountingOk, true);
 });
 
-test('runtime coverage is extension-partial when page diagnostics are bound', async () => {
+test('runtime coverage is complete with post-injection scope when page diagnostics are bound', async () => {
   const { report, context } = await scan(asyncHtml, { prepare: true });
-  // Bound flag alone should flip runtime even with zero captured errors.
+  // Bound flag alone should mark runtime complete within extension scope.
   context.__WEBQA_PAGE_DIAG_BOUND__ = true;
   context.__WEBQA_PAGE_DIAGNOSTICS__ = { errors: [] };
   const report2 = context.WebQARules.run();
-  assert.equal(report2.coverage.runtime, 'extension-partial');
+  assert.equal(report2.coverage.runtime, 'complete');
+  assert.equal(report2.coverageScope?.runtime, 'post-injection-extension');
   const reasons = explainCoverageReasons(report2);
-  assert.equal(reasons.runtime, COVERAGE_REASON.RUNTIME_EXTENSION_PARTIAL);
+  assert.equal(reasons.runtime, COVERAGE_REASON.RUNTIME_SCOPE_POST_INJECTION);
   assert.ok(report);
 });
 

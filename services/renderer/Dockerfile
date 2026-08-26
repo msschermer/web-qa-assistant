@@ -6,6 +6,7 @@ RUN npm install --omit=dev --no-audit --no-fund
 COPY packages/rules ./packages/rules
 COPY packages/integrity ./packages/integrity
 COPY packages/security ./packages/security
+COPY packages/findings ./packages/findings
 COPY packages/ai ./packages/ai
 COPY services/renderer ./services/renderer
 ENV NODE_ENV=production RENDERER_PORT=8790

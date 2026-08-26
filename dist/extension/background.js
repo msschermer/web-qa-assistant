@@ -6,7 +6,8 @@ import { applyFindingPolicy } from './policy.js';
 import { attachTargetIntegrity, finalizeBlockedTargetReport } from './apply-report.js';
 import { IMPACT_CLASSES } from './impact.js';
 import { gatewayContextEnvelope, gatewayFrankGraph } from './evidence-contract.js';
-import { explainCoverageReasons, resolvePerformanceCoverage, reconcilePerformanceCoverage } from './coverage.js';
+import { explainCoverageReasons, resolvePerformanceCoverage, reconcilePerformanceCoverage, finalizeLinkAudit, mergeGatewayLinkAudit, preserveScannerAborted, normalizePrivilegedFallback, applyPrivilegedProbeAccounting } from './coverage.js';
+import { buildEvidenceLedger } from './evidence-ledger.js';
 
 const LIVE_API = 'https://assistant.msschermer.us';
 const LOCAL_APIS = ['http://localhost:3000', 'http://localhost:8787'];
@@ -138,6 +139,10 @@ chrome.runtime.onInstalled.addListener(()=>chrome.sidePanel.setPanelBehavior({op
 chrome.runtime.onStartup.addListener(()=>chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:false}).catch(()=>{}));
 chrome.action.onClicked.addListener(tab=>{if(!tab?.windowId)return;chrome.sidePanel.open({windowId:tab.windowId}).catch(()=>{});chrome.runtime.sendMessage({type:'ACTION_INVOKED',tabId:tab.id,windowId:tab.windowId,pageUrl:tab.url||''}).catch(()=>{})});
 
+function emitScanProgress(phase, extra = {}) {
+  chrome.runtime.sendMessage({ type: 'SCAN_PROGRESS', phase, source: 'background', ...extra }).catch(() => {});
+}
+
 chrome.runtime.onMessage.addListener((msg,sender,send)=>{
   // Return to QA must call sidePanel.open synchronously to preserve the content-script user gesture.
   if(msg?.type==='RETURN_TO_QA'){
@@ -162,9 +167,16 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
   }
 
   (async()=>{
-  if(msg.type==='SCAN_ACTIVE'){const current=await activeTab(),report=await localScan(current);return{tab:{id:current.id,windowId:current.windowId,url:report.page.url},report}}
-  if(msg.type==='SCAN_TAB'){const report=await scanExistingTab(msg.tabId);const current=await chrome.tabs.get(msg.tabId).catch(()=>null);return{tab:{id:msg.tabId,windowId:current?.windowId,url:report.page.url},report}}
+  if(msg.type==='SCAN_PROGRESS'){
+    if(sender.tab && msg.source!=='background'){
+      chrome.runtime.sendMessage({ ...msg, source: 'content' }).catch(()=>{});
+    }
+    return { ok: true };
+  }
+  if(msg.type==='SCAN_ACTIVE'){emitScanProgress('DISCOVERING');const current=await activeTab(),report=await localScan(current);return{tab:{id:current.id,windowId:current.windowId,url:report.page.url},report}}
+  if(msg.type==='SCAN_TAB'){emitScanProgress('DISCOVERING');const report=await scanExistingTab(msg.tabId);const current=await chrome.tabs.get(msg.tabId).catch(()=>null);return{tab:{id:msg.tabId,windowId:current?.windowId,url:report.page.url},report}}
   if(msg.type==='ENRICH'){
+    emitScanProgress('VERIFYING_LINKS');
     const enriched=await enrich(msg.report,msg.tabId||null);
     if(msg.tabId&&enriched?.page?.url){
       try{await updateState({id:msg.tabId,url:enriched.page.url},enriched)}
@@ -259,10 +271,21 @@ async function contextualize(report,context=null){
   const findings=finalized.findings;
   // Attention is composed once here so every surface (panel, brief, markdown
   // export) reads the same grouped, cross-discipline view.
+  const tCorr=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  const announce=String(report.coverage?.links||'')!=='pending';
+  if(announce)emitScanProgress('CORRELATING');
   const attention=composeReportAttention(findings,{limit:8});
-  const next={...finalized,environment,page:{...finalized.page,environment},findings,attention:{groups:attention.groups.map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead.id,selectors:g.selectors,instanceIds:g.instances.map(x=>x.id),rootCauseKey:g.lead.rootCauseKey||g.key,targetability:g.lead.targetability||'',lenses:g.lead.lenses||[]})),worthChecking:(attention.worthChecking||[]).map(w=>({key:w.key,title:w.title,scope:w.scope,lens:w.lens,fixOwner:w.fixOwner,size:w.size,instanceCount:w.instanceCount,findingIds:w.findings.map(f=>f.id)})),classCounts:attention.classCounts,materialGroupCount:attention.materialGroupCount,materialFindingCount:attention.materialFindingCount,representedClasses:attention.representedClasses,classLabels:Object.fromEntries(Object.entries(IMPACT_CLASSES).map(([k,v])=>[k,v.label]))},priorityBrief:finalized.priorityBrief||report.priorityBrief||null,targetIntegrityBlocked:finalized.targetIntegrityBlocked||false};
+  const next={...finalized,environment,page:{...finalized.page,environment},findings,attention:{groups:attention.groups.map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead.id,selectors:g.selectors,instanceIds:g.instances.map(x=>x.id),rootCauseKey:g.lead.rootCauseKey||g.key,targetability:g.lead.targetability||'',lenses:g.lead.lenses||[]})),allGroups:(attention.allGroups||[]).map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead?.id,targetability:g.lead?.targetability||'',confidence:g.lead?.confidence||'',ruleId:g.lead?.ruleId||''})),worthChecking:(attention.worthChecking||[]).map(w=>({key:w.key,title:w.title,scope:w.scope,lens:w.lens,fixOwner:w.fixOwner,size:w.size,instanceCount:w.instanceCount,findingIds:w.findings.map(f=>f.id)})),classCounts:attention.classCounts,materialGroupCount:attention.materialGroupCount,materialFindingCount:attention.materialFindingCount,representedClasses:attention.representedClasses,classLabels:Object.fromEntries(Object.entries(IMPACT_CLASSES).map(([k,v])=>[k,v.label]))},priorityBrief:finalized.priorityBrief||report.priorityBrief||null,targetIntegrityBlocked:finalized.targetIntegrityBlocked||false};
   next.coverageReasons=explainCoverageReasons(next);
-  return reconcilePerformanceCoverage(next);
+  const reconciled=reconcilePerformanceCoverage(next);
+  const tFrank=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  if(announce)emitScanProgress('FRANK_ANALYZING');
+  reconciled.evidenceLedger=buildEvidenceLedger(reconciled,{uiLimit:8,composition:attention,findings});
+  if(!reconciled.priorityBrief)reconciled.priorityBrief=deterministicBrief(findings,{coverage:reconciled.coverage,linkAudit:reconciled.linkAudit,targetIntegrity:reconciled.page?.targetIntegrity});
+  const frankReviewMs=Math.round(((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())-tFrank);
+  const corrMs=Math.round(((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())-tCorr);
+  reconciled.scanTimings={...(reconciled.scanTimings||{}),correlationMs:corrMs,frankReviewMs,totalMs:Number(reconciled.scanTimings?.totalMs||0)+corrMs};
+  return reconciled;
 }
 function mergeGatewayReport(local,remote){
   if(!remote)return local;
@@ -270,28 +293,19 @@ function mergeGatewayReport(local,remote){
     ? local.browserPerformance
     : (remote.browserPerformance || local.browserPerformance);
   if(remote.linkAudit?.privilegedProbe==='gateway'){
-    const probed=new Set((remote.findings||[]).map(f=>f?.link?.url).filter(Boolean));
-    const localExtra=(local.linkAudit?.incompleteChecks||[]).filter(c=>{
-      if(c?.kind!=='external-link')return true;
-      if(!c.url)return true;
-      // Keep local incompletes the gateway never received (budget truncation).
-      return!probed.has(c.url)&&!(remote.linkAudit?.incompleteChecks||[]).some(r=>r.url===c.url);
-    });
-    const incompleteChecks=[...(remote.linkAudit?.incompleteChecks||[]),...localExtra];
-    const linkAudit={...(remote.linkAudit||{}),incompleteChecks,inconclusive:incompleteChecks.length,reachedLimit:Boolean(remote.linkAudit?.reachedLimit||local.linkAudit?.reachedLimit||localExtra.length)};
-    const linksCoverage=incompleteChecks.length?'partial':(remote.coverage?.links||local.coverage?.links);
+    const mergedLinks=mergeGatewayLinkAudit(local,remote);
     return reconcilePerformanceCoverage({
       ...local,
       ...remote,
       page:{...(remote.page||{}),...(local.page||{}),environment:remote.page?.environment||local.page?.environment},
       findings:remote.findings||local.findings,
-      linkAudit,
+      linkAudit:mergedLinks.linkAudit,
       browserPerformance,
-      coverage:{...(local.coverage||{}),...(remote.coverage||{}),links:linksCoverage}
+      coverage:{...(local.coverage||{}),...(remote.coverage||{}),links:mergedLinks.coverageLinks}
     });
   }
   const byId=new Map((local.findings||[]).map(f=>[f.id||f.fingerprint,f]));
-  const findings=(remote.findings||[]).map(r=>{const l=byId.get(r.id||r.fingerprint);if(!l)return r;return{...r,selector:l.selector||r.selector,targetId:l.targetId||r.targetId,targetType:l.targetType||r.targetType,evidence:l.evidence??r.evidence,axe:l.axe,link:l.link||r.link,verification:r.verification||l.verification};});
+  const findings=(remote.findings||[]).map(r=>{const l=byId.get(r.id||r.fingerprint);if(!l)return r;return{...r,selector:l.selector||r.selector,targetId:l.targetId||r.targetId,targetType:l.targetType||r.targetType,evidence:l.evidence??r.evidence,axe:l.axe,link:l.link||r.link,verification:r.verification||l.verification,embeddedContext:l.embeddedContext||r.embeddedContext,frameSelector:l.frameSelector||r.frameSelector,spotlightSafe:l.spotlightSafe??r.spotlightSafe,extra:{...(r.extra||{}),...(l.extra||{})}};});
   return reconcilePerformanceCoverage({
     ...local,
     ...remote,
@@ -325,52 +339,110 @@ async function addLinkAudit(report,tabId,{privilegedExternal=true}={}){
   try{
     const result=await chrome.tabs.sendMessage(tabId,{type:'AUDIT_LINKS'});
     let linkFindings=Array.isArray(result?.findings)?result.findings:[];
-    let incompleteChecks=Array.isArray(result?.incompleteChecks)?result.incompleteChecks:[];
     const externalCandidateTotal=Array.isArray(result?.externalCandidates)?result.externalCandidates.length:0;
-    const externalCandidates=Array.isArray(result?.externalCandidates)?result.externalCandidates.slice(0,12):[];
-    const externalBudgetLimited=externalCandidateTotal>externalCandidates.length;
+    const GATEWAY_EXTERNAL_CANDIDATE_CAP=80;
+    const externalCandidates=Array.isArray(result?.externalCandidates)?result.externalCandidates.slice(0,GATEWAY_EXTERNAL_CANDIDATE_CAP):[];
     // Connected scans: leave external confirmation to the gateway (no broad host permission prompts).
     // Local-only / private pages: optional SW fetch only when host permission already exists — never request wildcards.
+    const refinementStarted=Date.now();
+    let applied={findings:[],incompleteChecks:[],resolvedUrls:[]};
+    let probeRows=[];
     if(privilegedExternal&&externalCandidates.length){
-      const probeRows=[];
-      for(const candidate of externalCandidates){
-        const started=Date.now();
-        const probeUrl=sanitizeExternalProbeUrl(candidate.url);
-        if(!probeUrl){probeRows.push({url:candidate.url,status:0,error:'destination-not-allowed',durationMs:0,method:'GET',attempts:0});continue}
-        try{
-          const first=await fetch(probeUrl,{method:'GET',redirect:'follow',credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(4500)});
-          const status=first.status;
-          if(status===404||status===410||status>=500){
-            const second=await fetch(probeUrl,{method:'GET',redirect:'follow',credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(4500)});
-            if(second.status!==status){
-              probeRows.push({url:candidate.url,status:0,error:'inconclusive-mismatch',finalUrl:first.url||probeUrl,redirected:Boolean(first.redirected),durationMs:Date.now()-started,method:'GET',attempts:2});
+      probeRows=new Array(externalCandidates.length);
+      let cursor=0;
+      const worker=async()=>{
+        while(cursor<externalCandidates.length){
+          const index=cursor++;
+          const candidate=externalCandidates[index];
+          const started=Date.now();
+          const probeUrl=sanitizeExternalProbeUrl(candidate.url);
+          if(!probeUrl){probeRows[index]={url:candidate.url,status:0,error:'destination-not-allowed',durationMs:0,method:'GET',attempts:0};continue}
+          try{
+            const first=await fetch(probeUrl,{method:'GET',redirect:'follow',credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(4500)});
+            const status=first.status;
+            if(status===404||status===410||status>=500){
+              const second=await fetch(probeUrl,{method:'GET',redirect:'follow',credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(4500)});
+              if(second.status!==status){
+                probeRows[index]={url:candidate.url,status:0,error:'inconclusive-mismatch',finalUrl:first.url||probeUrl,redirected:Boolean(first.redirected),durationMs:Date.now()-started,method:'GET',attempts:2};
+                continue;
+              }
+              probeRows[index]={url:candidate.url,status,finalUrl:second.url||first.url||probeUrl,redirected:Boolean(first.redirected||second.redirected),durationMs:Date.now()-started,method:'GET',attempts:2};
               continue;
             }
-            probeRows.push({url:candidate.url,status,finalUrl:second.url||first.url||probeUrl,redirected:Boolean(first.redirected||second.redirected),durationMs:Date.now()-started,method:'GET',attempts:2});
-            continue;
+            probeRows[index]={url:candidate.url,status,finalUrl:first.url||probeUrl,redirected:Boolean(first.redirected),durationMs:Date.now()-started,method:'GET',attempts:1};
+          }catch(error){
+            probeRows[index]={url:candidate.url,status:0,error:String(error?.message||error),durationMs:Date.now()-started,method:'GET',attempts:1};
           }
-          probeRows.push({url:candidate.url,status,finalUrl:first.url||probeUrl,redirected:Boolean(first.redirected),durationMs:Date.now()-started,method:'GET',attempts:1});
-        }catch(error){
-          probeRows.push({url:candidate.url,status:0,error:String(error?.message||error),durationMs:Date.now()-started,method:'GET',attempts:1});
         }
-      }
+      };
+      await Promise.all(Array.from({length:Math.min(4,externalCandidates.length)},()=>worker()));
       try{
-        const applied=await chrome.tabs.sendMessage(tabId,{type:'APPLY_EXTERNAL_LINK_PROBES',candidates:externalCandidates,rows:probeRows});
+        applied=await chrome.tabs.sendMessage(tabId,{type:'APPLY_EXTERNAL_LINK_PROBES',candidates:externalCandidates,rows:probeRows})||applied;
         if(Array.isArray(applied?.findings)&&applied.findings.length)linkFindings=[...linkFindings,...applied.findings];
-        if(Array.isArray(applied?.resolvedUrls)&&applied.resolvedUrls.length){
-          const resolved=new Set(applied.resolvedUrls);
-          incompleteChecks=incompleteChecks.filter(c=>!(c.kind==='external-link'&&resolved.has(c.url)));
-          incompleteChecks=[...incompleteChecks,...(applied.incompleteChecks||[])];
-        }
       }catch{}
     }
-    if(externalBudgetLimited&&!incompleteChecks.some(c=>c.reason==='candidate-budget')){
-      incompleteChecks=[...incompleteChecks,{kind:'external-link',url:'',path:'',text:'',reason:'candidate-budget',status:0,attempts:[]}];
+    const refinementLinkMs=privilegedExternal&&externalCandidates.length?Date.now()-refinementStarted:0;
+    const privilegedFallback=normalizePrivilegedFallback(null,{
+      mode:privilegedExternal?(externalCandidates.length?'service-worker':(externalCandidateTotal?'queued':'none')):(externalCandidateTotal?'queued':'none'),
+      eligible:externalCandidateTotal,
+      attempted:privilegedExternal?((probeRows||[]).filter(row=>Number(row.attempts||0)>0).length):0,
+      truncated:externalCandidateTotal>externalCandidates.length,
+      resolved:Array.isArray(applied?.resolvedUrls)?applied.resolvedUrls.length:0,
+      stillInconclusive:Array.isArray(applied?.incompleteChecks)?applied.incompleteChecks.length:Number(result?.inconclusive||0)
+    });
+    let next={
+      ...report,
+      findings:[...(report.findings||[]),...linkFindings],
+      externalLinkCandidates:externalCandidates,
+      externalLinkCandidateTotal:externalCandidateTotal,
+      linkAudit:{
+        discovered:Number(result?.discovered||0),
+        eligible:Number(result?.eligible??result?.discovered??0),
+        attempted:Number(result?.attempted??result?.checked??0),
+        checked:Number(result?.attempted??result?.checked??0),
+        verifiedHealthy:Number(result?.verifiedHealthy||0),
+        confirmedIssues:Number(result?.confirmedIssues||0),
+        inconclusive:Number(result?.inconclusive||0),
+        unprobed:Number(result?.unprobed||0),
+        explicitlySkipped:Number(result?.explicitlySkipped||0),
+        scannerAborted:preserveScannerAborted(result?.scannerAborted),
+        inconclusiveByCause:result?.inconclusiveByCause||undefined,
+        incompleteChecks:Array.isArray(result?.incompleteChecks)?result.incompleteChecks:[],
+        unprobedChecks:[...(result?.unprobedChecks||[])],
+        limit:Number(result?.limit||0),
+        reachedLimit:Boolean(result?.reachedLimit),
+        cached:Number(result?.cached||0),
+        probeBudgetReached:Boolean(result?.probeBudgetReached),
+        probeBudgetPreventedCoverage:Boolean(result?.probeBudgetPreventedCoverage),
+        queueMetrics:result?.queueMetrics||undefined,
+        privilegedFallback,
+        refinement:result?.refinement
+      }
+    };
+    if(privilegedExternal&&externalCandidates.length){
+      const probedCount=(probeRows||[]).filter(row=>Number(row.attempts||0)>0&&String(row.error||'')!=='budget-exhausted').length;
+      next=applyPrivilegedProbeAccounting(next,{
+        applied,
+        truncated:externalCandidateTotal>externalCandidates.length||probedCount<externalCandidates.length,
+        candidateTotal:externalCandidateTotal,
+        candidatesProbed:probedCount
+      });
+    }else{
+      const finalized=finalizeLinkAudit(next.linkAudit,{unavailable:result?.status==='unavailable',privilegedFallback});
+      next={...next,linkAudit:finalized.linkAudit,coverage:{...report.coverage,links:finalized.coverageStatus}};
     }
-    const confirmedLinkFindings=linkFindings.filter(f=>f?.confidence==='confirmed'&&/navigation\.link-(404|410|5xx)/.test(String(f.ruleId||'')));
-    const status=result?.status==='unavailable'?'unavailable':incompleteChecks.length?'partial':'complete';
-    return{...report,findings:[...(report.findings||[]),...linkFindings],externalLinkCandidates:externalCandidates,externalLinkCandidateTotal:externalCandidateTotal,linkAudit:{checked:Number(result?.checked||0),verifiedHealthy:Number(result?.verifiedHealthy||0),confirmedIssues:confirmedLinkFindings.length,inconclusive:incompleteChecks.length,incompleteChecks,limit:Number(result?.limit||0),reachedLimit:Boolean(result?.reachedLimit)||externalBudgetLimited,degraded:Boolean(result?.degraded),cached:Number(result?.cached||0)},coverage:{...report.coverage,links:status}};
-  }catch{return{...report,linkAudit:{checked:0,verifiedHealthy:0,confirmedIssues:0,inconclusive:0,incompleteChecks:[]},coverage:{...report.coverage,links:'unavailable'}}}
+    const primaryLinkMs=Number(result?.primaryLinkMs||result?.linkProbeMs||0);
+    return{
+      ...next,
+      scanTimings:{
+        ...(report.scanTimings||{}),
+        linkProbeMs:primaryLinkMs+refinementLinkMs,
+        primaryLinkMs,
+        refinementLinkMs,
+        totalMs:Number(report.scanTimings?.totalMs||0)+primaryLinkMs+refinementLinkMs
+      }
+    };
+  }catch{return{...report,linkAudit:{discovered:0,eligible:0,attempted:0,checked:0,verifiedHealthy:0,confirmedIssues:0,inconclusive:0,unprobed:0,explicitlySkipped:0,scannerAborted:0,incompleteChecks:[],unprobedChecks:[],probeBudgetReached:false,probeBudgetPreventedCoverage:false},coverage:{...report.coverage,links:'unavailable'}}}
 }
 
 async function fetchJson(url,options={},timeoutMs=GATEWAY_TIMEOUT_MS){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{const response=await fetch(url,{...options,signal:controller.signal}),text=await response.text();if(!text.trim())throw new Error(`empty response (HTTP ${response.status})`);let data;try{data=JSON.parse(text)}catch{throw new Error(`invalid JSON response (HTTP ${response.status})`)}if(!response.ok)throw Object.assign(new Error(data?.error||`HTTP ${response.status}`),{status:response.status,code:data?.code||''});return data}finally{clearTimeout(timer)}}
@@ -483,7 +555,7 @@ async function prepareFrank({finding,report,tabId}){
   if(!isPrivateHost(report.page.hostname||'')&&(!report.context?.services||Object.keys(report.context.services).length===0)){try{sourceReport=await enrich(report,inspectedTabId)}catch{}}
   const target=finding.targetType==='visual'?await targetContext(inspectedTabId,finding.targetId,finding.selector,finding.ruleId):null;
   const latestFinding=sourceReport.findings?.find(x=>x.id===finding.id)||finding;
-  const graph=buildEvidenceGraph({finding:latestFinding,page:sourceReport.page,coverage:sourceReport.coverage,context:sourceReport.context||{},targetContext:target,environment:sourceReport.environment||sourceReport.page?.environment});
+  const graph=buildEvidenceGraph({finding:latestFinding,page:sourceReport.page,coverage:sourceReport.coverage,context:sourceReport.context||{},targetContext:target,environment:sourceReport.environment||sourceReport.page?.environment,evidenceLedger:sourceReport.evidenceLedger||null,linkAudit:sourceReport.linkAudit||null});
   const plan=deterministicFrankPlan(graph);
   return{plan,graph,tabId:inspectedTabId,reasoning:{status:'ready',mode:'deterministic',provider:'deterministic',message:'Verified deterministic guidance is ready for optional on-device improvement.'}};
 }

@@ -298,7 +298,7 @@ test('Frank guidance for new families is specific and does not invent broken con
     finding: { id: 'runtime.uncaught-error:1', ruleId: 'runtime.uncaught-error', title: 'Uncaught script error', detail: err.interpretation, category: 'review', severity: 'low', confidence: 'inferred', targetability: 'document', targetType: 'page' },
     page: { url: 'https://example.com/' }, coverage: { runtime: 'renderer' }
   }));
-  assert.match(errPlan.assessment.limitations, /extension-partial/i);
+  assert.match(errPlan.assessment.limitations, /post-injection/i);
 
   const hiddenGuide = guidanceFor({ ruleId: 'ux.hidden-required' });
   assert.doesNotMatch(hiddenGuide.impact, /can block form submission/i);

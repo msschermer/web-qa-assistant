@@ -268,9 +268,14 @@ test('WordPress high-confidence remediation appends implementation context after
 
 test('background linkAudit confirmedIssues ignores inconclusive link-review rows', () => {
   const background = fs.readFileSync('apps/extension/background.js', 'utf8');
-  assert.match(background, /confirmedLinkFindings/);
-  assert.match(background, /navigation\\.link-\(404\|410\|5xx\)/);
-  assert.doesNotMatch(background, /confirmedIssues:Number\(result\?\.confirmedIssues\|\|linkFindings\.length\)/);
+  const coverage = fs.readFileSync('packages/findings/coverage.js', 'utf8');
+  const addStart = background.indexOf('async function addLinkAudit');
+  const addEnd = background.indexOf('async function fetchJson', addStart);
+  const block = background.slice(addStart, addEnd);
+  assert.match(block, /confirmedIssues:Number\(result\?\.confirmedIssues\|\|0\)/);
+  assert.doesNotMatch(block, /confirmedIssues:.*linkFindings\.length/);
+  assert.match(coverage, /navigation\\.link-\(404\|410\|5xx\)/);
+  assert.match(coverage, /f\.confidence === 'confirmed'/);
 });
 
 test('sidepanel Worth Checking can start Frank without a finding card', () => {

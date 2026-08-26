@@ -1,3 +1,5 @@
+import { compactFrankPageLedger } from '../../packages/findings/evidence-ledger.js';
+
 const LOCAL_AI_OPTIONS = {
   expectedInputs: [{ type: 'text', languages: ['en'] }],
   expectedOutputs: [{ type: 'text', languages: ['en'] }]
@@ -66,7 +68,8 @@ function compactGraph(graph = {}, deterministicPlan = null) {
     },
     environment: graph.environment || {},
     evidence: safeEvidence(graph),
-    deterministicGuidance: core
+    deterministicGuidance: core,
+    pageLedger: graph.evidenceLedger ? compactFrankPageLedger(graph.evidenceLedger) : undefined
   };
 }
 

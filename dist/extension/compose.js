@@ -120,7 +120,7 @@ export function composedBrief(composition, { linkAudit = null, coverage = {}, ta
     return blocked;
   }
   if (!groups.length) {
-    if (inconclusive) return `No confirmed material issues were found. Internal-link verification was incomplete for ${inconclusive} of ${checked || inconclusive} checked destination${(checked || inconclusive) === 1 ? '' : 's'}, so Frank did not count those URLs as broken links.`;
+    if (inconclusive) return `No confirmed material issues were found. Link verification stayed inconclusive for ${inconclusive} of ${checked || inconclusive} checked destination${(checked || inconclusive) === 1 ? '' : 's'}, so Frank did not count those URLs as broken links.`;
     if (unavailable.length) return `No confirmed material issues were found in the available coverage. ${unavailable.join(', ')} could not be checked, so treat this as a partial pass.`;
     return 'No confirmed material issues were found in the available coverage. Lower-priority observations are still available under Show all checks.';
   }
