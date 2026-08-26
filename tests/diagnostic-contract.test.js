@@ -178,7 +178,9 @@ test('privacy: query, fragment, userinfo, tokens, form-like keys, filesystem pat
 test('bounding: huge error, resource, and timeline lists truncate with metadata', () => {
   const errors = Array.from({ length: 80 }, (_, i) => ({ kind: 'page_error', message: `Error ${i}`, source: `https://example.com/a${i}.js` }));
   const resources = Array.from({ length: 80 }, (_, i) => ({ initiator: 'script', status: 404, source: `https://example.com/r${i}.js` }));
-  const trace = Array.from({ length: 200 }, (_, i) => ({ at: `t${i}`, type: 'scan-complete', data: { findingCount: i } }));
+  const trace = Array.from({ length: 200 }, (_, i) => ({ at: `t${i}`, type: 'scan-enrichment-failed', data: { findingCount: i } }));
+  // One deferred completion plus many high-signal failure rows force timeline truncation.
+  trace.push({ at: 't-end', type: 'scan-complete', data: { findingCount: 1 } });
   const artifact = buildBugReport({
     report: reachedReport({ pageDiagnostics: { errors }, diagnostics: { failedResources: resources } }),
     trace
@@ -188,6 +190,7 @@ test('bounding: huge error, resource, and timeline lists truncate with metadata'
   assert.equal(artifact.pageDiagnostics.pageErrors.total, 80);
   assert.equal(artifact.pageDiagnostics.failedResources.truncated, true);
   assert.equal(artifact.timeline.truncated, true);
+  assert.equal(artifact.timeline.items[artifact.timeline.items.length - 1].type, 'scan_completed');
   assert.ok(artifact.bounds.bytes <= DIAGNOSTIC_CAPS.artifactBytes);
   const hardened = hardenReportBugArtifact(artifact);
   assert.equal(hardened.timeline.items.length, artifact.timeline.shown);

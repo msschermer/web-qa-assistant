@@ -119,7 +119,7 @@ async function scan(html, {
     wireToggle(doc.getElementById('micro-toggle'), doc.getElementById('micro-panel'), 'microtask');
     wireToggle(doc.getElementById('raf-toggle'), doc.getElementById('raf-panel'), 'raf');
     wireToggle(doc.getElementById('timeout-toggle'), doc.getElementById('timeout-panel'), 'timeout', { delayMs: 40 });
-    wireToggle(doc.getElementById('late-toggle'), doc.getElementById('late-panel'), 'timeout', { delayMs: 500 });
+    wireToggle(doc.getElementById('late-toggle'), doc.getElementById('late-panel'), 'timeout', { delayMs: 2000 });
     // throw-toggle intentionally unwired / broken — separate test covers thrown handlers.
     wireToggle(doc.getElementById('shipping-info'), doc.getElementById('shipping-panel'), 'sync');
     for (const frame of doc.querySelectorAll('iframe')) {

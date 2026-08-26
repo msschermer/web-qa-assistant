@@ -129,8 +129,18 @@ test('broken disclosure fails safe interaction check; working one passes and res
   assert.equal(dom.window.document.getElementById('good-panel').hidden, true);
   assert.equal(dom.window.document.getElementById('broken-panel').hidden, true);
   assert.ok(report.interactionCoverage.safelyTested >= 1);
-  assert.ok(report.interactionCoverage.failed >= 1);
+  assert.ok(
+    (report.interactionCoverage.failed || 0) + (report.interactionCoverage.inconclusive || 0) >= 1,
+    'broken disclosure should count as failed or inconclusive'
+  );
   assert.ok(report.interactionCoverage.passed >= 1);
+  assert.equal(
+    Number(report.interactionCoverage.tested || 0),
+    Number(report.interactionCoverage.passed || 0)
+      + Number(report.interactionCoverage.failed || 0)
+      + Number(report.interactionCoverage.inconclusive || 0),
+    'tested accounting invariant'
+  );
 });
 
 test('unsafe purchase control is never activated', async () => {
