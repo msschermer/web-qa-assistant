@@ -1,4 +1,4 @@
-globalThis.__WEBQA_BUILD_REVISION__="04eb556e3f2a";
+globalThis.__WEBQA_BUILD_REVISION__="b3270885fd62";
 import { localFrankRuntime, localFrankWalkthrough, probeLocalAi, setLocalAiTraceSink, localAiDiagnostics } from './local-ai.js';
 import { presentFinding, presentArea, QA_AREA_ORDER } from './presentation.js';
 import { RuntimeTrace, buildBugReport, bugReportPrivacySummary } from './bug-report.js';
@@ -244,7 +244,7 @@ function coverage() {
   for (const [key, value] of Object.entries(report.coverage || {})) {
     total++;
     // Accounted statuses that mean we measured something (not "not monitored" / "not applicable").
-    if (/complete|deterministic|local-only|current-page|renderer|extension-partial/i.test(String(value))) complete++;
+    if (/complete|deterministic|local-only|current-page|renderer|extension-partial|none[_-]?checked/i.test(String(value))) complete++;
     // Human rows below supersede these machine keys for the main coverage story.
     if (/^(performance|runtime|links|axe|browser)$/i.test(key)) continue;
     box.insertAdjacentHTML('beforeend', `<span>${esc(key)}</span><b data-status="${esc(String(value).toLowerCase().replace(/\s+/g, '-'))}">${esc(value)}</b>`);
@@ -256,10 +256,13 @@ function coverage() {
     const eligible = Number(links.eligible ?? links.discovered ?? attempted);
     const unprobed = Number(links.unprobed || 0);
     const scannerAborted = Number(links.scannerAborted || 0);
-    const linkDegraded = unprobed > 0 || scannerAborted > 0 || /unavailable|none/i.test(linkCov);
-    const linkLine = eligible > attempted || unprobed > 0
-      ? `${attempted} of ${eligible} eligible checked · ${links.verifiedHealthy || 0} healthy · ${links.confirmedIssues || 0} broken · ${links.inconclusive || 0} inconclusive · ${unprobed} unprobed`
-      : `${attempted} checked · ${links.verifiedHealthy || 0} healthy · ${links.confirmedIssues || 0} broken · ${links.inconclusive || 0} inconclusive`;
+    const linkDegraded = unprobed > 0 || scannerAborted > 0 || /unavailable/i.test(linkCov);
+    const noEligible = attempted === 0 && eligible === 0 && unprobed === 0;
+    const linkLine = noEligible
+      ? 'No probeable HTTP links on this page'
+      : (eligible > attempted || unprobed > 0
+        ? `${attempted} of ${eligible} eligible checked · ${links.verifiedHealthy || 0} healthy · ${links.confirmedIssues || 0} broken · ${links.inconclusive || 0} inconclusive · ${unprobed} unprobed`
+        : `${attempted} checked · ${links.verifiedHealthy || 0} healthy · ${links.confirmedIssues || 0} broken · ${links.inconclusive || 0} inconclusive`);
     box.insertAdjacentHTML('beforeend', `<span>Links</span><b data-status="${linkDegraded ? 'partial' : 'complete'}">${esc(linkLine)}</b>`);
   }
   const perf = report.browserPerformance;

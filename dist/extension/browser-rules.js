@@ -3280,11 +3280,12 @@
     const probeBudgetPreventedCoverage=linkResult.probeBudgetPreventedCoverage===true
       || unprobed>0
       || scannerAborted>0;
+    const discoveredKnown = linkResult.discovered != null && linkResult.discovered !== '';
     const linksStatus=linkResult.status==='unavailable'?'unavailable'
       :probeBudgetPreventedCoverage?'partial'
-      :attempted===0&&Number(linkResult.discovered||linkResult.eligible||0)===0?'none_checked'
-      :Number(linkResult.checked||0)===0&&!linkResult.discovered?'none_checked'
-      :'complete';
+      :attempted===0&&discoveredKnown&&Number(linkResult.discovered||0)===0?'none_checked'
+      :discoveredKnown||attempted>0?'complete'
+      :'unavailable';
     const diagBound=Boolean(globalThis.__WEBQA_PAGE_DIAG_BOUND__||globalThis.__WEBQA_PAGE_DIAGNOSTICS__||globalThis.__WEBQA_RUNTIME_ERRORS__);
     const bucket=globalThis.__WEBQA_RUNTIME_ERRORS__;
     let runtimeStatus=local.coverage?.runtime||'not applicable';
@@ -3320,7 +3321,11 @@
       primaryLinkMs:Number(linkResult.primaryLinkMs||0)||undefined,
       refinementLinkMs:Number(linkResult.refinementLinkMs||0)||undefined
     };
-    return{...local,browserPerformance:local.browserPerformance||null,findings:[...seen.values()],linkAudit,coverage:{...local.coverage,links:linksStatus,axe:axeResults?'complete':'unavailable',runtime:runtimeStatus},coverageScope,diagnostics:local.diagnostics||null,pageDiagnostics:local.pageDiagnostics||null};
+    const scanTimings={
+      ...(local.scanTimings||{}),
+      linkProbeMs:Number(linkResult.primaryLinkMs||local.scanTimings?.linkProbeMs||0)
+    };
+    return{...local,browserPerformance:local.browserPerformance||null,findings:[...seen.values()],linkAudit,coverage:{...local.coverage,links:linksStatus,axe:axeResults?'complete':'unavailable',runtime:runtimeStatus},coverageScope,scanTimings,diagnostics:local.diagnostics||null,pageDiagnostics:local.pageDiagnostics||null};
   }
 
   function recordRuntimeErrors(payload){
