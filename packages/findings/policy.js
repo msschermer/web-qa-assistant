@@ -107,7 +107,7 @@ export function applyFindingPolicy(findings=[],environment={type:'unknown'}){
       return set(f,{visible:false,priority:'quiet',reason:`represented by ${f.supersededBy}`});
     }
 
-    if(/^(ux\.inert-link|ux\.form-no-submit|ux\.input-type-mismatch|seo\.robots-googlebot-conflict|runtime\.uncaught-error|security\.mixed-content-passive|web\.horizontal-overflow|runtime\.resource-failed-cross-origin|ux\.embed-resource-failed|ux\.iframe-missing-title|web\.iframe-title-missing|ux\.disclosure-toggle-failed|ux\.controls-target-missing|ux\.disclosure-target-missing)$/.test(f.ruleId||'')){
+    if(/^(ux\.inert-link|ux\.form-no-submit|ux\.input-type-mismatch|seo\.robots-googlebot-conflict|runtime\.uncaught-error|security\.mixed-content-passive|web\.horizontal-overflow|runtime\.resource-failed-cross-origin|ux\.embed-resource-failed|ux\.iframe-missing-title|web\.iframe-title-missing|ux\.disclosure-toggle-failed|ux\.controls-target-missing|ux\.disclosure-target-missing|ux\.interaction-restoration-unproven|runtime\.resource-status-inconclusive)$/.test(f.ruleId||'')){
       f.worthChecking=true;
       return set(f,{visible:false,priority:'quiet',category:'review',severity:'low',reason:'review observation retained in Worth Checking rather than Recommended Order'});
     }

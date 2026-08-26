@@ -121,6 +121,7 @@ app.post('/scan', async (req, res) => {
       try { globalThis.__WEBQA_HTTP_STATUS__ = httpStatus; } catch {}
       try { window.WebQARules.recordRuntimeErrors?.({ count: runtimeErrorCount, samples }); } catch {}
       try { await window.WebQARules.preparePerformanceSignals?.(); } catch {}
+      try { await window.WebQARules.prepareSafeInteractions?.(); } catch {}
       const local = window.WebQARules.run(); let axe = null; let links = { findings: [], checked: 0 };
       try { axe = await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] } }); } catch {}
       try { links = await window.WebQARules.auditLinks({ limit: 30, concurrency: 6, timeoutMs: 3000, retryTimeoutMs: 6000, budgetMs: 10000 }); } catch {}

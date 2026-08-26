@@ -10,9 +10,15 @@
   const SHADOW_ROOT_BUDGET=80;
   const SAME_ORIGIN_IFRAME_BUDGET=3;
   const SAFE_INTERACTION_BUDGET=6;
+  const SAFE_INTERACTION_PER_FRAME=2;
+  const INTERACTION_SETTLE_MAX_MS=120;
+  const INTERACTION_SETTLE_STEP_MS=16;
+  const INTERACTION_TOTAL_BUDGET_MS=900;
   let lastResolutionStage='';
   const linkVerificationCache=new Map();
   let lastInteractionCoverage=null;
+  let lastPreparedInteractionFindings=null;
+  let interactionsPrepared=false;
 
   function text(value){return String(value??'').trim()}
   function attr(el,name){return text(el?.getAttribute?.(name))}
@@ -389,7 +395,12 @@
     findings.push(...malformedLinkFindings());
     findings.push(...embeddedFindings());
     findings.push(...interactionFindings());
-    findings.push(...safeInteractionFindings());
+    if(interactionsPrepared){
+      findings.push(...(lastPreparedInteractionFindings||[]));
+      interactionsPrepared=false;
+    }else{
+      findings.push(...safeInteractionFindings());
+    }
     findings.push(...soft404Findings(page));
     findings.push(...schemaSemanticFindings(schemaState()));
 
@@ -806,24 +817,46 @@
     }
     return'';
   }
+  function registrableDomain(hostname){
+    const parts=String(hostname||'').toLowerCase().split('.').filter(Boolean);
+    if(parts.length<=1)return hostname||'';
+    // Conservative eTLD+1 approximation (no public-suffix list). Good enough for cdn.example.com ↔ www.example.com.
+    return parts.slice(-2).join('.');
+  }
   function classifyResourceParty(url){
-    let parsed;try{parsed=new URL(url,location.href)}catch{return{party:'unknown',originClass:'unknown',noise:true}}
+    let parsed;try{parsed=new URL(url,location.href)}catch{return{party:'unknown',originClass:'unknown',ownership:'unknown',noise:true}}
     const host=parsed.hostname.toLowerCase();
     const path=parsed.pathname.toLowerCase();
     const sameOrigin=parsed.origin===location.origin;
+    const pageReg=registrableDomain(location.hostname);
+    const hostReg=registrableDomain(host);
     const tracking=/\b(google-analytics|googletagmanager|gtag|doubleclick|facebook\.net|connect\.facebook|hotjar|segment\.|mixpanel|amplitude|newrelic|nr-data|sentry\.io|clarity\.ms|adservice|adsystem|scorecardresearch|quantserve|taboola|outbrain|criteo)\b/i.test(host)
       ||/\/(collect|pixel|beacon|analytics|gtm\.js|fbevents)\b/i.test(path)
       ||/\.(gif|png)$/i.test(path)&&/\/(pixel|track|beacon|collect)\b/i.test(path);
-    if(tracking)return{party:'third-party',originClass:'tracking',noise:true,roleHint:'analytics'};
+    if(tracking)return{party:'third-party',originClass:'third-party-background',ownership:'third-party-background',noise:true,roleHint:'analytics'};
+    const infraVisible=/\b(fonts\.googleapis|fonts\.gstatic|ajax\.googleapis|cdn\.jsdelivr|unpkg\.com|cdnjs\.cloudflare)\b/i.test(host);
+    if(infraVisible)return{party:'third-party',originClass:'third-party-visible',ownership:'third-party-visible',noise:false,roleHint:'infrastructure'};
     const embed=/youtube\.com|youtube-nocookie\.com|youtu\.be|player\.vimeo\.com|vimeo\.com|maps\.google|google\.com\/maps|openstreetmap|js\.stripe\.com|checkout\.stripe|calendly\.com|typeform\.com|formstack|hubspot|intercom\.io|drift\.com|zendesk|twitter\.com|platform\.twitter|instagram\.com|tiktok\.com|linkedin\.com/i.test(host)
       ||(!sameOrigin&&/\/embed\//i.test(path));
-    if(embed)return{party:'third-party',originClass:'embed-provider',noise:false,roleHint:'embed'};
-    if(sameOrigin)return{party:'first-party',originClass:'same-origin',noise:false};
-    const cdn=/\b(cdn\.|static\.|assets\.|media\.|img\.|images\.|fonts\.|cloudfront\.net|akamai|fastly|jsdelivr|unpkg|cloudflare)\b/i.test(host)
-      ||host.endsWith(`.${location.hostname}`)
-      ||(location.hostname.split('.').length>=2&&host.endsWith(`.${location.hostname.split('.').slice(-2).join('.')}`)&&/cdn|static|assets|media|img|fonts/i.test(host));
-    if(cdn)return{party:'first-party-cdn',originClass:'first-party-cdn',noise:false};
-    return{party:'third-party',originClass:'third-party',noise:false};
+    if(embed)return{party:'third-party',originClass:'third-party-visible',ownership:'third-party-visible',noise:false,roleHint:'embed'};
+    if(sameOrigin)return{party:'first-party',originClass:'same-origin',ownership:'same-origin',noise:false};
+    // Probable first-party: asset-style host on the same registrable domain (conservative).
+    // Sibling hosts without CDN/asset markers are NOT promoted to confirmed first-party.
+    const relatedDomain=pageReg&&hostReg&&pageReg===hostReg&&host!==location.hostname.toLowerCase();
+    const assetSub=/^(cdn|static|assets|media|img|images|fonts|files|content|res|resource)[-.]/i.test(host)
+      ||/\.(cdn|static|assets|media)\./i.test(host)
+      ||/cdn|static|assets|media|img|fonts/i.test(host);
+    if(relatedDomain&&assetSub){
+      return{party:'first-party',originClass:'probable-first-party',ownership:'probable-first-party',noise:false};
+    }
+    if(relatedDomain){
+      return{party:'unknown',originClass:'related-host',ownership:'related-host',noise:false};
+    }
+    // Generic public CDN hosts without site relationship stay unknown/third-party — do not claim first-party.
+    if(/\b(cloudfront\.net|akamaized\.net|fastly\.net|azureedge\.net|stackpathcdn)\b/i.test(host)){
+      return{party:'unknown',originClass:'unknown',ownership:'unknown',noise:false};
+    }
+    return{party:'third-party',originClass:'third-party-visible',ownership:'third-party-visible',noise:false};
   }
   function visibleDependencyFor(url,kind){
     if(!url||!kind)return false;
@@ -841,18 +874,59 @@
     try{resources=performance.getEntriesByType('resource')||[]}catch{return out}
     const failed=new Map();
     let crossOriginEmitted=0;
+    const pageDiagErrors=globalThis.__WEBQA_PAGE_DIAGNOSTICS__?.errors||[];
     for(const entry of resources){
-      const status=Number(entry.responseStatus);
-      if(!Number.isFinite(status)||status<400)continue;
+      const rawStatus=entry.responseStatus;
+      const status=Number(rawStatus);
+      const opaque=!Number.isFinite(status)||status===0;
+      const httpFail=Number.isFinite(status)&&status>=400;
+      if(!opaque&&!httpFail)continue;
       let parsed;try{parsed=new URL(entry.name)}catch{continue}
       const url=sanitizeHttpUrl(entry.name);if(!url)continue;
       const kind=classifyResourceRole(entry.name,entry.initiatorType);
       if(!kind)continue;
       const party=classifyResourceParty(entry.name);
-      if(!failed.has(url))failed.set(url,{url,kind,status,sameOrigin:parsed.origin===location.origin,party});
+      if(!failed.has(url))failed.set(url,{url,kind,status:opaque?0:status,opaque,sameOrigin:parsed.origin===location.origin,party});
+    }
+    // Supplement with page-diagnostic resource failures that lack Performance status.
+    for(const row of pageDiagErrors){
+      if(String(row?.kind||'')!=='resource_failure'&&String(row?.type||'')!=='error')continue;
+      const url=sanitizeHttpUrl(row.source||row.url||'');
+      if(!url||failed.has(url))continue;
+      let parsed=null;try{parsed=new URL(url)}catch{continue}
+      const kind=classifyResourceRole(url,row.initiator||row.role||'')||'';
+      if(!kind)continue;
+      const party=classifyResourceParty(url);
+      failed.set(url,{url,kind,status:Number(row.status)||0,opaque:!Number(row.status),sameOrigin:parsed.origin===location.origin,party,fromPageDiag:true});
     }
     for(const row of failed.values()){
-      if(row.sameOrigin){
+      const visible=visibleDependencyFor(row.url,row.kind);
+      const isEmbed=row.party.roleHint==='embed'||row.party.originClass==='third-party-visible'&&row.kind==='iframe';
+      const ownership=row.party.ownership||row.party.originClass;
+      if(row.opaque){
+        // Opaque/missing status: never auto-confirm HTTP failure. Need visible page impact.
+        if(row.party.noise)continue;
+        if(row.kind==='image'&&visible){
+          // Broken image is handled by imageResourceFindings; keep diagnostic-only here.
+          continue;
+        }
+        if(!visible)continue;
+        if(crossOriginEmitted>=4)continue;
+        out.push(finding({
+          ruleId:'runtime.resource-status-inconclusive',
+          title:'Resource failure status could not be confirmed',
+          detail:`A ${row.kind} resource (${row.url}) showed an opaque or missing response status. Browser APIs did not expose a reliable HTTP status, so this is not treated as a confirmed HTTP failure.`,
+          category:'review',severity:'low',confidence:'inferred',targetType:'document',
+          evidence:`opaque-status; ${row.url}; ownership=${ownership}`,
+          extra:{
+            worthChecking:true,resourceUrl:row.url,originClass:ownership,party:row.party.party,
+            resourceRole:row.kind,visibleDependency:visible,resourceDisposition:'inconclusive',failureClass:'inconclusive'
+          }
+        }));
+        crossOriginEmitted++;
+        continue;
+      }
+      if(row.sameOrigin||ownership==='probable-first-party'){
         const selector=row.kind==='script'?'script[src]':row.kind==='stylesheet'?'link[rel~="stylesheet"]':row.kind==='font'?'link[rel="preload"][as="font"],link[href*=".woff"]':row.kind==='image'?'img[src]':null;
         let el=null;
         if(selector){
@@ -867,34 +941,50 @@
         const inHead=el&&document.head?.contains(el);
         const ruleId=row.kind==='script'?'runtime.script-failed':row.kind==='stylesheet'?'web.stylesheet-failed':row.kind==='font'?'runtime.font-failed':row.kind==='image'?'web.image-broken':'runtime.resource-failed';
         const title=row.kind==='script'?'Script failed to load':row.kind==='stylesheet'?'Stylesheet failed to load':row.kind==='font'?'Font failed to load':row.kind==='image'?'Image resource failed to load':'Resource failed to load';
+        const ownershipNote=ownership==='probable-first-party'?' (probable first-party CDN/asset host)':'';
         out.push(finding({
           ruleId,title,
-          detail:`A same-origin ${row.kind} request for ${row.url} completed with HTTP ${row.status}. Restore the asset or remove the unused reference.`,
+          detail:`A ${ownership==='same-origin'||row.sameOrigin?'same-origin':'probable first-party'} ${row.kind} request for ${row.url} completed with HTTP ${row.status}${ownershipNote}. Restore the asset or remove the unused reference.`,
           category:'fix',severity:row.kind==='font'?'medium':'high',confidence:'confirmed',
           element:inHead?null:el,targetType:inHead||!el?'document':'visual',
           evidence:`http-${row.status} ${row.url}`,
-          extra:{resourceUrl:row.url,originClass:row.party.originClass,party:row.party.party,resourceRole:row.kind,visibleDependency:true,resourceDisposition:'confirmed'}
+          extra:{resourceUrl:row.url,originClass:ownership,party:row.party.party,resourceRole:row.kind,visibleDependency:true,resourceDisposition:'confirmed',failureClass:'confirmed-failure'}
         }));
         continue;
       }
-      // Cross-origin: diagnostics always; findings only for non-noise with known role and visible dependency (or embed-provider).
+      // Related host without asset markers: Worth Checking only (do not confirm as first-party).
+      if(ownership==='related-host'){
+        if(row.party.noise||crossOriginEmitted>=4||!visible)continue;
+        out.push(finding({
+          ruleId:'runtime.resource-failed-cross-origin',
+          title:'Related-host resource failed to load',
+          detail:`A resource on a related host (${row.url}) completed with HTTP ${row.status}. The host shares a registrable domain with this page but is not classified as a first-party asset CDN, so impact is Worth Checking rather than a confirmed first-party defect.`,
+          category:'review',severity:'low',confidence:'inferred',targetType:'document',
+          evidence:`http-${row.status} ${row.url}; origin=related-host`,
+          extra:{
+            worthChecking:true,resourceUrl:row.url,originClass:ownership,party:row.party.party,
+            resourceRole:row.kind,visibleDependency:visible,resourceDisposition:'worthChecking',failureClass:'probable-failure'
+          }
+        }));
+        crossOriginEmitted++;
+        continue;
+      }
+      // Cross-origin / third-party: diagnostics always; findings only for non-noise with known role and visible dependency (or embed).
       if(row.party.noise)continue;
       if(crossOriginEmitted>=4)continue;
-      const visible=visibleDependencyFor(row.url,row.kind);
-      const isEmbed=row.party.originClass==='embed-provider';
-      if(!visible&&!isEmbed)continue;
-      const ruleId=isEmbed?'ux.embed-resource-failed':'runtime.resource-failed-cross-origin';
+      if(!visible&&!(row.party.roleHint==='embed'))continue;
+      const ruleId=row.party.roleHint==='embed'?'ux.embed-resource-failed':'runtime.resource-failed-cross-origin';
       out.push(finding({
         ruleId,
-        title:isEmbed?'Embedded third-party resource failed to load':'Cross-origin resource failed to load',
-        detail:isEmbed
+        title:row.party.roleHint==='embed'?'Embedded third-party resource failed to load':'Cross-origin resource failed to load',
+        detail:row.party.roleHint==='embed'
           ?`A third-party embed-related ${row.kind} request for ${row.url} completed with HTTP ${row.status}. Impact depends on whether the visible embed depends on this asset; treat as Worth Checking rather than a confirmed page defect.`
           :`A cross-origin ${row.kind} request for ${row.url} completed with HTTP ${row.status}. This may affect page features when the asset is required, but cross-origin failures are often blocked by privacy tools or expected CDN conditions — confirm impact before treating it as a defect.`,
         category:'review',severity:'low',confidence:'inferred',targetType:'document',
-        evidence:`http-${row.status} ${row.url}; origin=${row.party.originClass}`,
+        evidence:`http-${row.status} ${row.url}; origin=${ownership}`,
         extra:{
-          worthChecking:true,resourceUrl:row.url,originClass:row.party.originClass,party:row.party.party,
-          resourceRole:row.kind,visibleDependency:visible,resourceDisposition:'worthChecking'
+          worthChecking:true,resourceUrl:row.url,originClass:ownership,party:row.party.party,
+          resourceRole:row.kind,visibleDependency:visible,resourceDisposition:'worthChecking',failureClass:'probable-failure'
         }
       }));
       crossOriginEmitted++;
@@ -908,16 +998,23 @@
     for(const entry of resources){
       if(out.length>=25)break;
       const status=Number(entry.responseStatus);
-      if(!Number.isFinite(status)||status<400)continue;
+      const opaque=!Number.isFinite(status)||status===0;
+      if(!opaque&&status<400)continue;
       const url=sanitizeHttpUrl(entry.name);if(!url)continue;
       let parsed=null;try{parsed=new URL(entry.name)}catch{}
       const party=classifyResourceParty(entry.name);
       const kind=classifyResourceRole(entry.name,entry.initiatorType)||String(entry.initiatorType||'other').slice(0,40);
+      const ownership=party.ownership||party.originClass;
+      let disposition='worthChecking';
+      let failureClass='probable-failure';
+      if(opaque){disposition='inconclusive';failureClass='inconclusive'}
+      else if(party.noise){disposition='diagnosticOnly';failureClass='diagnostic'}
+      else if(parsed&&(parsed.origin===location.origin||ownership==='probable-first-party')){disposition='confirmed';failureClass='confirmed-failure'}
       out.push({
-        kind:'resource_failure',initiator:kind,status,source:url,
+        kind:'resource_failure',initiator:kind,status:opaque?0:status,source:url,
         sameOrigin:parsed?parsed.origin===location.origin:false,
-        originClass:party.originClass,party:party.party,noise:Boolean(party.noise),
-        disposition:party.noise?'diagnosticOnly':(parsed&&parsed.origin===location.origin?'confirmed':'worthChecking')
+        originClass:ownership,party:party.party,noise:Boolean(party.noise),
+        disposition,failureClass,opaque:opaque||undefined
       });
     }
     return out;
@@ -1269,92 +1366,630 @@
     }
     return out;
   }
+  const UNSAFE_INTERACTION_RE=/\b(buy|purchase|checkout|pay|payment|delete|remove|logout|log[\s-]?out|sign[\s-]?out|sign[\s-]?in|signin|log[\s-]?in|login|auth|authenticate|unsubscribe|submit|send|contact|apply|book|reserve|download|install|share|tweet|post|add[\s-]?to[\s-]?cart|place[\s-]?order|donate|subscribe|register|create[\s-]?account|upload|confirm|accept|password|billing|credit[\s-]?card)\b/i;
+  function interactionNow(){
+    if(typeof globalThis.__WEBQA_NOW__==='function')try{return Number(globalThis.__WEBQA_NOW__())||0}catch{}
+    try{return performance.now()}catch{return Date.now()}
+  }
+  async function interactionSleep(ms){
+    if(typeof globalThis.__WEBQA_INTERACTION_TICK__==='function'){
+      try{await globalThis.__WEBQA_INTERACTION_TICK__(ms);return}catch{}
+    }
+    await new Promise(r=>setTimeout(r,ms));
+  }
+  function settleDurationBucket(ms){
+    const n=Math.max(0,Number(ms)||0);
+    if(n<=0)return'immediate';
+    if(n<=16)return'0-16ms';
+    if(n<=50)return'17-50ms';
+    if(n<=120)return'51-120ms';
+    return'>120ms';
+  }
+  function hasHighRiskInteractionSemantics(el){
+    const label=`${attr(el,'aria-label')} ${clip(el.textContent,80)} ${String(el.className||'')} ${attr(el,'id')} ${attr(el,'name')} ${attr(el,'data-action')}`.toLowerCase();
+    return UNSAFE_INTERACTION_RE.test(label);
+  }
   function isUnsafeInteractionTarget(el){
     if(!el||el.nodeType!==1)return true;
     if(el.closest?.('form'))return true;
     if(el.matches?.('a[href]:not([href^="#"]),a[download],input,select,textarea,button[type="submit"]'))return true;
-    const label=`${attr(el,'aria-label')} ${clip(el.textContent,80)} ${String(el.className||'')} ${attr(el,'id')}`.toLowerCase();
-    if(/\b(buy|purchase|checkout|pay|delete|remove|logout|log out|sign out|sign in|signin|log in|login|unsubscribe|submit|send message|contact us|download|install|share|tweet|post|add to cart|place order|donate|subscribe|register|create account)\b/i.test(label))return true;
     if(attr(el,'type').toLowerCase()==='submit')return true;
+    if(hasHighRiskInteractionSemantics(el))return true;
     return false;
   }
-  function panelVisibility(doc,panelId){
-    if(!doc||!panelId)return{found:false,visible:false};
-    let el=null;
-    try{el=doc.getElementById(panelId)||doc.querySelector(`[name="${CSS.escape(panelId)}"]`)}catch{return{found:false,visible:false}}
-    if(!el)return{found:false,visible:false};
+  function isKnownSafeDisclosureControl(el,doc){
+    if(!el||el.nodeType!==1)return false;
+    const tag=el.localName;
+    const role=attr(el,'role');
+    if(tag!=='button'&&role!=='button')return false;
+    if(attr(el,'type').toLowerCase()==='submit')return false;
+    if(el.closest?.('form'))return false;
+    if(isUnsafeInteractionTarget(el))return false;
+    const expanded=attr(el,'aria-expanded');
+    if(expanded!=='true'&&expanded!=='false')return false;
+    const panelId=attr(el,'aria-controls').split(/\s+/).filter(Boolean)[0];
+    if(!panelId)return false;
+    const root=doc||document;
     try{
-      const style=doc.defaultView?.getComputedStyle?.(el)||getComputedStyle(el);
+      if(!(root.getElementById(panelId)||root.querySelector(`[name="${CSS.escape(panelId)}"]`)))return false;
+    }catch{return false}
+    return true;
+  }
+  function isKnownSafeTabControl(el,doc){
+    if(!el||el.nodeType!==1)return false;
+    if(attr(el,'role')!=='tab')return false;
+    if(el.closest?.('form')||isUnsafeInteractionTarget(el))return false;
+    if(hasHighRiskInteractionSemantics(el))return false;
+    const panelId=attr(el,'aria-controls').split(/\s+/).filter(Boolean)[0];
+    if(!panelId)return false;
+    const root=doc||document;
+    let panel=null;
+    try{panel=root.getElementById(panelId)}catch{return false}
+    if(!panel)return false;
+    const panelRole=attr(panel,'role');
+    if(panelRole&&panelRole!=='tabpanel')return false;
+    return true;
+  }
+  function isKnownSafeSkipLink(el,doc){
+    if(!isSkipLinkAnchor(el))return false;
+    if(isUnsafeInteractionTarget(el))return false;
+    const raw=attr(el,'href');
+    if(!raw||!raw.startsWith('#')||raw==='#')return false;
+    let id='';try{id=decodeURIComponent(raw.slice(1))}catch{id=raw.slice(1)}
+    if(!id)return false;
+    const root=doc||document;
+    try{return !!(root.getElementById(id)||root.querySelector(`[name="${CSS.escape(id)}"]`))}catch{return false}
+  }
+  function panelVisibility(doc,panelId){
+    if(!doc||!panelId)return{found:false,visible:false,hiddenAttr:false,display:'',visibility:''};
+    let el=null;
+    try{el=doc.getElementById(panelId)||doc.querySelector(`[name="${CSS.escape(panelId)}"]`)}catch{return{found:false,visible:false,hiddenAttr:false,display:'',visibility:''}}
+    if(!el)return{found:false,visible:false,hiddenAttr:false,display:'',visibility:''};
+    try{
+      const view=doc.defaultView||window;
+      const style=view?.getComputedStyle?.(el)||getComputedStyle(el);
       const rect=el.getBoundingClientRect?.()||{width:0,height:0};
-      const hidden=style.display==='none'||style.visibility==='hidden'||(style.opacity!==''&&Number(style.opacity)===0)||attr(el,'hidden')!==''||attr(el,'aria-hidden')==='true';
-      return{found:true,visible:!hidden&&(rect.width>0||rect.height>0||attr(el,'aria-hidden')!=='true')};
-    }catch{return{found:true,visible:true}}
+      const hiddenAttr=attr(el,'hidden')!=='';
+      const hidden=style.display==='none'||style.visibility==='hidden'||(style.opacity!==''&&Number(style.opacity)===0)||hiddenAttr||attr(el,'aria-hidden')==='true';
+      return{
+        found:true,
+        visible:!hidden&&(rect.width>0||rect.height>0||attr(el,'aria-hidden')!=='true'),
+        hiddenAttr,
+        display:String(style.display||''),
+        visibility:String(style.visibility||'')
+      };
+    }catch{return{found:true,visible:true,hiddenAttr:false,display:'',visibility:''}}
+  }
+  function captureFocus(doc){
+    try{
+      const ae=doc?.activeElement;
+      if(!ae||ae===doc.body||ae===doc.documentElement)return{selector:'',tag:''};
+      return{selector:selectorFor(ae),tag:ae.localName||''};
+    }catch{return{selector:'',tag:''}}
+  }
+  async function settleUntil(predicate,{maxMs=INTERACTION_SETTLE_MAX_MS,stepMs=INTERACTION_SETTLE_STEP_MS}={}){
+    const start=interactionNow();
+    if(predicate())return{settled:true,durationMs:0,immediate:true};
+    await Promise.resolve();
+    await Promise.resolve();
+    if(predicate())return{settled:true,durationMs:Math.max(0,interactionNow()-start),immediate:false};
+    // Prefer injectable tick over rAF so deterministic tests cannot deadlock on fake clocks.
+    if(typeof globalThis.__WEBQA_INTERACTION_TICK__==='function'){
+      await interactionSleep(Math.min(stepMs,16));
+    }else if(typeof requestAnimationFrame==='function'){
+      await new Promise(r=>{try{requestAnimationFrame(()=>r())}catch{r()}});
+    }else{
+      await interactionSleep(Math.min(stepMs,16));
+    }
+    if(predicate())return{settled:true,durationMs:Math.max(0,interactionNow()-start),immediate:false};
+    while(interactionNow()-start<maxMs){
+      await interactionSleep(stepMs);
+      if(predicate())return{settled:true,durationMs:Math.max(0,interactionNow()-start),immediate:false};
+    }
+    return{settled:false,durationMs:Math.max(0,interactionNow()-start),immediate:false};
+  }
+  function restorePanelState(doc,panelId,before){
+    let panel=null;
+    try{panel=doc.getElementById(panelId)||doc.querySelector(`[name="${CSS.escape(panelId)}"]`)}catch{return false}
+    if(!panel||!before)return false;
+    try{
+      if(before.visible===false){
+        panel.setAttribute('hidden','');
+        if(attr(panel,'aria-hidden')==='false')panel.setAttribute('aria-hidden','true');
+      }else{
+        panel.removeAttribute('hidden');
+        if(attr(panel,'aria-hidden')==='true')panel.removeAttribute('aria-hidden');
+      }
+      return true;
+    }catch{return false}
+  }
+  function activateElement(el){
+    try{
+      if(typeof el.click==='function')el.click();
+      else el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:el.ownerDocument?.defaultView||window}));
+      return true;
+    }catch{
+      return false;
+    }
+  }
+  async function verifyDisclosureInDocument(btn,{doc,frameSelector='',embeddedContext='',budgetRef}={}){
+    const panelId=attr(btn,'aria-controls').split(/\s+/).filter(Boolean)[0];
+    const initialExpanded=attr(btn,'aria-expanded');
+    const before=panelVisibility(doc,panelId);
+    const focusBefore=captureFocus(doc);
+    const expectedExpanded=initialExpanded==='false'?'true':'false';
+    const observation={
+      interactionType:'disclosure-toggle',
+      context:embeddedContext||'top-document',
+      frameSelector:frameSelector||undefined,
+      initialState:{ariaExpanded:initialExpanded,panelVisible:before.visible,focus:focusBefore.selector||undefined},
+      expectedState:{ariaExpanded:expectedExpanded},
+      observedState:{},
+      outcome:'inconclusive',
+      settled:false,
+      settleDurationBucket:'immediate',
+      restored:false,
+      failureReason:'',
+      confidence:'inferred'
+    };
+    if(initialExpanded!=='false'&&initialExpanded!=='true'){
+      observation.outcome='not-applicable';
+      observation.failureReason='invalid-aria-expanded';
+      return{finding:null,observation,stopFurther:false};
+    }
+    if(budgetRef&&budgetRef.remainingMs<=0){
+      observation.outcome='inconclusive';
+      observation.failureReason='interaction-time-budget';
+      return{finding:null,observation,stopFurther:false};
+    }
+    const clickOk=activateElement(btn);
+    const expectChange=()=>{
+      const expanded=attr(btn,'aria-expanded');
+      const after=panelVisibility(doc,panelId);
+      return expanded===expectedExpanded
+        ||(initialExpanded==='false'&&after.visible&&!before.visible)
+        ||(initialExpanded==='true'&&!after.visible&&before.visible);
+    };
+    let settle;
+    try{
+      settle=await settleUntil(expectChange);
+    }catch{
+      observation.outcome='inconclusive';
+      observation.failureReason='handler-threw';
+      observation.observedState={clickDispatched:clickOk};
+      // Best-effort restore after throw.
+      try{
+        if(attr(btn,'aria-expanded')!==initialExpanded)btn.setAttribute('aria-expanded',initialExpanded);
+        restorePanelState(doc,panelId,before);
+      }catch{}
+      observation.restored=attr(btn,'aria-expanded')===initialExpanded&&panelVisibility(doc,panelId).visible===before.visible;
+      return{finding:null,observation,stopFurther:!observation.restored};
+    }
+    const afterExpanded=attr(btn,'aria-expanded');
+    const after=panelVisibility(doc,panelId);
+    const changed=expectChange();
+    observation.settled=settle.settled||changed;
+    observation.settleDurationBucket=settleDurationBucket(settle.durationMs);
+    observation.observedState={ariaExpanded:afterExpanded,panelVisible:after.visible,clickDispatched:clickOk};
+    if(budgetRef)budgetRef.remainingMs-=settle.durationMs;
+
+    // Restore: prefer re-click when we observed a change; always force attributes afterward.
+    let restored=false;
+    try{
+      if(changed&&attr(btn,'aria-expanded')!==initialExpanded)activateElement(btn);
+      await settleUntil(()=>attr(btn,'aria-expanded')===initialExpanded,{maxMs:80,stepMs:16});
+      if(attr(btn,'aria-expanded')!==initialExpanded)btn.setAttribute('aria-expanded',initialExpanded);
+      restorePanelState(doc,panelId,before);
+      const restoredVis=panelVisibility(doc,panelId);
+      restored=attr(btn,'aria-expanded')===initialExpanded&&restoredVis.visible===before.visible;
+    }catch{restored=false}
+    observation.restored=restored;
+    observation.restoredState={ariaExpanded:attr(btn,'aria-expanded'),panelVisible:panelVisibility(doc,panelId).visible,restored};
+
+    if(!clickOk){
+      observation.outcome='inconclusive';
+      observation.failureReason='click-dispatch-failed';
+      observation.confidence='inferred';
+      return{finding:null,observation,stopFurther:!restored};
+    }
+    if(changed){
+      observation.outcome='passed';
+      observation.confidence='confirmed';
+      observation.failureReason='';
+      return{finding:null,observation,stopFurther:!restored};
+    }
+    // Unexpected but plausible: expanded flipped wrong way, or unrelated visibility flip.
+    const unexpected=afterExpanded!==initialExpanded&&afterExpanded!==expectedExpanded;
+    if(unexpected||(!before.found&&after.found)){
+      observation.outcome='inconclusive';
+      observation.failureReason='unexpected-state-change';
+      return{finding:null,observation,stopFurther:!restored};
+    }
+    if(settle.settled===false&&afterExpanded===initialExpanded&&after.visible===before.visible){
+      observation.outcome='failed';
+      observation.failureReason='no-state-change-after-settle';
+      observation.confidence='inferred';
+      const extra={
+        worthChecking:true,
+        interactionObservation:observation,
+        embeddedContext:embeddedContext||undefined,
+        frameSelector:frameSelector||undefined,
+        spotlightSafe:embeddedContext?false:undefined
+      };
+      return{
+        finding:finding({
+          ruleId:'ux.disclosure-toggle-failed',
+          title:'Disclosure control did not change state when activated',
+          detail:embeddedContext
+            ?`Inside an embedded same-origin document, a safe local disclosure control was activated. Expected aria-expanded to become "${expectedExpanded}" (or the controlled panel visibility to change) within the bounded verification window, but no qualifying state change was observed. This does not identify the exact JavaScript root cause.`
+            :`A safe local disclosure control was activated in a non-destructive check. Expected aria-expanded to become "${expectedExpanded}" (or the controlled panel visibility to change) within the bounded verification window, but no qualifying state change was observed. This does not identify the exact JavaScript root cause.`,
+          category:'review',severity:'medium',confidence:'inferred',element:embeddedContext?null:btn,
+          evidence:`interaction=disclosure-toggle; initial=${initialExpanded}; observed=${afterExpanded}; settled=${observation.settleDurationBucket}; restored=${restored}${embeddedContext?'; context=iframe':''}`,
+          extra
+        }),
+        observation,
+        stopFurther:!restored
+      };
+    }
+    observation.outcome='inconclusive';
+    observation.failureReason='settle-inconclusive';
+    return{finding:null,observation,stopFurther:!restored};
+  }
+  async function verifyTabInDocument(tab,{doc,frameSelector='',embeddedContext='',budgetRef}={}){
+    const panelId=attr(tab,'aria-controls').split(/\s+/).filter(Boolean)[0];
+    const initialSelected=attr(tab,'aria-selected');
+    if(initialSelected==='true'){
+      return{finding:null,observation:{interactionType:'tab',outcome:'not-applicable',failureReason:'already-selected',context:embeddedContext||'top-document',restored:true},stopFurther:false};
+    }
+    const beforePanel=panelVisibility(doc,panelId);
+    const tablist=tab.closest?.('[role="tablist"]')||doc;
+    const priorSelected=[...tablist.querySelectorAll('[role="tab"]')].find(t=>t!==tab&&attr(t,'aria-selected')==='true')||null;
+    const observation={
+      interactionType:'tab',
+      context:embeddedContext||'top-document',
+      frameSelector:frameSelector||undefined,
+      initialState:{ariaSelected:initialSelected||'false',panelVisible:beforePanel.visible},
+      expectedState:{ariaSelected:'true'},
+      observedState:{},
+      outcome:'inconclusive',
+      settled:false,
+      settleDurationBucket:'immediate',
+      restored:true,
+      failureReason:'',
+      confidence:'inferred'
+    };
+    if(budgetRef&&budgetRef.remainingMs<=0){
+      observation.failureReason='interaction-time-budget';
+      return{finding:null,observation,stopFurther:false};
+    }
+    // Without a known prior selected tab, skip — we cannot restore selection safely.
+    if(!priorSelected){
+      observation.outcome='skipped-unsafe';
+      observation.failureReason='no-restorable-prior-tab';
+      return{finding:null,observation,stopFurther:false};
+    }
+    const clickOk=activateElement(tab);
+    const expect=()=>attr(tab,'aria-selected')==='true'||(panelVisibility(doc,panelId).visible&&!beforePanel.visible);
+    let settle;
+    try{settle=await settleUntil(expect)}catch{
+      observation.outcome='inconclusive';
+      observation.failureReason='handler-threw';
+      try{activateElement(priorSelected)}catch{}
+      return{finding:null,observation,stopFurther:false};
+    }
+    const afterSelected=attr(tab,'aria-selected');
+    const afterPanel=panelVisibility(doc,panelId);
+    const changed=expect();
+    observation.settled=settle.settled||changed;
+    observation.settleDurationBucket=settleDurationBucket(settle.durationMs);
+    observation.observedState={ariaSelected:afterSelected,panelVisible:afterPanel.visible,clickDispatched:clickOk};
+    if(budgetRef)budgetRef.remainingMs-=settle.durationMs;
+    try{
+      activateElement(priorSelected);
+      await settleUntil(()=>attr(priorSelected,'aria-selected')==='true',{maxMs:80});
+      observation.restored=attr(priorSelected,'aria-selected')==='true';
+    }catch{observation.restored=false}
+    if(changed&&afterSelected==='true'){
+      observation.outcome=observation.restored?'passed':'inconclusive';
+      observation.confidence='confirmed';
+      if(!observation.restored)observation.failureReason='tab-restore-unproven';
+      return{finding:null,observation,stopFurther:!observation.restored};
+    }
+    observation.outcome=clickOk?'failed':'inconclusive';
+    observation.failureReason=clickOk?'no-state-change-after-settle':'click-dispatch-failed';
+    // Coverage only for tab failures in this batch — avoid RO spam while restore contract matures.
+    return{finding:null,observation,stopFurther:!observation.restored};
+  }
+  async function verifySkipLinkInDocument(a,{doc,frameSelector='',embeddedContext='',budgetRef}={}){
+    const raw=attr(a,'href');
+    let id='';try{id=decodeURIComponent(raw.slice(1))}catch{id=raw.slice(1)}
+    const focusBefore=captureFocus(doc);
+    const observation={
+      interactionType:'skip-link',
+      context:embeddedContext||'top-document',
+      frameSelector:frameSelector||undefined,
+      initialState:{focus:focusBefore.selector||undefined,href:`#${id}`},
+      expectedState:{focusOnTarget:true},
+      observedState:{},
+      outcome:'inconclusive',
+      settled:false,
+      settleDurationBucket:'immediate',
+      restored:false,
+      failureReason:'',
+      confidence:'inferred'
+    };
+    if(budgetRef&&budgetRef.remainingMs<=0){
+      observation.failureReason='interaction-time-budget';
+      return{finding:null,observation,stopFurther:false};
+    }
+    let target=null;
+    try{target=doc.getElementById(id)||doc.querySelector(`[name="${CSS.escape(id)}"]`)}catch{}
+    if(!target){
+      observation.outcome='not-applicable';
+      observation.failureReason='target-missing';
+      observation.restored=true;
+      return{finding:null,observation,stopFurther:false};
+    }
+    const clickOk=activateElement(a);
+    const expect=()=>{
+      const ae=doc.activeElement;
+      return ae===target||(target.contains?.(ae));
+    };
+    let settle;
+    try{settle=await settleUntil(expect,{maxMs:80})}catch{
+      observation.failureReason='handler-threw';
+      observation.restored=true;
+      return{finding:null,observation,stopFurther:false};
+    }
+    const moved=expect();
+    observation.settled=settle.settled||moved;
+    observation.settleDurationBucket=settleDurationBucket(settle.durationMs);
+    observation.observedState={clickDispatched:clickOk,focusMoved:moved};
+    if(budgetRef)budgetRef.remainingMs-=settle.durationMs;
+    try{
+      const focusAfter=captureFocus(doc);
+      if(focusBefore.selector){
+        const prev=doc.querySelector(focusBefore.selector);
+        if(prev&&typeof prev.focus==='function')prev.focus();
+        else if(typeof doc.body?.focus==='function')doc.body.focus();
+      }else if(typeof doc.body?.focus==='function')doc.body.focus();
+      const focusRestored=captureFocus(doc);
+      observation.restored=focusBefore.selector
+        ?(focusRestored.selector===focusBefore.selector||(!focusRestored.selector&&!doc.activeElement))
+        :true;
+      if(!observation.restored)observation.failureReason=observation.failureReason||'focus-restore-unproven';
+    }catch{observation.restored=false;observation.failureReason=observation.failureReason||'focus-restore-failed'}
+    if(moved){
+      observation.outcome='passed';
+      observation.confidence='confirmed';
+    }else{
+      observation.outcome='inconclusive';
+      observation.failureReason='focus-not-observed';
+    }
+    return{finding:null,observation,stopFurther:!observation.restored};
+  }
+  function emptyInteractionCoverage(){
+    return{
+      candidates:0,eligible:0,safelyTested:0,tested:0,skippedUnsafe:0,skippedIneligible:0,
+      passed:0,failed:0,inconclusive:0,restorationFailures:0,
+      partialReason:'',topDocumentOnly:true,iframeDisclosures:'none',
+      contexts:{top:0,iframe:0}
+    };
+  }
+  async function safeInteractionFindingsAsync(){
+    const out=[];
+    const coverage=emptyInteractionCoverage();
+    lastInteractionCoverage=coverage;
+    const budgetRef={remainingMs:INTERACTION_TOTAL_BUDGET_MS};
+    let stopAll=false;
+
+    function noteObservation(obs){
+      if(!obs)return;
+      if(obs.outcome==='passed')coverage.passed++;
+      else if(obs.outcome==='failed')coverage.failed++;
+      else if(obs.outcome==='inconclusive')coverage.inconclusive++;
+      else if(obs.outcome==='skipped-unsafe')coverage.skippedUnsafe++;
+      if(obs.restored===false&&(obs.outcome==='passed'||obs.outcome==='failed'||obs.outcome==='inconclusive')){
+        coverage.restorationFailures++;
+      }
+    }
+
+    async function runDisclosureList(list,ctx){
+      let used=0;
+      for(const btn of list){
+        if(stopAll)break;
+        coverage.candidates++;
+        if(!isKnownSafeDisclosureControl(btn,ctx.doc)){
+          if(isUnsafeInteractionTarget(btn)||hasHighRiskInteractionSemantics(btn))coverage.skippedUnsafe++;
+          else coverage.skippedIneligible++;
+          continue;
+        }
+        coverage.eligible++;
+        if(stopAll||budgetRef.remainingMs<=0||coverage.safelyTested>=SAFE_INTERACTION_BUDGET||(ctx.frameLimit!=null&&used>=ctx.frameLimit)){
+          coverage.partialReason=coverage.partialReason||(coverage.safelyTested>=SAFE_INTERACTION_BUDGET?'interaction-budget-exceeded':'interaction-time-budget');
+          continue;
+        }
+        coverage.safelyTested++;
+        coverage.tested++;
+        used++;
+        if(ctx.embeddedContext)coverage.contexts.iframe++;
+        else coverage.contexts.top++;
+        const result=await verifyDisclosureInDocument(btn,{
+          doc:ctx.doc,
+          frameSelector:ctx.frameSelector||'',
+          embeddedContext:ctx.embeddedContext||'',
+          budgetRef
+        });
+        noteObservation(result.observation);
+        if(result.finding)out.push(result.finding);
+        if(result.stopFurther){
+          coverage.partialReason=coverage.partialReason||'restoration-unproven';
+          stopAll=true;
+          out.push(finding({
+            ruleId:'ux.interaction-restoration-unproven',
+            title:'Interaction testing stopped after restoration could not be verified',
+            detail:'WebQA stopped further interaction testing after it could not verify restoration of the original page state. The page should not remain visibly modified, but subsequent controls were not activated.',
+            category:'review',severity:'low',confidence:'inferred',targetType:'document',
+            evidence:`restoration-unproven; context=${ctx.embeddedContext||'top-document'}`,
+            extra:{worthChecking:true,interactionObservation:result.observation,embeddedContext:ctx.embeddedContext||undefined,frameSelector:ctx.frameSelector||undefined,spotlightSafe:ctx.embeddedContext?false:undefined}
+          }));
+          break;
+        }
+      }
+    }
+
+    // Top document disclosures
+    const topDisclosures=[...document.querySelectorAll('button[aria-expanded][aria-controls], [role="button"][aria-expanded][aria-controls]')];
+    await runDisclosureList(topDisclosures,{doc:document,embeddedContext:'',frameSelector:''});
+
+    // Top document tabs (coverage-oriented; limited)
+    if(!stopAll&&coverage.safelyTested<SAFE_INTERACTION_BUDGET){
+      const tabs=[...document.querySelectorAll('[role="tab"][aria-controls]')].slice(0,3);
+      for(const tab of tabs){
+        if(stopAll||coverage.safelyTested>=SAFE_INTERACTION_BUDGET)break;
+        coverage.candidates++;
+        if(!isKnownSafeTabControl(tab,document)){
+          if(isUnsafeInteractionTarget(tab)||hasHighRiskInteractionSemantics(tab))coverage.skippedUnsafe++;
+          else coverage.skippedIneligible++;
+          continue;
+        }
+        coverage.eligible++;
+        coverage.safelyTested++;
+        coverage.tested++;
+        coverage.contexts.top++;
+        const result=await verifyTabInDocument(tab,{doc:document,budgetRef});
+        noteObservation(result.observation);
+        if(result.stopFurther){
+          coverage.partialReason=coverage.partialReason||'restoration-unproven';
+          stopAll=true;
+          break;
+        }
+      }
+    }
+
+    // Skip links (top document only, max 1)
+    if(!stopAll&&coverage.safelyTested<SAFE_INTERACTION_BUDGET){
+      const skips=[...document.querySelectorAll('a[href^="#"]')].filter(isSkipLinkAnchor).slice(0,1);
+      for(const a of skips){
+        coverage.candidates++;
+        if(!isKnownSafeSkipLink(a,document)){
+          coverage.skippedIneligible++;
+          continue;
+        }
+        coverage.eligible++;
+        coverage.safelyTested++;
+        coverage.tested++;
+        const result=await verifySkipLinkInDocument(a,{doc:document,budgetRef});
+        noteObservation(result.observation);
+        if(result.stopFurther){
+          coverage.partialReason=coverage.partialReason||'restoration-unproven';
+          stopAll=true;
+        }
+      }
+    }
+
+    // Same-origin iframe disclosures
+    let framesUsed=0;
+    let iframeActivated=false;
+    for(const frame of document.querySelectorAll('iframe')){
+      if(stopAll||coverage.safelyTested>=SAFE_INTERACTION_BUDGET)break;
+      if(framesUsed>=SAME_ORIGIN_IFRAME_BUDGET){
+        coverage.partialReason=coverage.partialReason||'frame-budget-exceeded';
+        break;
+      }
+      let doc=null;
+      try{doc=frame.contentDocument}catch{doc=null}
+      if(!doc)continue;
+      // Frame still attached?
+      if(!frame.isConnected)break;
+      framesUsed++;
+      coverage.topDocumentOnly=false;
+      const frameSel=selectorFor(frame);
+      const disclosures=[...doc.querySelectorAll('button[aria-expanded][aria-controls], [role="button"][aria-expanded][aria-controls]')];
+      const testedBefore=coverage.safelyTested;
+      await runDisclosureList(disclosures,{
+        doc,
+        embeddedContext:'same-origin-iframe',
+        frameSelector:frameSel,
+        frameLimit:SAFE_INTERACTION_PER_FRAME
+      });
+      if(coverage.safelyTested>testedBefore)iframeActivated=true;
+      try{
+        if(frame.contentDocument!==doc){
+          coverage.partialReason=coverage.partialReason||'frame-replaced';
+          stopAll=true;
+          break;
+        }
+      }catch{
+        coverage.partialReason=coverage.partialReason||'frame-unloaded';
+        stopAll=true;
+        break;
+      }
+    }
+    coverage.iframeDisclosures=iframeActivated?'tested':(framesUsed?'present-not-tested':'none');
+
+    if(!coverage.partialReason){
+      if(!coverage.safelyTested)coverage.partialReason=coverage.candidates?'no-safe-reversible-candidates':'no-disclosure-candidates';
+      else if(coverage.restorationFailures)coverage.partialReason='restoration-unproven';
+      else if(!coverage.topDocumentOnly)coverage.partialReason='top-and-iframe-disclosures';
+      else coverage.partialReason='top-document-interactions';
+    }
+    return out;
   }
   function safeInteractionFindings(){
+    // Sync fallback when prepareSafeInteractions was not awaited: immediate-only path for legacy callers.
+    if(interactionsPrepared&&Array.isArray(lastPreparedInteractionFindings)){
+      return lastPreparedInteractionFindings;
+    }
     const out=[];
-    const coverage={
-      candidates:0,safelyTested:0,skippedUnsafe:0,skippedIneligible:0,passed:0,failed:0,
-      partialReason:'',topDocumentOnly:true,iframeDisclosures:'static-only'
-    };
+    const coverage=emptyInteractionCoverage();
     lastInteractionCoverage=coverage;
     const candidates=[];
     const allDisclosure=[...document.querySelectorAll('button[aria-expanded][aria-controls], [role="button"][aria-expanded][aria-controls]')];
     for(const btn of allDisclosure){
       coverage.candidates++;
-      const panelId=attr(btn,'aria-controls').split(/\s+/).filter(Boolean)[0];
-      if(!panelId){coverage.skippedIneligible++;continue}
-      if(isUnsafeInteractionTarget(btn)){coverage.skippedUnsafe++;continue}
-      if(!resolveFragmentTarget(panelId)){coverage.skippedIneligible++;continue}
+      if(!isKnownSafeDisclosureControl(btn,document)){
+        if(isUnsafeInteractionTarget(btn)||hasHighRiskInteractionSemantics(btn))coverage.skippedUnsafe++;
+        else coverage.skippedIneligible++;
+        continue;
+      }
       candidates.push(btn);
+      coverage.eligible++;
       if(candidates.length>=SAFE_INTERACTION_BUDGET)break;
     }
     if(allDisclosure.length>SAFE_INTERACTION_BUDGET)coverage.partialReason='interaction-budget-exceeded';
-    if(!candidates.length){
-      coverage.partialReason=coverage.partialReason||(coverage.candidates?'no-safe-reversible-candidates':'no-disclosure-candidates');
-      return out;
-    }
     for(const btn of candidates){
       const panelId=attr(btn,'aria-controls').split(/\s+/).filter(Boolean)[0];
       const initialExpanded=attr(btn,'aria-expanded');
-      if(initialExpanded!=='false'&&initialExpanded!=='true'){coverage.skippedIneligible++;continue}
       const before=panelVisibility(document,panelId);
       const expectedExpanded=initialExpanded==='false'?'true':'false';
       coverage.safelyTested++;
+      coverage.tested++;
       let clickOk=false;
-      try{
-        if(typeof btn.click==='function')btn.click();
-        else btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));
-        clickOk=true;
-      }catch{clickOk=false}
+      try{clickOk=activateElement(btn)}catch{clickOk=false}
       const afterExpanded=attr(btn,'aria-expanded');
       const after=panelVisibility(document,panelId);
       const changed=afterExpanded===expectedExpanded||(initialExpanded==='false'&&after.visible&&!before.visible)||(initialExpanded==='true'&&!after.visible&&before.visible);
       let restored=false;
       try{
-        if(changed&&attr(btn,'aria-expanded')!==initialExpanded){
-          if(typeof btn.click==='function')btn.click();
-        }
+        if(changed&&attr(btn,'aria-expanded')!==initialExpanded)activateElement(btn);
         if(attr(btn,'aria-expanded')!==initialExpanded)btn.setAttribute('aria-expanded',initialExpanded);
-        // Restore panel visibility/hidden to the pre-click observation when possible.
-        const panel=document.getElementById(panelId)||document.querySelector(`[name="${CSS.escape(panelId)}"]`);
-        if(panel){
-          if(before.visible===false){
-            panel.setAttribute('hidden','');
-            if(attr(panel,'aria-hidden')==='false')panel.setAttribute('aria-hidden','true');
-          }else{
-            panel.removeAttribute('hidden');
-            if(attr(panel,'aria-hidden')==='true')panel.removeAttribute('aria-hidden');
-          }
-        }
+        restorePanelState(document,panelId,before);
         const restoredVis=panelVisibility(document,panelId);
         restored=attr(btn,'aria-expanded')===initialExpanded&&restoredVis.visible===before.visible;
       }catch{restored=false}
+      if(!restored)coverage.restorationFailures++;
       const observation={
         interactionType:'disclosure-toggle',
+        context:'top-document',
         initialState:{ariaExpanded:initialExpanded,panelVisible:before.visible},
         expectedState:{ariaExpanded:expectedExpanded},
         observedState:{ariaExpanded:afterExpanded,panelVisible:after.visible,clickDispatched:clickOk},
         restoredState:{ariaExpanded:attr(btn,'aria-expanded'),panelVisible:panelVisibility(document,panelId).visible,restored},
+        outcome:changed?'passed':(clickOk?'failed':'inconclusive'),
+        settled:changed,
+        settleDurationBucket:'immediate',
+        restored,
         confidence:changed?'confirmed':'inferred',
         failureReason:changed?'':(!clickOk?'click-dispatch-failed':'no-state-change')
       };
@@ -1370,11 +2005,24 @@
       }));
     }
     if(!coverage.partialReason){
-      if(coverage.safelyTested&&coverage.failed===0)coverage.partialReason='top-document-disclosures-only';
-      else if(!coverage.safelyTested)coverage.partialReason=coverage.partialReason||'none-tested';
-      else coverage.partialReason='top-document-disclosures-only';
+      if(coverage.safelyTested)coverage.partialReason='top-document-disclosures-only';
+      else coverage.partialReason=coverage.candidates?'no-safe-reversible-candidates':'no-disclosure-candidates';
     }
+    coverage.iframeDisclosures='static-only-sync-fallback';
     return out;
+  }
+  async function prepareSafeInteractions(){
+    interactionsPrepared=false;
+    lastPreparedInteractionFindings=null;
+    try{
+      lastPreparedInteractionFindings=await safeInteractionFindingsAsync();
+      interactionsPrepared=true;
+    }catch{
+      lastPreparedInteractionFindings=[];
+      interactionsPrepared=true;
+      if(!lastInteractionCoverage)lastInteractionCoverage=emptyInteractionCoverage();
+      lastInteractionCoverage.partialReason=lastInteractionCoverage.partialReason||'interaction-prepare-failed';
+    }
   }
   function interactionFindings(){
     const out=[],seen=new Set();
@@ -1820,7 +2468,7 @@
     globalThis.__WEBQA_RUNTIME_ERRORS__={count,samples,source:'renderer'};
   }
 
-  globalThis.WebQARules={run,axeFindings,resolvedTargetState,auditLinks,recheckLink,applyExternalProbeResults,merge,recordRuntimeErrors,selectorFor,resolveTarget,performanceSignals,preparePerformanceSignals,semanticContextFor,targetContextFor(targetId,selector='',ruleId=''){
+  globalThis.WebQARules={run,axeFindings,resolvedTargetState,auditLinks,recheckLink,applyExternalProbeResults,merge,recordRuntimeErrors,selectorFor,resolveTarget,performanceSignals,preparePerformanceSignals,prepareSafeInteractions,semanticContextFor,targetContextFor(targetId,selector='',ruleId=''){
     const el=resolveTarget(targetId,selector);if(!el)return null;
     const style=getComputedStyle(el),rect=el.getBoundingClientRect();
     return{found:true,tag:el.tagName.toLowerCase(),selector:selector||selectorFor(el),markup:clip(cleanMarkup(el.outerHTML),1400),text:clip(el.innerText||el.textContent,500),semantics:semanticContextFor(el,ruleId),rect:{x:Math.round(rect.x),y:Math.round(rect.y),width:Math.round(rect.width),height:Math.round(rect.height)},styles:{color:style.color,backgroundColor:style.backgroundColor,fontSize:style.fontSize,fontWeight:style.fontWeight,lineHeight:style.lineHeight,display:style.display,position:style.position}};

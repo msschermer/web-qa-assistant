@@ -40,6 +40,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
   async function scan() {
     try { await window.WebQARules.preparePerformanceSignals?.(); } catch {}
+    try { await window.WebQARules.prepareSafeInteractions?.(); } catch {}
     const local = window.WebQARules.run();
     let axeResults = null;
     try {
