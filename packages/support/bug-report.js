@@ -355,11 +355,16 @@ function projectPageDiagnostics(report, includeContext) {
     },
     interactionCoverage: {
       candidates: Number(interaction.candidates || 0),
-      safelyTested: Number(interaction.safelyTested || 0),
+      eligible: Number(interaction.eligible || interaction.candidates || 0),
+      safelyTested: Number(interaction.safelyTested || interaction.tested || 0),
+      tested: Number(interaction.tested || interaction.safelyTested || 0),
       skippedUnsafe: Number(interaction.skippedUnsafe || 0),
       passed: Number(interaction.passed || 0),
       failed: Number(interaction.failed || 0),
-      partialReason: clip(interaction.partialReason, 80) || undefined
+      inconclusive: Number(interaction.inconclusive || 0),
+      restorationFailures: Number(interaction.restorationFailures || 0),
+      partialReason: clip(interaction.partialReason, 80) || undefined,
+      iframeDisclosures: clip(interaction.iframeDisclosures, 40) || undefined
     },
     psi: {
       enabled: psi.enabled === true,

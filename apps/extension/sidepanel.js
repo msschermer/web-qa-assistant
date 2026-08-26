@@ -177,12 +177,43 @@ function coverage() {
   if (links) box.insertAdjacentHTML('beforeend', `<span>internal URLs checked</span><b>${esc(links.checked || 0)}</b><span>verified healthy</span><b>${esc(links.verifiedHealthy || 0)}</b><span>confirmed link issues</span><b>${esc(links.confirmedIssues || 0)}</b><span>incomplete verification</span><b data-status="${links.inconclusive ? 'partial' : 'complete'}">${esc(links.inconclusive || 0)}</b>`);
   const perf = report.browserPerformance;
   if (perf?.available) box.insertAdjacentHTML('beforeend', `<span>this page, in this browser</span><b>${esc(perf.largestContentfulPaintMs != null ? `LCP ${(perf.largestContentfulPaintMs / 1000).toFixed(1)}s` : `TTFB ${perf.ttfbMs}ms`)}</b>`);
+
+  const ix = report.interactionCoverage;
+  if (ix && (ix.candidates > 0 || ix.safelyTested > 0 || ix.skippedUnsafe > 0)) {
+    const tested = Number(ix.safelyTested || ix.tested || 0);
+    const skipped = Number(ix.skippedUnsafe || 0);
+    const inconclusive = Number(ix.inconclusive || 0);
+    const line = inconclusive
+      ? `${tested} safely tested · ${skipped} skipped · ${inconclusive} inconclusive`
+      : `${tested} safely tested · ${skipped} skipped`;
+    const ixPartial = Boolean(ix.failed || ix.restorationFailures || ix.inconclusive || /budget|restoration|prepare-failed|time-budget/i.test(String(ix.partialReason || '')));
+    box.insertAdjacentHTML('beforeend', `<span>Interactions</span><b data-status="${ixPartial ? 'partial' : 'complete'}">${esc(line)}</b>`);
+  }
+  const embed = report.page?.embeddedCoverage;
+  if (embed && (embed.sameOriginFramesChecked > 0 || embed.crossOriginFramesNotInspectable > 0 || embed.crossOriginIframes > 0)) {
+    const so = Number(embed.sameOriginFramesChecked || 0);
+    const xo = Number(embed.crossOriginFramesNotInspectable || embed.crossOriginIframes || 0);
+    box.insertAdjacentHTML('beforeend', `<span>Embedded content</span><b data-status="${xo ? 'partial' : 'complete'}">${esc(`${so} same-origin checked · ${xo} cross-origin not inspectable`)}</b>`);
+  }
+
   $('#coverage-summary').textContent = `${complete}/${total} available`;
 
   const notes = $('#coverage-notes'); notes.innerHTML = '';
   if (perf?.available) notes.insertAdjacentHTML('beforeend', `<b>Current-page performance is a lab measurement.</b><span>Measured on this machine and network, so it shows direction rather than a field score. Monitored history is the source for regression claims.</span>`);
   if (String(report.coverage?.runtime) === 'not applicable') notes.insertAdjacentHTML('beforeend', `<b>Uncaught script errors are renderer-only.</b><span>Extension scans do not collect this family, so runtime coverage is not applicable rather than incomplete.</span>`);
   if (String(report.coverage?.runtime) === 'renderer') notes.insertAdjacentHTML('beforeend', `<b>Renderer runtime coverage is count-only.</b><span>Uncaught errors are recorded as a count. Error text is untrusted and is not treated as instructions.</span>`);
+  if (String(report.coverage?.runtime) === 'extension-partial') notes.insertAdjacentHTML('beforeend', `<b>Runtime capture is partial.</b><span>Extension diagnostics began after injection, so earlier script errors may be missing.</span>`);
+  if (ix && ix.safelyTested > 0) {
+    const eligible = Number(ix.eligible || ix.candidates || 0);
+    const tested = Number(ix.safelyTested || 0);
+    if (eligible > tested) notes.insertAdjacentHTML('beforeend', `<b>WebQA safely tested ${esc(tested)} of ${esc(eligible)} eligible controls.</b><span>Skipped or budget-limited controls are coverage limits, not proof that remaining controls work. Allowlisted clicks can still run page handlers.</span>`);
+    else notes.insertAdjacentHTML('beforeend', `<b>WebQA safely tested ${esc(tested)} eligible control${tested === 1 ? '' : 's'}.</b><span>Forms, navigation, purchases, and high-risk actions are never activated. Allowlisted clicks can still run page handlers.</span>`);
+  }
+  if (embed && Number(embed.crossOriginFramesNotInspectable || embed.crossOriginIframes || 0) > 0) {
+    const xo = Number(embed.crossOriginFramesNotInspectable || embed.crossOriginIframes || 0);
+    notes.insertAdjacentHTML('beforeend', `<b>${esc(xo)} cross-origin embedded document${xo === 1 ? '' : 's'} could not be inspected.</b><span>That is a coverage limit — not evidence that those embeds are free of issues.</span>`);
+  }
+  if (ix?.restorationFailures) notes.insertAdjacentHTML('beforeend', `<b>Interaction testing stopped after restoration could not be verified.</b><span>Later controls were not activated to avoid leaving the page in an altered state.</span>`);
   if (links?.inconclusive) {
     notes.insertAdjacentHTML('beforeend', `<b>${esc(links.inconclusive)} destination${links.inconclusive === 1 ? '' : 's'} could not be independently verified.</b><span>These were not counted as broken links.</span>`);
     const rows = (links.incompleteChecks || []).slice(0, 8);

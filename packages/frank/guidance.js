@@ -279,7 +279,44 @@ function rawGuidanceFor(f,environment={type:'unknown'}){
   if(/ux\.iframe-missing-title|web\.iframe-title-missing/.test(id))return{interpretation:id.includes('iframe-title-missing')?'Inside an embedded same-origin document, the document title is empty.':'A visible iframe has no title attribute.',impact:'Screen-reader users may not know what the embedded frame contains.',recommendation:id.includes('iframe-title-missing')?'Set a concise document title inside the framed experience.':'Add a concise title describing the embedded content.',remediation:id.includes('iframe-title-missing')?'Update the iframe document <title>, not only the parent page.':'Set title on the iframe to match the embedded experience (for example “Payment form” or “Map”).',verify:'Rescan and confirm the iframe or framed document exposes a meaningful title.',limitations:'Worth Checking observation — confirm whether the embed is user-facing before prioritizing it as a defect.'};
   if(/ux\.disclosure-toggle-failed/.test(id)){
     const obs=f.interactionObservation||{};
-    return{interpretation:`A safe, local disclosure control was activated in a non-destructive check. Initial aria-expanded was "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${obs.expectedState?.ariaExpanded||'a state change'}", observed "${obs.observedState?.ariaExpanded||'no change'}".`,impact:'Users may be unable to open or close accordion/menu panels even when the markup looks structurally complete.',recommendation:'Reproduce the toggle manually and inspect the click/keyboard handler for that control.',remediation:'Do not assume a specific script file is at fault unless separate runtime evidence points there. Verify the listener updates aria-expanded and panel visibility, then restore the prior collapsed/expanded state after testing.',verify:'Activate the control with pointer and keyboard, confirm aria-expanded and panel visibility change, then confirm the control can return to its prior state.',limitations:'WebQA only tests allowlisted reversible disclosures. Forms, navigation, purchases, downloads, and third-party widgets are never activated. Co-occurring script failures are correlated only as Worth Checking, not as proven causation.'};
+    const inFrame=f.embeddedContext==='same-origin-iframe'||obs.context==='same-origin-iframe';
+    const settle=obs.settleDurationBucket&&obs.settleDurationBucket!=='immediate';
+    return{
+      interpretation:inFrame
+        ?(settle
+          ?`This control is inside a same-origin embedded document. It was safely activated under WebQA’s allowlist, but the expected panel state did not appear during the bounded verification window (observed aria-expanded "${obs.observedState?.ariaExpanded||'unchanged'}" after initial "${obs.initialState?.ariaExpanded||'unknown'}").`
+          :`This control is inside a same-origin embedded document. An allowlisted local disclosure was activated and the expected panel state did not change (initial aria-expanded "${obs.initialState?.ariaExpanded||'unknown'}", observed "${obs.observedState?.ariaExpanded||'no change'}").`)
+        :(settle
+          ?`This control was safely activated under WebQA’s allowlist, but the expected panel state did not appear during the bounded verification window. Initial aria-expanded was "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${obs.expectedState?.ariaExpanded||'a state change'}", observed "${obs.observedState?.ariaExpanded||'no change'}".`
+          :`An allowlisted local disclosure control was activated. Initial aria-expanded was "${obs.initialState?.ariaExpanded||'unknown'}"; expected "${obs.expectedState?.ariaExpanded||'a state change'}", observed "${obs.observedState?.ariaExpanded||'no change'}".`),
+      impact:'Users may be unable to open or close accordion/menu panels even when the markup looks structurally complete. If the control only updates after a longer delay or animation, this may be a verification-window limit rather than a broken control.',
+      recommendation:'Reproduce the toggle manually and inspect the click/keyboard handler for that control.',
+      remediation:'Do not assume a specific script file is at fault unless separate runtime evidence points there. Verify the listener updates aria-expanded and panel visibility, then restore the prior collapsed/expanded state after testing.',
+      verify:'Activate the control with pointer and keyboard, confirm aria-expanded and panel visibility change, then confirm the control can return to its prior state.',
+      limitations:inFrame
+        ?'Allowlisted activation is not a guarantee of zero side effects — page handlers may still run. This control lives inside a same-origin iframe; spotlight may be unavailable. Forms, navigation, purchases, downloads, and third-party widgets are never activated.'
+        :'Allowlisted activation is not a guarantee of zero side effects — page handlers may still run (analytics, fetches, preference writes). Forms, navigation, purchases, downloads, and third-party widgets are never activated. Co-occurring script failures are correlated only as Worth Checking, not as proven causation.'
+    };
+  }
+  if(/ux\.interaction-restoration-unproven/.test(id)){
+    return{
+      interpretation:'WebQA stopped interaction testing after it could not verify restoration of the original page state.',
+      impact:'Further interactive checks were skipped to avoid leaving or compounding an altered page state.',
+      recommendation:'Manually confirm the last tested control returns to its prior expanded/collapsed (or selected) state, then rescan.',
+      remediation:'Inspect the control that was activated last. Ensure toggling is reversible and that aria-expanded / panel visibility can return to the starting state. Do not treat this as proof that application logic is broken.',
+      verify:'Activate the control, confirm the intended state change, restore it manually, and rescan to resume interaction coverage.',
+      limitations:'WebQA refuses to continue activating dependent controls when restoration cannot be proven.'
+    };
+  }
+  if(/runtime\.resource-status-inconclusive/.test(id)){
+    return{
+      interpretation:'A resource showed an opaque or missing response status, so HTTP failure is not confirmed from browser APIs alone.',
+      impact:'Impact is uncertain until the asset is checked in DevTools Network or against a visible broken element.',
+      recommendation:'Confirm whether the resource is required for a visible feature, then check its network status manually.',
+      remediation:'Do not treat opaque status as a confirmed HTTP error. If a visible dependency is broken, restore that asset; if the request is expected to be opaque (cross-origin timing), leave it as diagnostic context.',
+      verify:'In DevTools Network, confirm the final HTTP status and whether the page feature still works.',
+      limitations:'Opaque responses are common for cross-origin assets; this observation alone is not a defect.'
+    };
   }
   if(/navigation\.skip-link-target-missing/.test(id))return{interpretation:'A skip link points to a fragment id that is not present in observable contexts.',impact:'Keyboard users relying on skip navigation may land nowhere.',recommendation:'Add the missing target id on main content or fix the skip link href.',remediation:'Ensure the skip target id exists once in the document or an accessible same-origin iframe.',verify:'Activate the skip link with keyboard and confirm focus moves to the intended region.'};
   if(/schema\.jsonld-missing-type/.test(id))return{interpretation:'A JSON-LD object lacks @type, so structured-data consumers cannot classify the entity.',impact:'Rich-result eligibility may be reduced for that block.',recommendation:'Add the appropriate schema.org @type for the entity being described.',remediation:'Update the JSON-LD block with a valid @type and required properties for that type.',verify:'Validate the JSON-LD with a structured-data testing tool after publishing.'};
