@@ -269,9 +269,22 @@ test('sidepanel polarity: current-page lab must not claim historical monitor ava
   const artifact = buildBugReport({ report });
   assert.equal(artifact.performance.lab.coverage, 'available');
   assert.equal(artifact.performance.historicalMonitor.coverage, 'unavailable');
-  // Mirror the sidepanel rule: only explicit "complete" means historical available.
-  const histAvailable = /^complete$/i.test(String(report.coverage.performance || '').trim());
-  assert.equal(histAvailable, false);
+  // Lab-owned coverage.performance === current-page is not historical monitor evidence.
+  const histFromCoverageAlone = /^complete$/i.test(String(report.coverage.performance || '').trim());
+  assert.equal(histFromCoverageAlone, false);
+});
+
+test('historical monitor available when monitor evidence exists even with current-page lab coverage', () => {
+  const report = {
+    page: { url: 'https://example.com/' },
+    coverage: { performance: 'current-page' },
+    browserPerformance: { available: true, largestContentfulPaintMs: 1800 },
+    context: { performance: { data: { monitored: true, mobile: 62, desktop: 80 } } },
+    findings: [{ ruleId: 'performance.mobile-below-target', title: 'Mobile below target', category: 'review' }]
+  };
+  const artifact = buildBugReport({ report });
+  assert.equal(artifact.performance.lab.coverage, 'available');
+  assert.equal(artifact.performance.historicalMonitor.coverage, 'available');
 });
 
 test('resource count semantics expose observed events vs deduplicated list', () => {
