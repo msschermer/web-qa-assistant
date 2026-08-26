@@ -6,7 +6,7 @@ import { applyFindingPolicy } from './policy.js';
 import { attachTargetIntegrity, finalizeBlockedTargetReport } from './apply-report.js';
 import { IMPACT_CLASSES } from './impact.js';
 import { gatewayContextEnvelope, gatewayFrankGraph } from './evidence-contract.js';
-import { explainCoverageReasons } from './coverage.js';
+import { explainCoverageReasons, resolvePerformanceCoverage } from './coverage.js';
 
 const LIVE_API = 'https://assistant.msschermer.us';
 const LOCAL_APIS = ['http://localhost:3000', 'http://localhost:8787'];
@@ -403,7 +403,16 @@ async function testGateway(overrides={}){
   return{gateway:root,reachable:true,auth,health,integrations,available,integrationCount:rows.length,problems,summary,requestId:health?.requestId||rid};
 }
 
-function localOnlyCoverage(report){return{...report.coverage,published:'local-only',performance:'local-only',wcag:'local-only',ai:'local-only'}}
+function localOnlyCoverage(report){
+  const base={...report.coverage,published:'local-only',wcag:'local-only',ai:'local-only'};
+  // Preserve current-page lab evidence; connector absence must not erase it.
+  base.performance=resolvePerformanceCoverage(base,report.browserPerformance,{status:'not_applicable'})==='current-page'
+    ?'current-page'
+    :resolvePerformanceCoverage(base,report.browserPerformance,null)==='current-page'
+      ?'current-page'
+      :'local-only';
+  return base;
+}
 async function enrich(report,tabId=null){
   const privatePage=isPrivateHost(report.page?.hostname||'');
   // Connected public pages: content-script audit only; gateway performs privileged external probes.
@@ -414,7 +423,15 @@ async function enrich(report,tabId=null){
     if(result?.report){const merged=mergeGatewayReport(report,result.report),contextual=await contextualize(merged,result.report.context?.services?.performance);return{...contextual,aiGateway:result.gateway,requestId:result.requestId,connectedMode:'gateway'}}
   }catch(error){
     const s=await settings(),status=Number(error?.status||0),connectedMode=status===401?((s.apiKey||s.installToken)?'auth-rejected':'auth-required'):status===403?'auth-rejected':'unavailable';
-    const coverage={...report.coverage,published:'unavailable',performance:'unavailable',wcag:'unavailable',ai:'deterministic'};
+    const labPerf=resolvePerformanceCoverage(report.coverage||{},report.browserPerformance,null);
+    const coverage={
+      ...report.coverage,
+      published:'unavailable',
+      // Keep lab coverage when present; connector failure is a separate honesty signal.
+      performance:labPerf==='current-page'||labPerf==='partial'?labPerf:'unavailable',
+      wcag:'unavailable',
+      ai:'deterministic'
+    };
     const connectedError=connectedMode==='auth-required'?'The assistant gateway requires an access key.':connectedMode==='auth-rejected'?'The saved assistant access key was rejected.':String(error?.message||error);
     const next={...report,coverage,priorityBrief:deterministicBrief(report.findings,{coverage,linkAudit:report.linkAudit,targetIntegrity:report.page?.targetIntegrity}),priorityMode:'deterministic',connectedMode,connectedError,context:{performance:null,services:{}}};
     next.coverageReasons=explainCoverageReasons(next,{enrichmentFailed:true,rendererTimeout:/timed out|timeout/i.test(String(error?.message||''))});

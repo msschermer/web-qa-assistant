@@ -30,7 +30,7 @@ export function signalForFinding(f={}){
   if(/form-action/.test(id))return SIGNALS.FORM_ACTION;
   if(/nested-form|form-no-submit|hidden-required|input-type-mismatch/.test(id))return SIGNALS.FORM_STRUCTURE;
   if(/mixed-content/.test(id))return SIGNALS.MIXED_CONTENT;
-  if(/inert-link|disclosure-toggle|iframe-missing-title|iframe-title-missing|placeholder-only|skip-link-target|controls-target|disclosure-target/.test(id))return SIGNALS.UX_REVIEW;
+  if(/inert-link|disclosure-toggle|menu-toggle|iframe-missing-title|iframe-title-missing|placeholder-only|skip-link-target|controls-target|disclosure-target/.test(id))return SIGNALS.UX_REVIEW;
   if(/uncaught-error|script-failed|unhandled-rejection|font-failed|resource-failed|embed-resource-failed/.test(id))return SIGNALS.RUNTIME;
   if(/horizontal-overflow|viewport-overflow/.test(id))return SIGNALS.OVERFLOW;
   if(/security/.test(id))return SIGNALS.SECURITY;

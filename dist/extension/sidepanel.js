@@ -1,3 +1,4 @@
+globalThis.__WEBQA_BUILD_REVISION__="265e6125e217";
 import { localFrankRuntime, localFrankWalkthrough, probeLocalAi, setLocalAiTraceSink, localAiDiagnostics } from './local-ai.js';
 import { presentFinding, presentArea, QA_AREA_ORDER } from './presentation.js';
 import { RuntimeTrace, buildBugReport, bugReportPrivacySummary } from './bug-report.js';
@@ -179,22 +180,29 @@ function coverage() {
   let complete = 0, total = 0;
   for (const [key, value] of Object.entries(report.coverage || {})) {
     total++;
-    if (/complete|deterministic|local-only|current-page|not monitored|not applicable/i.test(String(value))) complete++;
+    // Accounted statuses that mean we measured something (not "not monitored" / "not applicable").
+    if (/complete|deterministic|local-only|current-page|renderer|extension-partial/i.test(String(value))) complete++;
+    // Human rows below supersede these machine keys for the main coverage story.
+    if (/^(performance|runtime|links|axe|browser)$/i.test(key)) continue;
     box.insertAdjacentHTML('beforeend', `<span>${esc(key)}</span><b data-status="${esc(String(value).toLowerCase().replace(/\s+/g, '-'))}">${esc(value)}</b>`);
   }
   const links = report.linkAudit;
-  if (links) box.insertAdjacentHTML('beforeend', `<span>internal URLs checked</span><b>${esc(links.checked || 0)}</b><span>verified healthy</span><b>${esc(links.verifiedHealthy || 0)}</b><span>confirmed link issues</span><b>${esc(links.confirmedIssues || 0)}</b><span>incomplete verification</span><b data-status="${links.inconclusive ? 'partial' : 'complete'}">${esc(links.inconclusive || 0)}</b>`);
+  if (links) {
+    const linkCov = String(report.coverage?.links || '');
+    const linkLine = `${links.checked || 0} checked · ${links.verifiedHealthy || 0} healthy · ${links.confirmedIssues || 0} broken · ${links.inconclusive || 0} inconclusive`;
+    box.insertAdjacentHTML('beforeend', `<span>Links</span><b data-status="${/partial|unavailable/i.test(linkCov) || links.inconclusive ? 'partial' : 'complete'}">${esc(linkLine)}</b>`);
+  }
   const perf = report.browserPerformance;
   if (perf?.available) box.insertAdjacentHTML('beforeend', `<span>this page, in this browser</span><b>${esc(perf.largestContentfulPaintMs != null ? `LCP ${(perf.largestContentfulPaintMs / 1000).toFixed(1)}s` : `TTFB ${perf.ttfbMs}ms`)}</b>`);
 
   const ix = report.interactionCoverage;
-  if (ix && (ix.candidates > 0 || ix.safelyTested > 0 || ix.skippedUnsafe > 0)) {
+  if (ix && (ix.candidates > 0 || ix.safelyTested > 0 || ix.skippedUnsafe > 0 || ix.skippedIneligible > 0)) {
     const tested = Number(ix.safelyTested || ix.tested || 0);
-    const skipped = Number(ix.skippedUnsafe || 0);
-    const inconclusive = Number(ix.inconclusive || 0);
-    const line = inconclusive
-      ? `${tested} safely tested · ${skipped} skipped · ${inconclusive} inconclusive`
-      : `${tested} safely tested · ${skipped} skipped`;
+    const eligible = Number(ix.eligible || ix.candidates || 0);
+    const passed = Number(ix.passed || 0);
+    const needReview = Number(ix.inconclusive || 0) + Number(ix.failed || 0);
+    const skipped = Number(ix.skippedUnsafe || 0) + Number(ix.skippedIneligible || 0);
+    const line = `${tested} of ${eligible || tested} safely tested · ${passed} passed · ${needReview} need review · ${skipped} skipped for safety`;
     const ixPartial = Boolean(
       ix.failed
       || ix.restorationFailures
@@ -210,8 +218,30 @@ function coverage() {
     const xo = Number(embed.crossOriginFramesNotInspectable || embed.crossOriginIframes || 0);
     box.insertAdjacentHTML('beforeend', `<span>Embedded content</span><b data-status="${xo ? 'partial' : 'complete'}">${esc(`${so} same-origin checked · ${xo} cross-origin not inspectable`)}</b>`);
   }
+  const perfCov = String(report.coverage?.performance || '');
+  if (perf?.available || /current-page|partial|not monitored|unavailable|local-only|complete/i.test(perfCov)) {
+    const labLine = perf?.available
+      ? 'Current-page lab observations available'
+      : (/partial/i.test(perfCov) ? 'Current-page lab observations partial' : 'Current-page lab observations unavailable');
+    // Historical monitor only when coverage is explicitly monitor-complete — never infer from lab.
+    const histAvailable = /^complete$/i.test(perfCov.trim());
+    const histLine = histAvailable ? 'Historical monitor available' : 'Historical monitor unavailable';
+    const rowStatus = !perf?.available || !histAvailable ? 'partial' : 'complete';
+    box.insertAdjacentHTML('beforeend', `<span>Performance</span><b data-status="${rowStatus}">${esc(`${labLine} · ${histLine}`)}</b>`);
+  }
+  const runtime = String(report.coverage?.runtime || '');
+  if (runtime) {
+    const runtimeLine = /extension-partial/i.test(runtime)
+      ? 'Partial capture (post-injection)'
+      : /renderer/i.test(runtime)
+        ? 'Renderer session capture'
+        : /not applicable/i.test(runtime)
+          ? 'Not applicable'
+          : runtime;
+    box.insertAdjacentHTML('beforeend', `<span>Runtime</span><b data-status="${/partial/i.test(runtime) ? 'partial' : 'complete'}">${esc(runtimeLine)}</b>`);
+  }
 
-  $('#coverage-summary').textContent = `${complete}/${total} available`;
+  $('#coverage-summary').textContent = `${complete}/${total} accounted`;
 
   const notes = $('#coverage-notes'); notes.innerHTML = '';
   if (perf?.available) notes.insertAdjacentHTML('beforeend', `<b>Current-page performance is a lab measurement.</b><span>Measured on this machine and network, so it shows direction rather than a field score. Monitored history is the source for regression claims.</span>`);
@@ -221,8 +251,11 @@ function coverage() {
   if (ix && ix.safelyTested > 0) {
     const eligible = Number(ix.eligible || ix.candidates || 0);
     const tested = Number(ix.safelyTested || 0);
-    if (eligible > tested) notes.insertAdjacentHTML('beforeend', `<b>WebQA safely tested ${esc(tested)} of ${esc(eligible)} eligible controls.</b><span>Skipped or budget-limited controls are coverage limits, not proof that remaining controls work. Allowlisted clicks can still run page handlers.</span>`);
-    else notes.insertAdjacentHTML('beforeend', `<b>WebQA safely tested ${esc(tested)} eligible control${tested === 1 ? '' : 's'}.</b><span>Forms, navigation, purchases, and high-risk actions are never activated. Allowlisted clicks can still run page handlers.</span>`);
+    const sideFx = ix.sideEffectLimitation
+      ? ' Allowlisted activation may still run page handlers (fetch, analytics, navigation).'
+      : ' Allowlisted clicks can still run page handlers.';
+    if (eligible > tested) notes.insertAdjacentHTML('beforeend', `<b>WebQA safely tested ${esc(tested)} of ${esc(eligible)} eligible controls.</b><span>Skipped or budget-limited controls are coverage limits, not proof that remaining controls work.${sideFx}</span>`);
+    else notes.insertAdjacentHTML('beforeend', `<b>WebQA safely tested ${esc(tested)} eligible control${tested === 1 ? '' : 's'}.</b><span>Forms, navigation, purchases, and high-risk actions are never activated.${sideFx}</span>`);
   }
   if (embed && Number(embed.crossOriginFramesNotInspectable || embed.crossOriginIframes || 0) > 0) {
     const xo = Number(embed.crossOriginFramesNotInspectable || embed.crossOriginIframes || 0);
@@ -910,6 +943,8 @@ function currentBugArtifact() {
   const diagnostic = lastDiagnostic ? { id: lastDiagnostic.id, operation: lastDiagnostic.operation, timestamp: lastDiagnostic.timestamp } : null;
   return buildBugReport({
     version: RELEASE_VERSION,
+    buildRevision: String(globalThis.__WEBQA_BUILD_REVISION__ || ''),
+    developmentTarget: '1.7.5',
     trace: runtimeTrace.snapshot(),
     readiness: localFrankRuntime.snapshot(),
     report,

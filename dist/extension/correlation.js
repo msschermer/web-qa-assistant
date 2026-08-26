@@ -387,7 +387,7 @@ export function applyRuntimeResourceCorrelations(findings = []) {
     cssFailed.forEach(f => { f.rootCauseKey = key; });
     overflow.rootCauseKey = overflow.rootCauseKey || key;
   }
-  const toggleFailed = out.filter(f => f.ruleId === 'ux.disclosure-toggle-failed');
+  const toggleFailed = out.filter(f => f.ruleId === 'ux.disclosure-toggle-failed' || f.ruleId === 'ux.menu-toggle-failed');
   if (scriptFailed.length && toggleFailed.length) {
     // Annotate only — do NOT share rootCauseKey (that would collapse unrelated issues in Recommended Order).
     const related = scriptFailed.map(s => s.resourceUrl || s.evidence).filter(Boolean).slice(0, 3);

@@ -12,6 +12,7 @@
   const SAFE_INTERACTION_BUDGET=6;
   const SAFE_INTERACTION_PER_FRAME=2;
   const INTERACTION_SETTLE_MAX_MS=120;
+  const INTERACTION_SETTLE_EXTENDED_MS=280;
   const INTERACTION_SETTLE_STEP_MS=16;
   const INTERACTION_TOTAL_BUDGET_MS=900;
   let lastResolutionStage='';
@@ -408,11 +409,20 @@
     const coverageMeta={
       browser:'complete',links:'pending',axe:'pending',published:'pending',
       performance:browserPerformance.available?'current-page':'pending',wcag:'pending',ai:'pending',
-      runtime:globalThis.__WEBQA_RUNTIME_ERRORS__?.source==='renderer'?'renderer':globalThis.__WEBQA_PAGE_DIAGNOSTICS__?.errors?.length?'extension-partial':globalThis.__WEBQA_RUNTIME_ERRORS__?'extension-partial':'not applicable'
+      runtime:globalThis.__WEBQA_RUNTIME_ERRORS__?.source==='renderer'
+        ?'renderer'
+        :(globalThis.__WEBQA_PAGE_DIAG_BOUND__||globalThis.__WEBQA_PAGE_DIAGNOSTICS__||globalThis.__WEBQA_RUNTIME_ERRORS__)
+          ?'extension-partial'
+          :'not applicable'
     };
+    const failedResourceDiag=diagnosticFailedResources();
     return{
       scannedAt:new Date().toISOString(),page,findings,browserPerformance,
-      diagnostics:{failedResources:diagnosticFailedResources()},
+      diagnostics:{
+        failedResources:failedResourceDiag.items,
+        observedResourceFailureEvents:failedResourceDiag.observedFailureEvents,
+        deduplicatedFailedResources:failedResourceDiag.items.length
+      },
       pageDiagnostics:{errors:(globalThis.__WEBQA_PAGE_DIAGNOSTICS__?.errors||globalThis.__WEBQA_RUNTIME_ERRORS__?.samples||[]).slice(0,20)},
       coverage:coverageMeta,
       interactionCoverage:lastInteractionCoverage,
@@ -818,10 +828,18 @@
     return'';
   }
   function registrableDomain(hostname){
-    const parts=String(hostname||'').toLowerCase().split('.').filter(Boolean);
-    if(parts.length<=1)return hostname||'';
-    // Conservative eTLD+1 approximation (no public-suffix list). Good enough for cdn.example.com ↔ www.example.com.
-    return parts.slice(-2).join('.');
+    const host=String(hostname||'').toLowerCase().replace(/\.$/, '');
+    const parts=host.split('.').filter(Boolean);
+    if(parts.length<=1)return host||'';
+    // Bounded multi-part public suffixes (not a full PSL). Prefer under-calling ownership.
+    const MULTI=[
+      'co.uk','org.uk','ac.uk','gov.uk','co.jp','com.au','net.au','org.au','co.nz','com.br','com.mx','co.in','com.sg','com.hk','co.kr','com.tr','com.ar','co.za'
+    ];
+    const last2=parts.slice(-2).join('.');
+    const last3=parts.length>=3?parts.slice(-3).join('.'):'';
+    if(MULTI.includes(last2)&&parts.length>=3)return parts.slice(-3).join('.');
+    if(MULTI.includes(last3)&&parts.length>=4)return parts.slice(-4).join('.');
+    return last2;
   }
   function classifyResourceParty(url){
     let parsed;try{parsed=new URL(url,location.href)}catch{return{party:'unknown',originClass:'unknown',ownership:'unknown',noise:true}}
@@ -830,10 +848,21 @@
     const sameOrigin=parsed.origin===location.origin;
     const pageReg=registrableDomain(location.hostname);
     const hostReg=registrableDomain(host);
-    const tracking=/\b(google-analytics|googletagmanager|gtag|doubleclick|facebook\.net|connect\.facebook|hotjar|segment\.|mixpanel|amplitude|newrelic|nr-data|sentry\.io|clarity\.ms|adservice|adsystem|scorecardresearch|quantserve|taboola|outbrain|criteo)\b/i.test(host)
+    // Consent / CMP infrastructure — diagnostic-only unless visibly user-blocking (handled elsewhere).
+    const consent=/\b(onetrust|cookielaw|cookiebot|trustarc|evidon|quantcast\.|sp-prod\.net|sourcepoint|didomi|usercentrics|ketchcdn|osano)\b/i.test(host)
+      ||/\/(consent|cookie-consent|cmp|otBanner|otSDKStub)\b/i.test(path);
+    if(consent)return{party:'third-party',originClass:'third-party-background',ownership:'third-party-background',noise:true,roleHint:'consent'};
+    const tracking=/\b(google-analytics|googletagmanager|gtag|doubleclick|facebook\.net|connect\.facebook|hotjar|segment\.|mixpanel|amplitude|newrelic|nr-data|sentry\.io|clarity\.ms|adservice|adsystem|scorecardresearch|quantserve|taboola|outbrain|criteo|adsrvr|adnxs|rubiconproject|pubmatic|openx|moatads|amazon-adsystem)\b/i.test(host)
       ||/\/(collect|pixel|beacon|analytics|gtm\.js|fbevents)\b/i.test(path)
       ||/\.(gif|png)$/i.test(path)&&/\/(pixel|track|beacon|collect)\b/i.test(path);
     if(tracking)return{party:'third-party',originClass:'third-party-background',ownership:'third-party-background',noise:true,roleHint:'analytics'};
+    const ads=/\b(\/ads?\/|\/adserver|googlesyndication|pagead|doubleclick|adservice)\b/i.test(`${host}${path}`);
+    if(ads)return{party:'third-party',originClass:'third-party-background',ownership:'third-party-background',noise:true,roleHint:'ads'};
+    const mediaSdk=/\b(jwplayer|brightcove|theoplayer|bitmovin|mux\.com|akamaihd\.net\/i\/|hls\.js)\b/i.test(host+path);
+    if(mediaSdk)return{party:'third-party',originClass:'third-party-visible',ownership:'third-party-visible',noise:false,roleHint:'media'};
+    const loginSocial=/\b(accounts\.google|login\.microsoftonline|appleid\.apple|auth0\.com|okta\.com|oauth|sso\.)\b/i.test(host)
+      ||/\/(oauth|authorize|signin|login)\b/i.test(path)&&!sameOrigin;
+    if(loginSocial)return{party:'third-party',originClass:'third-party-visible',ownership:'third-party-visible',noise:false,roleHint:'auth'};
     const infraVisible=/\b(fonts\.googleapis|fonts\.gstatic|ajax\.googleapis|cdn\.jsdelivr|unpkg\.com|cdnjs\.cloudflare)\b/i.test(host);
     if(infraVisible)return{party:'third-party',originClass:'third-party-visible',ownership:'third-party-visible',noise:false,roleHint:'infrastructure'};
     const embed=/youtube\.com|youtube-nocookie\.com|youtu\.be|player\.vimeo\.com|vimeo\.com|maps\.google|google\.com\/maps|openstreetmap|js\.stripe\.com|checkout\.stripe|calendly\.com|typeform\.com|formstack|hubspot|intercom\.io|drift\.com|zendesk|twitter\.com|platform\.twitter|instagram\.com|tiktok\.com|linkedin\.com/i.test(host)
@@ -846,6 +875,10 @@
     const assetSub=/^(cdn|static|assets|media|img|images|fonts|files|content|res|resource)[-.]/i.test(host)
       ||/\.(cdn|static|assets|media)\./i.test(host)
       ||/cdn|static|assets|media|img|fonts/i.test(host);
+    const MULTI_TENANT=['github.io','herokuapp.com','netlify.app','vercel.app','pages.dev','azurewebsites.net','cloudfront.net'];
+    if(MULTI_TENANT.includes(pageReg)||MULTI_TENANT.includes(hostReg)){
+      return{party:'unknown',originClass:'related-host',ownership:'related-host',noise:false};
+    }
     if(relatedDomain&&assetSub){
       return{party:'first-party',originClass:'probable-first-party',ownership:'probable-first-party',noise:false};
     }
@@ -854,7 +887,7 @@
     }
     // Generic public CDN hosts without site relationship stay unknown/third-party — do not claim first-party.
     if(/\b(cloudfront\.net|akamaized\.net|fastly\.net|azureedge\.net|stackpathcdn)\b/i.test(host)){
-      return{party:'unknown',originClass:'unknown',ownership:'unknown',noise:false};
+      return{party:'unknown',originClass:'unknown',ownership:'unknown',noise:false,roleHint:'cdn'};
     }
     return{party:'third-party',originClass:'third-party-visible',ownership:'third-party-visible',noise:false};
   }
@@ -992,32 +1025,39 @@
     return out;
   }
   function diagnosticFailedResources(){
-    const out=[];
+    const items=[];
+    const seen=new Set();
+    let observedFailureEvents=0;
     let resources=[];
-    try{resources=performance.getEntriesByType('resource')||[]}catch{return out}
+    try{resources=performance.getEntriesByType('resource')||[]}catch{return{items,observedFailureEvents:0}}
     for(const entry of resources){
-      if(out.length>=25)break;
       const status=Number(entry.responseStatus);
       const opaque=!Number.isFinite(status)||status===0;
       if(!opaque&&status<400)continue;
+      observedFailureEvents++;
       const url=sanitizeHttpUrl(entry.name);if(!url)continue;
       let parsed=null;try{parsed=new URL(entry.name)}catch{}
       const party=classifyResourceParty(entry.name);
       const kind=classifyResourceRole(entry.name,entry.initiatorType)||String(entry.initiatorType||'other').slice(0,40);
       const ownership=party.ownership||party.originClass;
+      const key=`${url}|${opaque?0:status}|${kind}`;
+      if(seen.has(key))continue;
+      seen.add(key);
+      if(items.length>=25)continue;
       let disposition='worthChecking';
       let failureClass='probable-failure';
       if(opaque){disposition='inconclusive';failureClass='inconclusive'}
       else if(party.noise){disposition='diagnosticOnly';failureClass='diagnostic'}
       else if(parsed&&(parsed.origin===location.origin||ownership==='probable-first-party')){disposition='confirmed';failureClass='confirmed-failure'}
-      out.push({
+      items.push({
         kind:'resource_failure',initiator:kind,status:opaque?0:status,source:url,
         sameOrigin:parsed?parsed.origin===location.origin:false,
         originClass:ownership,party:party.party,noise:Boolean(party.noise),
-        disposition,failureClass,opaque:opaque||undefined
+        disposition,failureClass,opaque:opaque||undefined,
+        roleHint:party.roleHint||undefined
       });
     }
-    return out;
+    return{items,observedFailureEvents};
   }
   function runtimeErrorFindings(){
     const bucket=globalThis.__WEBQA_RUNTIME_ERRORS__;
@@ -1433,6 +1473,40 @@
     if(panelRole&&panelRole!=='tabpanel')return false;
     return true;
   }
+  function isKnownSafeMenuControl(el,doc){
+    if(!el||el.nodeType!==1)return false;
+    const tag=el.localName;
+    const role=attr(el,'role');
+    if(tag!=='button'&&role!=='button')return false;
+    if(el.closest?.('form')||isUnsafeInteractionTarget(el)||hasHighRiskInteractionSemantics(el))return false;
+    if(attr(el,'type').toLowerCase()==='submit')return false;
+    const expanded=attr(el,'aria-expanded');
+    if(expanded!=='true'&&expanded!=='false')return false;
+    const menuId=attr(el,'aria-controls').split(/\s+/).filter(Boolean)[0];
+    if(!menuId)return false;
+    const root=doc||document;
+    let menu=null;
+    try{menu=root.getElementById(menuId)}catch{return false}
+    if(!menu)return false;
+    const menuRole=attr(menu,'role');
+    if(menuRole!=='menu'&&menuRole!=='listbox')return false;
+    // Must not contain navigational links that leave the document.
+    try{
+      if(menu.querySelector('a[href]:not([href^="#"]),form,button[type="submit"]'))return false;
+    }catch{}
+    return true;
+  }
+  function isMenuToggleCandidate(el,doc){
+    if(!el||el.nodeType!==1)return false;
+    const menuId=attr(el,'aria-controls').split(/\s+/).filter(Boolean)[0];
+    if(!menuId)return false;
+    const root=doc||document;
+    let menu=null;
+    try{menu=root.getElementById(menuId)}catch{return false}
+    if(!menu)return false;
+    const menuRole=attr(menu,'role');
+    return menuRole==='menu'||menuRole==='listbox';
+  }
   function isKnownSafeSkipLink(el,doc){
     if(!isSkipLinkAnchor(el))return false;
     if(isUnsafeInteractionTarget(el))return false;
@@ -1613,9 +1687,43 @@
       return{finding:null,observation,stopFurther:!restored};
     }
     if(settle.settled===false&&afterExpanded===initialExpanded&&after.visible===before.visible){
-      observation.outcome='failed';
-      observation.failureReason='no-state-change-after-settle';
+      // Extended settle tier: slow UI may still change without becoming a confirmed failure.
+      if(budgetRef&&budgetRef.remainingMs>0){
+        const extended=await settleUntil(expectChange,{maxMs:Math.min(INTERACTION_SETTLE_EXTENDED_MS,budgetRef.remainingMs),stepMs:INTERACTION_SETTLE_STEP_MS});
+        budgetRef.remainingMs-=extended.durationMs;
+        if(expectChange()){
+          observation.settled=true;
+          observation.settleDurationBucket=settleDurationBucket(settle.durationMs+extended.durationMs);
+          observation.observedState={ariaExpanded:attr(btn,'aria-expanded'),panelVisible:panelVisibility(doc,panelId).visible,clickDispatched:clickOk};
+          // Fall through to restore path as a pass — re-enter by setting changed semantics.
+          const afterPassExpanded=attr(btn,'aria-expanded');
+          const afterPass=panelVisibility(doc,panelId);
+          observation.outcome='passed';
+          observation.confidence='confirmed';
+          observation.failureReason='';
+          let restoredPass=false;
+          try{
+            if(settle.immediate===false){ /* async: attribute restore only */ }
+            else if(attr(btn,'aria-expanded')!==initialExpanded)activateElement(btn);
+            await settleUntil(()=>attr(btn,'aria-expanded')===initialExpanded,{maxMs:80,stepMs:16});
+            if(attr(btn,'aria-expanded')!==initialExpanded)btn.setAttribute('aria-expanded',initialExpanded);
+            restorePanelState(doc,panelId,before);
+            await Promise.resolve();
+            if(attr(btn,'aria-expanded')!==initialExpanded)btn.setAttribute('aria-expanded',initialExpanded);
+            restorePanelState(doc,panelId,before);
+            restoredPass=attr(btn,'aria-expanded')===initialExpanded&&panelVisibility(doc,panelId).visible===before.visible;
+          }catch{restoredPass=false}
+          observation.restored=restoredPass;
+          observation.restoredState={ariaExpanded:attr(btn,'aria-expanded'),panelVisible:panelVisibility(doc,panelId).visible,restored:restoredPass};
+          observation.observedState={ariaExpanded:afterPassExpanded,panelVisible:afterPass.visible,clickDispatched:clickOk};
+          return{finding:null,observation,stopFurther:!restoredPass};
+        }
+      }
+      // Still no change after extended window → inconclusive (may be slow UI or inert control).
+      observation.outcome='inconclusive';
+      observation.failureReason='no-state-change-after-extended-settle';
       observation.confidence='inferred';
+      observation.settleDurationBucket=settleDurationBucket(INTERACTION_SETTLE_MAX_MS+INTERACTION_SETTLE_EXTENDED_MS);
       const extra={
         worthChecking:true,
         interactionObservation:observation,
@@ -1628,11 +1736,131 @@
           ruleId:'ux.disclosure-toggle-failed',
           title:'Disclosure control did not change state when activated',
           detail:embeddedContext
-            ?`Inside an embedded same-origin document, a safe local disclosure control was activated. Expected aria-expanded to become "${expectedExpanded}" (or the controlled panel visibility to change) within the bounded verification window, but no qualifying state change was observed. This does not identify the exact JavaScript root cause.`
-            :`A safe local disclosure control was activated in a non-destructive check. Expected aria-expanded to become "${expectedExpanded}" (or the controlled panel visibility to change) within the bounded verification window, but no qualifying state change was observed. This does not identify the exact JavaScript root cause.`,
+            ?`Inside an embedded same-origin document, a safe local disclosure control was activated. Expected aria-expanded to become "${expectedExpanded}" (or the controlled panel visibility to change) within the bounded verification window, including a short extended settle for delayed UI. No qualifying state change was observed. This may be a slow animation or an inert control — it does not identify the exact JavaScript root cause.`
+            :`A safe local disclosure control was activated in a non-destructive check. Expected aria-expanded to become "${expectedExpanded}" (or the controlled panel visibility to change) within the bounded verification window, including a short extended settle for delayed UI. No qualifying state change was observed. This may be a slow animation or an inert control — it does not identify the exact JavaScript root cause.`,
           category:'review',severity:'medium',confidence:'inferred',element:embeddedContext?null:btn,
           evidence:`interaction=disclosure-toggle; initial=${initialExpanded}; observed=${afterExpanded}; settled=${observation.settleDurationBucket}; restored=${restored}${embeddedContext?'; context=iframe':''}`,
           extra
+        }),
+        observation,
+        stopFurther:!restored
+      };
+    }
+    observation.outcome='inconclusive';
+    observation.failureReason='settle-inconclusive';
+    return{finding:null,observation,stopFurther:!restored};
+  }
+  async function verifyMenuInDocument(btn,{doc,frameSelector='',embeddedContext='',budgetRef}={}){
+    const menuId=attr(btn,'aria-controls').split(/\s+/).filter(Boolean)[0];
+    const initialExpanded=attr(btn,'aria-expanded');
+    const before=panelVisibility(doc,menuId);
+    const focusBefore=captureFocus(doc);
+    const expectedExpanded=initialExpanded==='false'?'true':'false';
+    const observation={
+      interactionType:'menu-toggle',
+      context:embeddedContext||'top-document',
+      frameSelector:frameSelector||undefined,
+      initialState:{ariaExpanded:initialExpanded,menuVisible:before.visible,focus:focusBefore.selector||undefined},
+      expectedState:{ariaExpanded:expectedExpanded},
+      observedState:{},
+      outcome:'inconclusive',
+      settled:false,
+      settleDurationBucket:'immediate',
+      restored:false,
+      failureReason:'',
+      confidence:'inferred'
+    };
+    if(initialExpanded!=='false'&&initialExpanded!=='true'){
+      observation.outcome='not-applicable';
+      observation.failureReason='invalid-aria-expanded';
+      return{finding:null,observation,stopFurther:false};
+    }
+    if(budgetRef&&budgetRef.remainingMs<=0){
+      observation.outcome='inconclusive';
+      observation.failureReason='interaction-time-budget';
+      return{finding:null,observation,stopFurther:false};
+    }
+    // Toggle only — never activate menu items / links inside the menu.
+    const clickOk=activateElement(btn);
+    const expectChange=()=>{
+      const expanded=attr(btn,'aria-expanded');
+      const after=panelVisibility(doc,menuId);
+      return expanded===expectedExpanded
+        ||(initialExpanded==='false'&&after.visible&&!before.visible)
+        ||(initialExpanded==='true'&&!after.visible&&before.visible);
+    };
+    let settle;
+    try{settle=await settleUntil(expectChange)}catch{
+      observation.outcome='inconclusive';
+      observation.failureReason='handler-threw';
+      try{
+        if(attr(btn,'aria-expanded')!==initialExpanded)btn.setAttribute('aria-expanded',initialExpanded);
+        restorePanelState(doc,menuId,before);
+      }catch{}
+      observation.restored=attr(btn,'aria-expanded')===initialExpanded&&panelVisibility(doc,menuId).visible===before.visible;
+      return{finding:null,observation,stopFurther:!observation.restored};
+    }
+    const afterExpanded=attr(btn,'aria-expanded');
+    const after=panelVisibility(doc,menuId);
+    const changed=expectChange();
+    observation.settled=settle.settled||changed;
+    observation.settleDurationBucket=settleDurationBucket(settle.durationMs);
+    observation.observedState={ariaExpanded:afterExpanded,menuVisible:after.visible,clickDispatched:clickOk};
+    if(budgetRef)budgetRef.remainingMs-=settle.durationMs;
+    let restored=false;
+    try{
+      if(changed&&settle.immediate&&attr(btn,'aria-expanded')!==initialExpanded)activateElement(btn);
+      await settleUntil(()=>attr(btn,'aria-expanded')===initialExpanded,{maxMs:80,stepMs:16});
+      if(attr(btn,'aria-expanded')!==initialExpanded)btn.setAttribute('aria-expanded',initialExpanded);
+      restorePanelState(doc,menuId,before);
+      await Promise.resolve();
+      if(attr(btn,'aria-expanded')!==initialExpanded)btn.setAttribute('aria-expanded',initialExpanded);
+      restorePanelState(doc,menuId,before);
+      restored=attr(btn,'aria-expanded')===initialExpanded&&panelVisibility(doc,menuId).visible===before.visible;
+    }catch{restored=false}
+    observation.restored=restored;
+    observation.restoredState={ariaExpanded:attr(btn,'aria-expanded'),menuVisible:panelVisibility(doc,menuId).visible,restored};
+    if(!clickOk){
+      observation.outcome='inconclusive';
+      observation.failureReason='click-dispatch-failed';
+      return{finding:null,observation,stopFurther:!restored};
+    }
+    if(changed){
+      observation.outcome='passed';
+      observation.confidence='confirmed';
+      observation.failureReason='';
+      return{finding:null,observation,stopFurther:!restored};
+    }
+    if(settle.settled===false&&afterExpanded===initialExpanded&&after.visible===before.visible){
+      if(budgetRef&&budgetRef.remainingMs>0){
+        const extended=await settleUntil(expectChange,{maxMs:Math.min(INTERACTION_SETTLE_EXTENDED_MS,budgetRef.remainingMs),stepMs:INTERACTION_SETTLE_STEP_MS});
+        budgetRef.remainingMs-=extended.durationMs;
+        if(expectChange()){
+          observation.settled=true;
+          observation.settleDurationBucket=settleDurationBucket(settle.durationMs+extended.durationMs);
+          observation.outcome='passed';
+          observation.confidence='confirmed';
+          try{
+            if(attr(btn,'aria-expanded')!==initialExpanded)btn.setAttribute('aria-expanded',initialExpanded);
+            restorePanelState(doc,menuId,before);
+            restored=attr(btn,'aria-expanded')===initialExpanded&&panelVisibility(doc,menuId).visible===before.visible;
+          }catch{restored=false}
+          observation.restored=restored;
+          observation.observedState={ariaExpanded:attr(btn,'aria-expanded'),menuVisible:panelVisibility(doc,menuId).visible,clickDispatched:clickOk};
+          return{finding:null,observation,stopFurther:!restored};
+        }
+      }
+      observation.outcome='inconclusive';
+      observation.failureReason='no-state-change-after-extended-settle';
+      observation.confidence='inferred';
+      return{
+        finding:finding({
+          ruleId:'ux.menu-toggle-failed',
+          title:'Menu control did not change state when activated',
+          detail:'A known-safe local menu toggle was activated. Expected aria-expanded (or menu visibility) to change within the bounded verification window, including a short extended settle for delayed UI. No qualifying state change was observed. Menu items inside the menu were not activated. This does not identify the exact JavaScript root cause.',
+          category:'review',severity:'medium',confidence:'inferred',element:embeddedContext?null:btn,
+          evidence:`interaction=menu-toggle; initial=${initialExpanded}; observed=${afterExpanded}; settled=${observation.settleDurationBucket}; restored=${restored}`,
+          extra:{worthChecking:true,interactionObservation:observation,embeddedContext:embeddedContext||undefined,frameSelector:frameSelector||undefined,spotlightSafe:embeddedContext?false:undefined}
         }),
         observation,
         stopFurther:!restored
@@ -1711,6 +1939,7 @@
     const raw=attr(a,'href');
     let id='';try{id=decodeURIComponent(raw.slice(1))}catch{id=raw.slice(1)}
     const focusBefore=captureFocus(doc);
+    const hrefBefore=String(doc.defaultView?.location?.href||location.href||'');
     const observation={
       interactionType:'skip-link',
       context:embeddedContext||'top-document',
@@ -1754,18 +1983,34 @@
     observation.observedState={clickDispatched:clickOk,focusMoved:moved};
     if(budgetRef)budgetRef.remainingMs-=settle.durationMs;
     try{
-      const focusAfter=captureFocus(doc);
       if(focusBefore.selector){
         const prev=doc.querySelector(focusBefore.selector);
         if(prev&&typeof prev.focus==='function')prev.focus();
         else if(typeof doc.body?.focus==='function')doc.body.focus();
       }else if(typeof doc.body?.focus==='function')doc.body.focus();
+      const hrefAfter=String(doc.defaultView?.location?.href||location.href||'');
+      if(hrefAfter!==hrefBefore){
+        try{
+          const view=doc.defaultView||window;
+          if(typeof view.history?.replaceState==='function'){
+            const u=new URL(hrefBefore);
+            view.history.replaceState(view.history.state,'',`${u.pathname}${u.search}${u.hash}`);
+          }
+        }catch{}
+      }
+      const hrefRestored=String(doc.defaultView?.location?.href||location.href||'')===hrefBefore
+        || String(doc.defaultView?.location?.hash||'')===(new URL(hrefBefore).hash||'');
       const focusRestored=captureFocus(doc);
-      observation.restored=focusBefore.selector
-        ?(focusRestored.selector===focusBefore.selector||(!focusRestored.selector&&!doc.activeElement))
-        :true;
-      if(!observation.restored)observation.failureReason=observation.failureReason||'focus-restore-unproven';
+      observation.restored=Boolean(hrefRestored)&&(focusBefore.selector
+        ?(focusRestored.selector===focusBefore.selector||!focusRestored.selector)
+        :true);
+      if(!observation.restored)observation.failureReason=observation.failureReason||'skip-link-state-unproven';
     }catch{observation.restored=false;observation.failureReason=observation.failureReason||'focus-restore-failed'}
+    if(!observation.restored){
+      observation.outcome='inconclusive';
+      observation.failureReason=observation.failureReason||'skip-link-state-unproven';
+      return{finding:null,observation,stopFurther:true};
+    }
     if(moved){
       observation.outcome='passed';
       observation.confidence='confirmed';
@@ -1778,9 +2023,10 @@
   function emptyInteractionCoverage(){
     return{
       candidates:0,eligible:0,safelyTested:0,tested:0,skippedUnsafe:0,skippedIneligible:0,
-      passed:0,failed:0,inconclusive:0,restorationFailures:0,
+      passed:0,failed:0,inconclusive:0,notApplicable:0,restorationFailures:0,
       partialReason:'',topDocumentOnly:true,iframeDisclosures:'none',
-      contexts:{top:0,iframe:0}
+      contexts:{top:0,iframe:0},
+      sideEffectLimitation:'allowlisted-activation-may-run-page-handlers'
     };
   }
   async function safeInteractionFindingsAsync(){
@@ -1792,10 +2038,19 @@
 
     function noteObservation(obs){
       if(!obs)return;
+      // Accounting invariant: tested == passed + failed + inconclusive (+ other tested outcomes).
+      // not-applicable and skipped-unsafe are not tested activations.
+      if(obs.outcome==='not-applicable'||obs.outcome==='skipped-unsafe'){
+        if(coverage.tested>0)coverage.tested--;
+        if(coverage.safelyTested>0)coverage.safelyTested--;
+        if(obs.outcome==='not-applicable')coverage.notApplicable++;
+        else coverage.skippedUnsafe++;
+        return;
+      }
       if(obs.outcome==='passed')coverage.passed++;
       else if(obs.outcome==='failed')coverage.failed++;
       else if(obs.outcome==='inconclusive')coverage.inconclusive++;
-      else if(obs.outcome==='skipped-unsafe')coverage.skippedUnsafe++;
+      else coverage.inconclusive++;
       if(obs.restored===false&&(obs.outcome==='passed'||obs.outcome==='failed'||obs.outcome==='inconclusive')){
         coverage.restorationFailures++;
       }
@@ -1845,9 +2100,38 @@
       }
     }
 
-    // Top document disclosures
-    const topDisclosures=[...document.querySelectorAll('button[aria-expanded][aria-controls], [role="button"][aria-expanded][aria-controls]')];
+    // Top document disclosures (exclude menu toggles — menus use a dedicated safe path)
+    const topDisclosures=[...document.querySelectorAll('button[aria-expanded][aria-controls], [role="button"][aria-expanded][aria-controls]')]
+      .filter(el=>!isMenuToggleCandidate(el,document));
     await runDisclosureList(topDisclosures,{doc:document,embeddedContext:'',frameSelector:''});
+
+    // Safe menu toggles only (toggle control; never activate menu items). Ambiguous menus are skipped.
+    if(!stopAll&&coverage.safelyTested<SAFE_INTERACTION_BUDGET){
+      const menuCandidates=[...document.querySelectorAll('button[aria-expanded][aria-controls], [role="button"][aria-expanded][aria-controls]')]
+        .filter(el=>isMenuToggleCandidate(el,document))
+        .slice(0,4);
+      for(const btn of menuCandidates){
+        if(stopAll||coverage.safelyTested>=SAFE_INTERACTION_BUDGET)break;
+        coverage.candidates++;
+        if(!isKnownSafeMenuControl(btn,document)){
+          if(isUnsafeInteractionTarget(btn)||hasHighRiskInteractionSemantics(btn))coverage.skippedUnsafe++;
+          else coverage.skippedIneligible++;
+          continue;
+        }
+        coverage.eligible++;
+        coverage.safelyTested++;
+        coverage.tested++;
+        coverage.contexts.top++;
+        const result=await verifyMenuInDocument(btn,{doc:document,budgetRef});
+        noteObservation(result.observation);
+        if(result.finding)out.push(result.finding);
+        if(result.stopFurther){
+          coverage.partialReason=coverage.partialReason||'restoration-unproven';
+          stopAll=true;
+          break;
+        }
+      }
+    }
 
     // Top document tabs (coverage-oriented; limited)
     if(!stopAll&&coverage.safelyTested<SAFE_INTERACTION_BUDGET){
@@ -1912,7 +2196,8 @@
       framesUsed++;
       coverage.topDocumentOnly=false;
       const frameSel=selectorFor(frame);
-      const disclosures=[...doc.querySelectorAll('button[aria-expanded][aria-controls], [role="button"][aria-expanded][aria-controls]')];
+      const disclosures=[...doc.querySelectorAll('button[aria-expanded][aria-controls], [role="button"][aria-expanded][aria-controls]')]
+        .filter(el=>!isMenuToggleCandidate(el,doc));
       const testedBefore=coverage.safelyTested;
       await runDisclosureList(disclosures,{
         doc,
