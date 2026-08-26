@@ -1,6 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 const root=process.cwd(),src=path.join(root,'apps/extension'),out=path.join(root,'dist/extension');
+function shortBuildRevision(){
+  try{
+    const rev=String(execSync('git rev-parse --short=12 HEAD',{cwd:root,encoding:'utf8',stdio:['ignore','pipe','ignore']})).trim();
+    if(/^[0-9a-f]{7,12}$/i.test(rev))return rev.toLowerCase();
+  }catch{}
+  return 'unknown';
+}
+const buildRevision=shortBuildRevision();
 const installedAxe=path.join(root,'node_modules/axe-core/axe.min.js'),vendoredAxe=path.join(out,'vendor/axe.min.js');
 const axeBytes=fs.existsSync(installedAxe)?fs.readFileSync(installedAxe):fs.existsSync(vendoredAxe)?fs.readFileSync(vendoredAxe):null;
 if(!axeBytes)throw new Error('axe-core runtime is unavailable. Run npm ci, or start from a release source package that includes dist/extension/vendor/axe.min.js.');
@@ -45,4 +54,15 @@ fs.writeFileSync(path.join(out,'frank-plan.js'),frankPlanSource);
 fs.writeFileSync(path.join(out,'plan.js'),frankPlanSource);
 fs.mkdirSync(path.join(out,'vendor'),{recursive:true});fs.writeFileSync(path.join(out,'vendor/axe.min.js'),axeBytes);
 fs.mkdirSync(path.join(out,'icons'),{recursive:true});for(const n of ['16.png','32.png','48.png','128.png'])fs.copyFileSync(path.join(src,'icons',n),path.join(out,'icons',n));
-console.log(`Built ${out}`);
+fs.writeFileSync(path.join(out,'build-revision.json'),`${JSON.stringify({ buildRevision, releasedVersion: '1.7.4', developmentTarget: '1.7.5' }, null, 2)}\n`);
+// Inject revision into sidepanel without editing source tree identity.
+{
+  const panelPath=path.join(out,'sidepanel.js');
+  let panel=fs.readFileSync(panelPath,'utf8');
+  // Always assign once at the top. Never string-replace the identifier — source may read the global.
+  if(!/globalThis\.__WEBQA_BUILD_REVISION__\s*=/.test(panel)){
+    panel=`globalThis.__WEBQA_BUILD_REVISION__=${JSON.stringify(buildRevision)};\n${panel}`;
+  }
+  fs.writeFileSync(panelPath,panel);
+}
+console.log(`Built ${out} (buildRevision=${buildRevision})`);
