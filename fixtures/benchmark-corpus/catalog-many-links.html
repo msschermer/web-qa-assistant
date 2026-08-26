@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Synthetic catalog — 90 products</title>
+  <meta name="description" content="Synthetic product listing used to stress current-page link verification.">
+  <link rel="canonical" href="https://example.com/catalog">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="/qa-matrix/clean.html">Home</a>
+      <a href="/corpus/news-hub.html">Journal</a>
+      <a href="/corpus/checkout-form.html">Checkout</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Synthetic catalog</h1>
+    <p>Ninety unique product destinations plus a few healthy section links. Destinations ending in 0 return 404.</p>
+    <div id="products"></div>
+  </main>
+  <script>
+    (function () {
+      const root = document.getElementById('products');
+      for (let i = 0; i < 90; i += 1) {
+        const a = document.createElement('a');
+        a.href = (i % 10 === 0) ? ('/missing/' + i) : ('/ok/' + i);
+        a.textContent = 'Product ' + i;
+        root.appendChild(a);
+        root.appendChild(document.createTextNode(' '));
+      }
+    }());
+  </script>
+</body>
+</html>

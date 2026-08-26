@@ -1,0 +1,79 @@
+{
+  "name": "webqa-internal-beta-corpus",
+  "description": "Repeatable 12-page synthetic corpus plus two optional public controls. Pages are client-like (catalog, news, checkout, frames, SPA shell) but synthetic — no real client names or copied site content. Live pages are opt-in.",
+  "defaultMaxElapsedMs": 180000,
+  "pages": [
+    {
+      "id": "clean",
+      "path": "/qa-matrix/clean.html",
+      "profile": "quiet-control"
+    },
+    {
+      "id": "problems",
+      "path": "/qa-matrix/problems.html",
+      "profile": "multi-discipline-issues"
+    },
+    {
+      "id": "frame-interaction",
+      "path": "/qa-matrix/frame-interaction.html",
+      "profile": "iframe-and-disclosure"
+    },
+    {
+      "id": "interaction-clean",
+      "path": "/qa-matrix/interaction-clean.html",
+      "profile": "quiet-interaction"
+    },
+    {
+      "id": "async-interaction",
+      "path": "/qa-matrix/async-interaction.html",
+      "profile": "async-disclosure"
+    },
+    {
+      "id": "batch-dev",
+      "path": "/qa-matrix/batch-dev.html",
+      "profile": "soft-404-and-forms"
+    },
+    {
+      "id": "resource-ownership",
+      "path": "/qa-matrix/resource-ownership.html",
+      "profile": "third-party-resources"
+    },
+    {
+      "id": "catalog-many-links",
+      "path": "/corpus/catalog-many-links.html",
+      "profile": "high-link-inventory"
+    },
+    {
+      "id": "frames-gallery",
+      "path": "/corpus/frames-gallery.html",
+      "profile": "same-origin-frames"
+    },
+    {
+      "id": "news-hub",
+      "path": "/corpus/news-hub.html",
+      "profile": "editorial-hub"
+    },
+    {
+      "id": "checkout-form",
+      "path": "/corpus/checkout-form.html",
+      "profile": "form-heavy"
+    },
+    {
+      "id": "spa-shell",
+      "path": "/corpus/spa-shell.html",
+      "profile": "client-rendered-shell"
+    },
+    {
+      "id": "example-com",
+      "url": "https://example.com/",
+      "profile": "public-simple",
+      "live": true
+    },
+    {
+      "id": "example-org",
+      "url": "https://example.org/",
+      "profile": "public-simple",
+      "live": true
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Synthetic app shell</title>
+  <meta name="description" content="Synthetic single-page shell with hash routes and a few real destinations.">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="#/home">Home</a>
+      <a href="#/catalog">Catalog</a>
+      <a href="#/account">Account</a>
+      <a href="/ok/help">Help center</a>
+      <a href="/missing/legacy">Legacy docs</a>
+    </nav>
+  </header>
+  <main id="app">
+    <h1>Workspace</h1>
+    <p>Hash routes stay on this page. Help and legacy links leave the shell.</p>
+    <button type="button" id="filters" aria-expanded="false" aria-controls="filter-panel">Filters</button>
+    <div id="filter-panel" hidden>
+      <a href="/ok/in-stock">In stock</a>
+      <a href="/ok/on-sale">On sale</a>
+    </div>
+  </main>
+  <script>
+    document.getElementById('filters').addEventListener('click', function () {
+      var open = this.getAttribute('aria-expanded') === 'true';
+      this.setAttribute('aria-expanded', open ? 'false' : 'true');
+      document.getElementById('filter-panel').hidden = open;
+    });
+  </script>
+</body>
+</html>

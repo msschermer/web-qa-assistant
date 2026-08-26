@@ -223,6 +223,47 @@ test('interactions: accounting reconciles tested outcomes', () => {
   assert.equal(accounting.interactions.tested, 2);
 });
 
+test('links: none_checked with unique inventory and no attempts is degraded', () => {
+  const report = {
+    coverage: { links: 'none_checked', browser: 'complete' },
+    page: { inventory: { links: 90, uniqueLinks: 90 } },
+    linkAudit: {
+      discovered: 0,
+      eligible: 0,
+      attempted: 0,
+      checked: 0,
+      verifiedHealthy: 0,
+      confirmedIssues: 0,
+      inconclusive: 0,
+      unprobed: 0,
+      explicitlySkipped: 0
+    }
+  };
+  const accounting = buildCoverageAccounting(report);
+  assert.ok(accounting.degradedAreas.includes('links'));
+});
+
+test('links: none_checked with empty eligible inventory is complete, not degraded', () => {
+  const report = {
+    coverage: { links: 'none_checked', browser: 'complete' },
+    linkAudit: {
+      discovered: 0,
+      eligible: 0,
+      attempted: 0,
+      checked: 0,
+      verifiedHealthy: 0,
+      confirmedIssues: 0,
+      inconclusive: 0,
+      unprobed: 0,
+      explicitlySkipped: 0
+    }
+  };
+  const accounting = buildCoverageAccounting(report);
+  assert.equal(accounting.degradedAreas.includes('links'), false);
+  assert.ok(accounting.completeAreas.includes('links'));
+  assert.equal(classifyCoverageReason(COVERAGE_REASON.NONE_CHECKED), COVERAGE_CLASS.COMPLETE);
+});
+
 test('links: all attempted and healthy is complete', () => {
   const report = {
     coverage: { links: 'complete', browser: 'complete' },

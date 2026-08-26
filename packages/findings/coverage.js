@@ -62,7 +62,6 @@ const SCOPE_LIMITED_REASONS = new Set([
 const DEGRADED_REASONS = new Set([
   COVERAGE_REASON.PROBE_BUDGET_EXHAUSTED,
   COVERAGE_REASON.LINK_AUDIT_UNAVAILABLE,
-  COVERAGE_REASON.NONE_CHECKED,
   COVERAGE_REASON.LAB_PARTIAL,
   COVERAGE_REASON.AXE_UNAVAILABLE,
   COVERAGE_REASON.ENRICHMENT_FAILED,
@@ -76,7 +75,7 @@ const DEGRADED_REASONS = new Set([
 
 export function classifyCoverageReason(reason = '') {
   const code = String(reason || '').trim();
-  if (!code) return COVERAGE_CLASS.COMPLETE;
+  if (!code || code === COVERAGE_REASON.NONE_CHECKED) return COVERAGE_CLASS.COMPLETE;
   if (DEGRADED_REASONS.has(code)) return COVERAGE_CLASS.DEGRADED;
   if (SCOPE_LIMITED_REASONS.has(code)) return COVERAGE_CLASS.SCOPE_LIMITED;
   // Unknown codes default to degraded so new failure modes stay visible.
@@ -772,8 +771,7 @@ export function explainCoverageReasons(report = {}, extras = {}) {
       continue;
     }
     if (area === 'links') {
-      if (/none checked/.test(value)) reasons.links = COVERAGE_REASON.NONE_CHECKED;
-      else if (/unavailable/.test(value)) reasons.links = COVERAGE_REASON.LINK_AUDIT_UNAVAILABLE;
+      if (/unavailable/.test(value)) reasons.links = COVERAGE_REASON.LINK_AUDIT_UNAVAILABLE;
       else if (/not applicable/.test(value)) reasons.links = COVERAGE_REASON.NOT_APPLICABLE;
       else if (links.probeBudgetPreventedCoverage || links.unprobed > 0 || links.scannerAborted > 0) {
         reasons.links = COVERAGE_REASON.PROBE_BUDGET_EXHAUSTED;
@@ -830,7 +828,7 @@ export function buildCoverageAccounting(report = {}) {
   const COMPLETE_STATUSES = /^(complete|current-page|renderer|deterministic|local-only)$/i;
   // Legacy extension-partial is scope, not degradation.
   const SCOPE_STATUSES = /^(extension-partial|not applicable|not monitored)$/i;
-  const DEGRADED_STATUSES = /^(partial|unavailable|pending|none checked|blocked|substituted|inconclusive)$/i;
+  const DEGRADED_STATUSES = /^(partial|unavailable|pending|blocked|substituted|inconclusive)$/i;
 
   for (const [area, status] of Object.entries(coverage)) {
     const value = coverageValue(status);
@@ -856,9 +854,16 @@ export function buildCoverageAccounting(report = {}) {
         cls = COVERAGE_CLASS.DEGRADED;
         areaReasons[area] = reasons.links || COVERAGE_REASON.LINK_AUDIT_UNAVAILABLE;
       } else if (/none checked/i.test(value)) {
-        cls = COVERAGE_CLASS.DEGRADED;
-        areaReasons[area] = COVERAGE_REASON.NONE_CHECKED;
+        const uniqueInventory = Number(report.page?.inventory?.uniqueLinks ?? 0);
+        if (linksAcc.eligible > 0 || uniqueInventory > 0) {
+          cls = COVERAGE_CLASS.DEGRADED;
+          areaReasons[area] = COVERAGE_REASON.LINK_AUDIT_UNAVAILABLE;
+        } else {
+          cls = COVERAGE_CLASS.COMPLETE;
+          delete areaReasons[area];
+        }
       } else {
+        // complete and legacy partial without unfinished work.
         cls = COVERAGE_CLASS.COMPLETE;
         delete areaReasons[area];
       }

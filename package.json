@@ -13,7 +13,8 @@
     "test": "node --test tests/*.test.js",
     "start": "node services/api/server.js",
     "dev:api": "node services/api/server.js",
-    "release:validate": "node scripts/validate-release.mjs"
+    "release:validate": "node scripts/validate-release.mjs",
+    "benchmark:corpus": "node scripts/benchmark-corpus.mjs"
   },
   "dependencies": {
     "axe-core": "^4.13.0",

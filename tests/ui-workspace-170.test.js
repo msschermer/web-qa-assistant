@@ -54,3 +54,12 @@ test('primary workspace copy avoids internal materiality jargon',()=>{
   assert.doesNotMatch(html,/grouped material issues|>Download JSON</i);
   assert.doesNotMatch(js,/Nothing material found|material finding|Cloud-enhanced summary|Evidence summary/);
 });
+
+test('Scan coverage does not paint none_checked links as degraded',()=>{
+  const js=fs.readFileSync('apps/extension/sidepanel.js','utf8');
+  const css=fs.readFileSync('apps/extension/sidepanel.css','utf8');
+  assert.match(js,/No probeable HTTP links on this page/);
+  assert.doesNotMatch(js,/unavailable\|none\/i/);
+  assert.match(js,/none\[_-]\?checked/);
+  assert.match(css,/data-status=none-checked/);
+});

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Synthetic checkout</title>
+  <meta name="description" content="Synthetic checkout form used to exercise form and interaction coverage.">
+</head>
+<body>
+  <header><a href="/corpus/catalog-many-links.html">Back to catalog</a></header>
+  <main>
+    <h1>Checkout</h1>
+    <form action="/ok/place-order" method="post">
+      <p>
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email">
+      </p>
+      <p>
+        <input name="card" type="text" placeholder="Card number">
+      </p>
+      <p>
+        <label>Notes <textarea name="notes"></textarea></label>
+      </p>
+      <button type="submit">Place order</button>
+    </form>
+    <form action="/ok/promo" method="get">
+      <label for="promo">Promo code</label>
+      <input id="promo" name="promo" type="text">
+      <button type="submit">Apply</button>
+    </form>
+    <button type="button" id="gift-toggle" aria-expanded="false" aria-controls="gift-panel">Gift options</button>
+    <div id="gift-panel" hidden>Gift message field would appear here.</div>
+    <script>
+      document.getElementById('gift-toggle').addEventListener('click', function () {
+        var open = this.getAttribute('aria-expanded') === 'true';
+        this.setAttribute('aria-expanded', open ? 'false' : 'true');
+        document.getElementById('gift-panel').hidden = open;
+      });
+    </script>
+  </main>
+</body>
+</html>
