@@ -25,6 +25,10 @@ function bestOf(rows) {
 
 function groupTitle(lead, size) {
   if (size < 2) return lead.title;
+  const rule = String(lead.ruleId || '');
+  if (rule === 'performance.browser.image-oversized' || lead.rootCauseKey === 'images-oversized') {
+    return `${size} images are substantially oversized for their display size`;
+  }
   const base = String(lead.title || '').replace(/\s*\(\d+\s+instances?\)\s*$/i, '');
   return `${base} (${size} instances)`;
 }

@@ -62,6 +62,7 @@ export function applyFindingPolicy(findings=[],environment={type:'unknown'}){
     const f=clone(original);const signal=f.signal||signalForFinding(f);f.signal=signal;
     f.confidence=normalizeConfidence(f.confidence,'confirmed');
     f.verification=f.verification||{state:f.confidence,method:'normalized finding evidence',attempts:1,evidence:[]};
+    const requestedQuiet=original.frankVisible===false;
     f.frankVisible=true;f.frankPriority=f.category==='fix'?'high':f.category==='review'?'medium':'low';
 
     if(f.confidence==='inconclusive'){
@@ -105,6 +106,11 @@ export function applyFindingPolicy(findings=[],environment={type:'unknown'}){
     if(f.supersededBy){
       f.worthChecking=false;
       return set(f,{visible:false,priority:'quiet',reason:`represented by ${f.supersededBy}`});
+    }
+
+    if(requestedQuiet||(f.rootCauseKey==='images-oversized-mild')||(f.imageMetrics?.magnitude==='mild'&&/image-oversized/.test(f.ruleId||''))){
+      f.worthChecking=f.worthChecking!==false;
+      return set(f,{visible:false,priority:'quiet',category:f.category||'review',severity:f.severity||'low',reason:'mild or scanner-quiet observation retained outside Recommended Order'});
     }
 
     if(/^(ux\.inert-link|ux\.form-no-submit|ux\.input-type-mismatch|seo\.robots-googlebot-conflict|runtime\.uncaught-error|security\.mixed-content-passive|web\.horizontal-overflow|runtime\.resource-failed-cross-origin|ux\.embed-resource-failed|ux\.iframe-missing-title|web\.iframe-title-missing|ux\.disclosure-toggle-failed|ux\.menu-toggle-failed|ux\.controls-target-missing|ux\.disclosure-target-missing|ux\.interaction-restoration-unproven|runtime\.resource-status-inconclusive)$/.test(f.ruleId||'')){
