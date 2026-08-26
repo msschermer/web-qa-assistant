@@ -31,7 +31,10 @@ const HIGH_SIGNAL_TRACE = new Set([
   'local-ai:session-create-failed','local-ai:prompt-rejected','local-ai:prompt-accepted','local-ai:prompt-start'
 ]);
 const PAGE_ERROR_RULES = new Set(['runtime.uncaught-error']);
-const RESOURCE_RULES = new Set(['runtime.script-failed','web.stylesheet-failed','web.image-broken','runtime.font-failed','runtime.resource-failed']);
+const RESOURCE_RULES = new Set([
+  'runtime.script-failed','web.stylesheet-failed','web.image-broken','runtime.font-failed','runtime.resource-failed',
+  'runtime.resource-failed-cross-origin','ux.embed-resource-failed'
+]);
 const CANNED_FALLBACK = {
   LOCAL_AI_REMEDIATION_DRIFT: 'The on-device remediation changed the type of fix instead of improving the verified recommendation.',
   LOCAL_AI_UNAVAILABLE: 'On-device reasoning was not available, so verified guidance was used.',
@@ -325,7 +328,10 @@ function projectPageDiagnostics(report, includeContext) {
       initiator: clip(row.initiator, 40),
       status: Number(row.status) || undefined,
       source: diagnosticUrl(row.source || row.url),
-      sameOrigin: row.sameOrigin === true
+      sameOrigin: row.sameOrigin === true,
+      originClass: clip(row.originClass, 40) || undefined,
+      party: clip(row.party, 40) || undefined,
+      disposition: clip(row.disposition, 40) || undefined
     });
   }
   const securityCount = (report?.linkAudit?.incompleteChecks || []).filter(c => /destination-not-allowed|not-allowed|private-destination/i.test(String(c.reason || ''))).length;
@@ -333,12 +339,35 @@ function projectPageDiagnostics(report, includeContext) {
 
   const errorBound = boundList(errors, DIAGNOSTIC_CAPS.pageErrors);
   const resourceBound = boundList(resources, DIAGNOSTIC_CAPS.failedResources);
+  const embed = report?.page?.embeddedCoverage || {};
+  const interaction = report?.interactionCoverage || {};
+  const psi = report?.psi || {};
   return {
     pageErrors: errorBound,
     failedResources: resourceBound,
     expectedInconclusive: boundList(expectedInconclusive, DIAGNOSTIC_CAPS.links),
     securityBlocks: boundList(securityBlocks, 8),
     coverageLimitation: report?.coverageReasons?.runtime ? { kind: 'coverage_limitation', reason: report.coverageReasons.runtime } : undefined,
+    iframeCoverage: {
+      sameOriginFramesChecked: Number(embed.sameOriginFramesChecked || 0),
+      crossOriginFramesNotInspectable: Number(embed.crossOriginFramesNotInspectable || embed.crossOriginIframes || 0),
+      frameBudgetExceeded: embed.frameBudgetExceeded === true
+    },
+    interactionCoverage: {
+      candidates: Number(interaction.candidates || 0),
+      safelyTested: Number(interaction.safelyTested || 0),
+      skippedUnsafe: Number(interaction.skippedUnsafe || 0),
+      passed: Number(interaction.passed || 0),
+      failed: Number(interaction.failed || 0),
+      partialReason: clip(interaction.partialReason, 80) || undefined
+    },
+    psi: {
+      enabled: psi.enabled === true,
+      attempted: psi.attempted === true,
+      completed: psi.completed === true,
+      unavailableReason: clip(psi.unavailableReason, 80) || undefined,
+      evidenceClass: 'deferred'
+    },
     notes: {
       pageErrors: report?.coverage?.runtime === 'renderer'
         ? 'renderer-pageerror-session'

@@ -285,6 +285,47 @@ export function applyPerformanceCorrelations(findings = [], browserPerformance =
     lcpFinding.rootCauseKey = `lcp-resource:${hash(lcpEl.url)}`;
     lcpFinding.resourceUrl = lcpEl.url;
     if (lcpEl.selector) lcpFinding.selector = lcpFinding.selector || lcpEl.selector;
+    const oversized = out.find(f => f.ruleId === 'performance.browser.lcp-image-oversized');
+    const heavy = out.find(f => f.ruleId === 'performance.browser.lcp-heavy-image');
+    if (oversized || heavy) {
+      const key = `lcp-resource:${hash(lcpEl.url)}`;
+      if (oversized) oversized.rootCauseKey = key;
+      if (heavy) heavy.rootCauseKey = key;
+      // Prefer the composed heavy/oversized lead in Recommended Order; keep bare LCP as twin.
+      if (heavy || oversized) {
+        lcpFinding.supersededBy = heavy ? 'performance.browser.lcp-heavy-image' : 'performance.browser.lcp-image-oversized';
+      }
+    }
+  }
+  const weight = out.find(f => f.ruleId === 'performance.browser.weight');
+  if (weight && Array.isArray(browserPerformance.heaviest) && browserPerformance.heaviest[0]?.bytes) {
+    const top = browserPerformance.heaviest[0];
+    const total = Number(browserPerformance.transferBytes || browserPerformance.transferSize || 0);
+    const bytes = Number(top.bytes || 0);
+    if (total > 0 && bytes / total >= 0.45 && !out.some(f => f.ruleId === 'performance.browser.weight-dominant-resource')) {
+      const key = `weight-resource:${hash(top.name || '')}`;
+      weight.rootCauseKey = key;
+      out.push({
+        id: `performance.browser.weight-dominant-resource:${hash(top.name || '')}`,
+        ruleId: 'performance.browser.weight-dominant-resource',
+        title: 'One resource dominates page weight',
+        detail: `This lab observation recorded elevated transfer weight, and ${top.name || 'one resource'} accounted for about ${Math.round((bytes / total) * 100)}% of measured bytes. Inspect compression, caching, and whether that asset is required for the first view.`,
+        category: 'review',
+        severity: 'medium',
+        confidence: 'inferred',
+        targetType: 'document',
+        sources: ['browser'],
+        evidence: `dominant=${top.name || ''}; bytes=${bytes}; share=${Math.round((bytes / total) * 100)}%`,
+        resourceUrl: top.name || '',
+        performanceObservation: browserPerformance,
+        fingerprint: hash(`weight-dom|${top.name}|${bytes}`),
+        verification: { state: 'inferred', method: 'lab weight composition', attempts: 1, evidence: [] },
+        count: 1,
+        rootCauseKey: key,
+        lenses: ['performance', 'development', 'ux']
+      });
+      weight.supersededBy = 'performance.browser.weight-dominant-resource';
+    }
   }
   return out;
 }
@@ -345,6 +386,15 @@ export function applyRuntimeResourceCorrelations(findings = []) {
     const key = `stylesheet-layout:${hash(cssFailed.map(f => f.resourceUrl || f.evidence).join('|'))}`;
     cssFailed.forEach(f => { f.rootCauseKey = key; });
     overflow.rootCauseKey = overflow.rootCauseKey || key;
+  }
+  const toggleFailed = out.filter(f => f.ruleId === 'ux.disclosure-toggle-failed');
+  if (scriptFailed.length && toggleFailed.length) {
+    // Annotate only — do NOT share rootCauseKey (that would collapse unrelated issues in Recommended Order).
+    const related = scriptFailed.map(s => s.resourceUrl || s.evidence).filter(Boolean).slice(0, 3);
+    toggleFailed.forEach(f => {
+      f.relatedRuntimeFailures = related;
+      f.worthChecking = true;
+    });
   }
   return out;
 }

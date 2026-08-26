@@ -8,8 +8,11 @@
   const TARGET_ATTR='data-web-qa-target';
   const targetFingerprints=new Map();
   const SHADOW_ROOT_BUDGET=80;
+  const SAME_ORIGIN_IFRAME_BUDGET=3;
+  const SAFE_INTERACTION_BUDGET=6;
   let lastResolutionStage='';
   const linkVerificationCache=new Map();
+  let lastInteractionCoverage=null;
 
   function text(value){return String(value??'').trim()}
   function attr(el,name){return text(el?.getAttribute?.(name))}
@@ -43,19 +46,47 @@
     return /^javascript:(?:void(?:\(0?\))?;?|void0;?|;)$/.test(h);
   }
   function hash(input){let h=2166136261;for(let i=0;i<input.length;i++){h^=input.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36)}
+  function hostIframeFor(el){
+    if(!el||!el.ownerDocument||el.ownerDocument===document)return null;
+    try{
+      return[...document.querySelectorAll('iframe')].find(frame=>{
+        try{return frame.contentDocument===el.ownerDocument}catch{return false}
+      })||null;
+    }catch{return null}
+  }
+  function frameContextFor(el){
+    const host=hostIframeFor(el);
+    if(!host)return null;
+    const src=sanitizeHttpUrl(attr(host,'src'))||sanitizeResourceUrl(attr(host,'src'));
+    return{
+      embeddedContext:'same-origin-iframe',
+      frameSelector:selectorFor(host),
+      frameSrc:src,
+      spotlightSafe:false,
+      parentUrl:sanitizeHttpUrl(location.href)||location.origin
+    };
+  }
   function selectorFor(el){
     if(!el||el.nodeType!==1)return'';
-    if(el.id)return`#${CSS.escape(el.id)}`;
-    const parts=[];let node=el;
-    while(node&&node.nodeType===1&&parts.length<6){
-      let part=node.localName;if(!part)break;
-      const classes=[...node.classList].filter(Boolean).slice(0,2);
-      if(classes.length)part+='.'+classes.map(c=>CSS.escape(c)).join('.');
-      const parent=node.parentElement;
-      if(parent){const same=[...parent.children].filter(x=>x.localName===node.localName);if(same.length>1)part+=`:nth-of-type(${same.indexOf(node)+1})`}
-      parts.unshift(part);node=parent;
+    const host=hostIframeFor(el);
+    const local=(()=>{
+      if(el.id)return`#${CSS.escape(el.id)}`;
+      const parts=[];let node=el;
+      while(node&&node.nodeType===1&&parts.length<6){
+        let part=node.localName;if(!part)break;
+        const classes=[...(node.classList||[])].filter(Boolean).slice(0,2);
+        if(classes.length)part+='.'+classes.map(c=>CSS.escape(c)).join('.');
+        const parent=node.parentElement;
+        if(parent){const same=[...parent.children].filter(x=>x.localName===node.localName);if(same.length>1)part+=`:nth-of-type(${same.indexOf(node)+1})`}
+        parts.unshift(part);node=parent;
+      }
+      return parts.join(' > ');
+    })();
+    if(host){
+      const frameSel=selectorFor(host);
+      return frameSel?`${frameSel} >> ${local}`:local;
     }
-    return parts.join(' > ');
+    return local;
   }
   // The marker is an internal implementation detail, so it never reaches
   // evidence, Frank, or a copied snippet.
@@ -95,6 +126,11 @@
   function resolveSelector(selector){return deepQuery(selector)}
   function presentationForElement(el){
     if(!el)return'page';
+    if(el.ownerDocument&&el.ownerDocument!==document){
+      // Interior iframe nodes are not safely spotlightable in the parent page;
+      // Frank should treat them as markup/document guidance with frame context.
+      return'document';
+    }
     if(document.head?.contains(el)||['META','LINK','TITLE','SCRIPT','STYLE'].includes(el.tagName))return'document';
     return document.body?.contains(el)?'visual':'page';
   }
@@ -252,11 +288,13 @@
   }
   function finding({ruleId,title,detail,category='review',severity='medium',selector='',element=null,targetType='',evidence='',sources=['browser'],wcag=[],helpUrl='',count=1,confidence='confirmed',verification=null,extra={}}){
     const resolved=element||resolveSelector(selector);
+    const frameCtx=resolved?frameContextFor(resolved):null;
     const finalSelector=selector||selectorFor(resolved);
     const presentation=targetType||presentationForElement(resolved);
     const fingerprint=hash(`${ruleId}|${finalSelector}|${clip(evidence,220)}`);
-    const targetId=presentation==='visual'&&resolved?registerTarget(resolved,`${ruleId}|${fingerprint}`):'';
-    return {id:`${ruleId}:${fingerprint}`,ruleId,title,detail,category,severity,selector:finalSelector,targetId,targetType:presentation,evidence:clip(evidence,520),sources,wcag,helpUrl,count,fingerprint,confidence,verification:verification||{state:confidence,method:'deterministic browser observation',attempts:1,evidence:[]},...extra};
+    const targetId=presentation==='visual'&&resolved&&!frameCtx?registerTarget(resolved,`${ruleId}|${fingerprint}`):'';
+    const merged={...(frameCtx||{}),...extra};
+    return {id:`${ruleId}:${fingerprint}`,ruleId,title,detail,category,severity,selector:finalSelector,targetId,targetType:presentation,evidence:clip(evidence,520),sources,wcag,helpUrl,count,fingerprint,confidence,verification:verification||{state:confidence,method:'deterministic browser observation',attempts:1,evidence:[]},...merged};
   }
   function headingSkip(headings){let previous=null;for(const h of headings){const level=Number(h.tagName.slice(1));if(previous&&level>previous+1)return h;previous=level}return null}
   function schemaState(){
@@ -351,11 +389,24 @@
     findings.push(...malformedLinkFindings());
     findings.push(...embeddedFindings());
     findings.push(...interactionFindings());
+    findings.push(...safeInteractionFindings());
     findings.push(...soft404Findings(page));
     findings.push(...schemaSemanticFindings(schemaState()));
 
     findings.sort((a,b)=>(CATEGORY_RANK[b.category]-CATEGORY_RANK[a.category])||(SEVERITY_RANK[b.severity]-SEVERITY_RANK[a.severity]));
-    return{scannedAt:new Date().toISOString(),page,findings,browserPerformance,diagnostics:{failedResources:diagnosticFailedResources()},pageDiagnostics:{errors:(globalThis.__WEBQA_PAGE_DIAGNOSTICS__?.errors||globalThis.__WEBQA_RUNTIME_ERRORS__?.samples||[]).slice(0,20)},coverage:{browser:'complete',links:'pending',axe:'pending',published:'pending',performance:browserPerformance.available?'current-page':'pending',wcag:'pending',ai:'pending',runtime:globalThis.__WEBQA_RUNTIME_ERRORS__?.source==='renderer'?'renderer':globalThis.__WEBQA_PAGE_DIAGNOSTICS__?.errors?.length?'extension-partial':globalThis.__WEBQA_RUNTIME_ERRORS__?'extension-partial':'not applicable'}};
+    const coverageMeta={
+      browser:'complete',links:'pending',axe:'pending',published:'pending',
+      performance:browserPerformance.available?'current-page':'pending',wcag:'pending',ai:'pending',
+      runtime:globalThis.__WEBQA_RUNTIME_ERRORS__?.source==='renderer'?'renderer':globalThis.__WEBQA_PAGE_DIAGNOSTICS__?.errors?.length?'extension-partial':globalThis.__WEBQA_RUNTIME_ERRORS__?'extension-partial':'not applicable'
+    };
+    return{
+      scannedAt:new Date().toISOString(),page,findings,browserPerformance,
+      diagnostics:{failedResources:diagnosticFailedResources()},
+      pageDiagnostics:{errors:(globalThis.__WEBQA_PAGE_DIAGNOSTICS__?.errors||globalThis.__WEBQA_RUNTIME_ERRORS__?.samples||[]).slice(0,20)},
+      coverage:coverageMeta,
+      interactionCoverage:lastInteractionCoverage,
+      psi:{enabled:false,attempted:false,completed:false,unavailableReason:'deferred-native-lab-sufficient'}
+    };
   }
 
   // Semantic context is what lets Frank reason about the correct implementation
@@ -739,55 +790,114 @@
       extra:{worthChecking:true,overflowMetrics:{viewportWidth,scrollWidth,overflowPx}}
     })];
   }
+  function classifyResourceRole(url,initiator=''){
+    const path=(()=>{try{return new URL(url).pathname||''}catch{return String(url||'')}})();
+    const init=String(initiator||'');
+    if(init==='script'||/\.m?js$/i.test(path))return'script';
+    if(/\.css$/i.test(path))return'stylesheet';
+    if(init==='font'||/\.(woff2?|ttf|otf|eot)$/i.test(path))return'font';
+    if(init==='img'||/\.(png|jpe?g|gif|webp|avif|svg)$/i.test(path))return'image';
+    if(init==='css'||init==='link'){
+      try{
+        const cleaned=sanitizeHttpUrl(url);
+        if(cleaned&&[...document.querySelectorAll('link[rel~="stylesheet"]')].some(node=>sanitizeHttpUrl(attr(node,'href'))===cleaned))return'stylesheet';
+      }catch{}
+      return'';
+    }
+    return'';
+  }
+  function classifyResourceParty(url){
+    let parsed;try{parsed=new URL(url,location.href)}catch{return{party:'unknown',originClass:'unknown',noise:true}}
+    const host=parsed.hostname.toLowerCase();
+    const path=parsed.pathname.toLowerCase();
+    const sameOrigin=parsed.origin===location.origin;
+    const tracking=/\b(google-analytics|googletagmanager|gtag|doubleclick|facebook\.net|connect\.facebook|hotjar|segment\.|mixpanel|amplitude|newrelic|nr-data|sentry\.io|clarity\.ms|adservice|adsystem|scorecardresearch|quantserve|taboola|outbrain|criteo)\b/i.test(host)
+      ||/\/(collect|pixel|beacon|analytics|gtm\.js|fbevents)\b/i.test(path)
+      ||/\.(gif|png)$/i.test(path)&&/\/(pixel|track|beacon|collect)\b/i.test(path);
+    if(tracking)return{party:'third-party',originClass:'tracking',noise:true,roleHint:'analytics'};
+    const embed=/youtube\.com|youtube-nocookie\.com|youtu\.be|player\.vimeo\.com|vimeo\.com|maps\.google|google\.com\/maps|openstreetmap|js\.stripe\.com|checkout\.stripe|calendly\.com|typeform\.com|formstack|hubspot|intercom\.io|drift\.com|zendesk|twitter\.com|platform\.twitter|instagram\.com|tiktok\.com|linkedin\.com/i.test(host)
+      ||(!sameOrigin&&/\/embed\//i.test(path));
+    if(embed)return{party:'third-party',originClass:'embed-provider',noise:false,roleHint:'embed'};
+    if(sameOrigin)return{party:'first-party',originClass:'same-origin',noise:false};
+    const cdn=/\b(cdn\.|static\.|assets\.|media\.|img\.|images\.|fonts\.|cloudfront\.net|akamai|fastly|jsdelivr|unpkg|cloudflare)\b/i.test(host)
+      ||host.endsWith(`.${location.hostname}`)
+      ||(location.hostname.split('.').length>=2&&host.endsWith(`.${location.hostname.split('.').slice(-2).join('.')}`)&&/cdn|static|assets|media|img|fonts/i.test(host));
+    if(cdn)return{party:'first-party-cdn',originClass:'first-party-cdn',noise:false};
+    return{party:'third-party',originClass:'third-party',noise:false};
+  }
+  function visibleDependencyFor(url,kind){
+    if(!url||!kind)return false;
+    try{
+      if(kind==='script')return[...document.querySelectorAll('script[src]')].some(n=>sanitizeHttpUrl(attr(n,'src'))===url);
+      if(kind==='stylesheet')return[...document.querySelectorAll('link[rel~="stylesheet"]')].some(n=>sanitizeHttpUrl(attr(n,'href'))===url);
+      if(kind==='font')return[...document.querySelectorAll('link[rel="preload"][as="font"],link[href*=".woff"],style')].length>0;
+      if(kind==='image')return[...document.querySelectorAll('img[src],img[srcset]')].some(n=>sanitizeHttpUrl(attr(n,'src'))===url||String(attr(n,'srcset')).includes(new URL(url).pathname));
+    }catch{}
+    return false;
+  }
   function resourceFailureFindings(){
     const out=[];
     let resources=[];
     try{resources=performance.getEntriesByType('resource')||[]}catch{return out}
     const failed=new Map();
+    let crossOriginEmitted=0;
     for(const entry of resources){
       const status=Number(entry.responseStatus);
       if(!Number.isFinite(status)||status<400)continue;
       let parsed;try{parsed=new URL(entry.name)}catch{continue}
-      if(parsed.origin!==location.origin)continue;
       const url=sanitizeHttpUrl(entry.name);if(!url)continue;
-      const initiator=String(entry.initiatorType||'');
-      const path=parsed.pathname||'';
-      let kind='';
-      if(initiator==='script'||/\.m?js$/i.test(path))kind='script';
-      else if(/\.css$/i.test(path))kind='stylesheet';
-      else if(initiator==='css'||initiator==='link'){
-        try{
-          if([...document.querySelectorAll('link[rel~="stylesheet"]')].some(node=>sanitizeHttpUrl(attr(node,'href'))===url))kind='stylesheet';
-        }catch{}
-      }
-      else if(initiator==='img'||/\.(png|jpe?g|gif|webp|avif|svg)$/i.test(path))kind='image';
-      else if(initiator==='font'||/\.(woff2?|ttf|otf|eot)$/i.test(path))kind='font';
+      const kind=classifyResourceRole(entry.name,entry.initiatorType);
       if(!kind)continue;
-      if(!failed.has(url))failed.set(url,{url,kind,status});
+      const party=classifyResourceParty(entry.name);
+      if(!failed.has(url))failed.set(url,{url,kind,status,sameOrigin:parsed.origin===location.origin,party});
     }
     for(const row of failed.values()){
-      const selector=row.kind==='script'?'script[src]':row.kind==='stylesheet'?'link[rel~="stylesheet"]':row.kind==='font'?'link[rel="preload"][as="font"],link[href*=".woff"]':row.kind==='image'?'img[src]':null;
-      let el=null;
-      if(selector){
-        try{
-          el=[...document.querySelectorAll(selector)].find(node=>{
-            const attrName=row.kind==='script'?'src':'href';
-            const nodeUrl=sanitizeHttpUrl(attr(node,attrName)||attr(node,'src'));
-            return nodeUrl===row.url;
-          })||null;
-        }catch{}
+      if(row.sameOrigin){
+        const selector=row.kind==='script'?'script[src]':row.kind==='stylesheet'?'link[rel~="stylesheet"]':row.kind==='font'?'link[rel="preload"][as="font"],link[href*=".woff"]':row.kind==='image'?'img[src]':null;
+        let el=null;
+        if(selector){
+          try{
+            el=[...document.querySelectorAll(selector)].find(node=>{
+              const attrName=row.kind==='script'||row.kind==='image'?'src':'href';
+              const nodeUrl=sanitizeHttpUrl(attr(node,attrName)||attr(node,'src'));
+              return nodeUrl===row.url;
+            })||null;
+          }catch{}
+        }
+        const inHead=el&&document.head?.contains(el);
+        const ruleId=row.kind==='script'?'runtime.script-failed':row.kind==='stylesheet'?'web.stylesheet-failed':row.kind==='font'?'runtime.font-failed':row.kind==='image'?'web.image-broken':'runtime.resource-failed';
+        const title=row.kind==='script'?'Script failed to load':row.kind==='stylesheet'?'Stylesheet failed to load':row.kind==='font'?'Font failed to load':row.kind==='image'?'Image resource failed to load':'Resource failed to load';
+        out.push(finding({
+          ruleId,title,
+          detail:`A same-origin ${row.kind} request for ${row.url} completed with HTTP ${row.status}. Restore the asset or remove the unused reference.`,
+          category:'fix',severity:row.kind==='font'?'medium':'high',confidence:'confirmed',
+          element:inHead?null:el,targetType:inHead||!el?'document':'visual',
+          evidence:`http-${row.status} ${row.url}`,
+          extra:{resourceUrl:row.url,originClass:row.party.originClass,party:row.party.party,resourceRole:row.kind,visibleDependency:true,resourceDisposition:'confirmed'}
+        }));
+        continue;
       }
-      const inHead=el&&document.head?.contains(el);
-      const ruleId=row.kind==='script'?'runtime.script-failed':row.kind==='stylesheet'?'web.stylesheet-failed':row.kind==='font'?'runtime.font-failed':row.kind==='image'?'web.image-broken':'runtime.resource-failed';
-      const title=row.kind==='script'?'Script failed to load':row.kind==='stylesheet'?'Stylesheet failed to load':row.kind==='font'?'Font failed to load':row.kind==='image'?'Image resource failed to load':'Resource failed to load';
+      // Cross-origin: diagnostics always; findings only for non-noise with known role and visible dependency (or embed-provider).
+      if(row.party.noise)continue;
+      if(crossOriginEmitted>=4)continue;
+      const visible=visibleDependencyFor(row.url,row.kind);
+      const isEmbed=row.party.originClass==='embed-provider';
+      if(!visible&&!isEmbed)continue;
+      const ruleId=isEmbed?'ux.embed-resource-failed':'runtime.resource-failed-cross-origin';
       out.push(finding({
         ruleId,
-        title,
-        detail:`A same-origin ${row.kind} request for ${row.url} completed with HTTP ${row.status}. Restore the asset or remove the unused reference.`,
-        category:'fix',severity:row.kind==='font'?'medium':'high',confidence:'confirmed',
-        element:inHead?null:el,targetType:inHead||!el?'document':'visual',
-        evidence:`http-${row.status} ${row.url}`,extra:{resourceUrl:row.url}
+        title:isEmbed?'Embedded third-party resource failed to load':'Cross-origin resource failed to load',
+        detail:isEmbed
+          ?`A third-party embed-related ${row.kind} request for ${row.url} completed with HTTP ${row.status}. Impact depends on whether the visible embed depends on this asset; treat as Worth Checking rather than a confirmed page defect.`
+          :`A cross-origin ${row.kind} request for ${row.url} completed with HTTP ${row.status}. This may affect page features when the asset is required, but cross-origin failures are often blocked by privacy tools or expected CDN conditions — confirm impact before treating it as a defect.`,
+        category:'review',severity:'low',confidence:'inferred',targetType:'document',
+        evidence:`http-${row.status} ${row.url}; origin=${row.party.originClass}`,
+        extra:{
+          worthChecking:true,resourceUrl:row.url,originClass:row.party.originClass,party:row.party.party,
+          resourceRole:row.kind,visibleDependency:visible,resourceDisposition:'worthChecking'
+        }
       }));
+      crossOriginEmitted++;
     }
     return out;
   }
@@ -801,7 +911,14 @@
       if(!Number.isFinite(status)||status<400)continue;
       const url=sanitizeHttpUrl(entry.name);if(!url)continue;
       let parsed=null;try{parsed=new URL(entry.name)}catch{}
-      out.push({kind:'resource_failure',initiator:String(entry.initiatorType||'other').slice(0,40),status,source:url,sameOrigin:parsed?parsed.origin===location.origin:false});
+      const party=classifyResourceParty(entry.name);
+      const kind=classifyResourceRole(entry.name,entry.initiatorType)||String(entry.initiatorType||'other').slice(0,40);
+      out.push({
+        kind:'resource_failure',initiator:kind,status,source:url,
+        sameOrigin:parsed?parsed.origin===location.origin:false,
+        originClass:party.originClass,party:party.party,noise:Boolean(party.noise),
+        disposition:party.noise?'diagnosticOnly':(parsed&&parsed.origin===location.origin?'confirmed':'worthChecking')
+      });
     }
     return out;
   }
@@ -882,21 +999,39 @@
   }
   function collectEmbeddedCoverage(){
     const iframes=[...document.querySelectorAll('iframe')];
-    let sameOrigin=0,crossOrigin=0,accessible=0,openShadowRoots=shadowRoots().length;
+    let sameOrigin=0,crossOrigin=0,accessible=0,frameBudgetExceeded=false;
+    let sameOriginChecked=0;
+    const openShadowRoots=shadowRoots().length;
     for(const frame of iframes){
       const src=attr(frame,'src');
-      if(!src){crossOrigin++;continue}
+      const srcdoc=attr(frame,'srcdoc');
+      // srcdoc / blank / about:blank are same-document embeds when contentDocument is readable.
+      if(!src&&!srcdoc){
+        try{
+          if(frame.contentDocument){sameOrigin++;accessible++;continue}
+        }catch{}
+        crossOrigin++;
+        continue;
+      }
       try{
-        const u=new URL(src,location.href);
-        if(u.origin===location.origin){sameOrigin++;if(frame.contentDocument)accessible++}
-        else crossOrigin++;
+        const u=src?new URL(src,location.href):null;
+        const isSame=srcdoc||(u&&(u.origin===location.origin||u.protocol==='about:'));
+        if(isSame){
+          sameOrigin++;
+          try{if(frame.contentDocument)accessible++}catch{}
+        }else crossOrigin++;
       }catch{crossOrigin++}
     }
+    sameOriginChecked=Math.min(accessible,SAME_ORIGIN_IFRAME_BUDGET);
+    if(accessible>SAME_ORIGIN_IFRAME_BUDGET)frameBudgetExceeded=true;
     return{
       iframeCount:iframes.length,
       sameOriginIframes:sameOrigin,
       accessibleSameOriginIframes:accessible,
+      sameOriginFramesChecked:sameOriginChecked,
       crossOriginIframes:crossOrigin,
+      crossOriginFramesNotInspectable:crossOrigin,
+      frameBudgetExceeded,
       openShadowRoots,
       closedShadowRoots:'not observable',
       fragmentTargets:'top-document, open shadow roots, and same-origin iframe documents when accessible'
@@ -958,39 +1093,286 @@
       evidence:`soft-404-signals=${signals}; title=${clip(page.title||'',80)}`,extra:{worthChecking:true,soft404Signals:signals}
     })];
   }
+  function formFindingsInDocument(doc,{frame=null,budget=4}={}){
+    const out=[];
+    if(!doc)return out;
+    const push=(row)=>{if(out.length<budget)out.push(row)};
+    try{
+      doc.querySelectorAll('form form').forEach(inner=>{
+        push(finding({
+          ruleId:'web.nested-form',
+          title:'A form is nested inside another form',
+          detail:frame
+            ?'Inside an embedded same-origin document, a form is nested inside another form. Nested forms are invalid HTML.'
+            :'The live DOM contains a form inside a form. Nested forms are invalid HTML and browsers may ignore the inner form or attach controls to the outer form.',
+          category:'fix',severity:'medium',confidence:'confirmed',element:inner,evidence:'nested-form'
+        }));
+      });
+      doc.querySelectorAll('form').forEach(form=>{
+        const actionRaw=attr(form,'action');
+        if(!actionRaw)return;
+        let action;try{action=new URL(actionRaw,doc.defaultView?.location?.href||location.href)}catch{return}
+        if(!/^https?:$/.test(action.protocol))return;
+        if(formHasSubmitter(form))return;
+        const fields=[...form.querySelectorAll('input,select,textarea')].filter(el=>{
+          const type=attr(el,'type').toLowerCase();
+          return type!=='hidden'&&type!=='submit'&&type!=='button'&&type!=='image'&&type!=='reset';
+        });
+        if(fields.length<=1)return;
+        push(finding({
+          ruleId:'ux.form-no-submit',
+          title:'HTML form has an action but no submit control',
+          detail:frame
+            ?`Inside an embedded same-origin document, a form posts to ${sanitizeHttpUrl(action.href)||'an HTTP(S) action'} with ${fields.length} visible fields and no native submit control.`
+            :`A form posts to ${sanitizeHttpUrl(action.href)||'an HTTP(S) action'} and has ${fields.length} visible fields, but no native submit control or button was observed. Scripted submit was not verified, so this is not treated as a confirmed broken form.`,
+          category:'review',severity:'low',confidence:'inferred',targetType:'document',
+          evidence:sanitizeHttpUrl(action.href),
+          extra:{worthChecking:true,resourceUrl:sanitizeHttpUrl(action.href),...(frame?{embeddedContext:'same-origin-iframe',frameSelector:selectorFor(frame),spotlightSafe:false}:{})}
+        }));
+      });
+      doc.querySelectorAll('input[type="hidden" i][required],input[type="hidden" i][aria-required="true" i]').forEach(input=>{
+        const name=attr(input,'name').slice(0,80);
+        push(finding({
+          ruleId:'ux.hidden-required',
+          title:'A hidden input is marked required',
+          detail:`A type=hidden input${name?` named "${name}"`:''}${frame?' inside an embedded same-origin document':''} is marked required.`,
+          category:'review',severity:'medium',confidence:'inferred',targetType:'document',
+          evidence:name?`type=hidden; required; name=${name}`:'type=hidden; required',
+          extra:frame?{embeddedContext:'same-origin-iframe',frameSelector:selectorFor(frame),spotlightSafe:false}:{}
+        }));
+      });
+      doc.querySelectorAll('form input, form select, form textarea').forEach(field=>{
+        const type=attr(field,'type').toLowerCase();
+        if(type==='hidden'||type==='submit'||type==='button'||type==='image'||type==='reset')return;
+        const name=attr(field,'name');
+        const labelled=field.id&&doc.querySelector(`label[for="${CSS.escape(field.id)}"]`);
+        const aria=attr(field,'aria-label')||attr(field,'aria-labelledby');
+        const placeholder=attr(field,'placeholder');
+        if(!labelled&&!aria&&placeholder){
+          push(finding({
+            ruleId:'ux.placeholder-only-label',
+            title:'Form control relies on placeholder text alone',
+            detail:frame
+              ?'Inside an embedded same-origin document, a form control uses placeholder text without an associated label or aria-label.'
+              :'A visible form control uses placeholder text without an associated label or aria-label. Placeholders disappear on input and are weak accessible names.',
+            category:'review',severity:'medium',confidence:'inferred',element:field,
+            evidence:`placeholder=${clip(placeholder,80)}`,extra:{worthChecking:true}
+          }));
+        }
+        if(!name&&field.closest('form[action]')){
+          const rect=field.getBoundingClientRect?.();
+          if(rect&&rect.width>0&&rect.height>0){
+            push(finding({
+              ruleId:'ux.form-control-missing-name',
+              title:'Submittable control has no name attribute',
+              detail:frame
+                ?'Inside an embedded same-origin document, a visible form control inside a form with an action has no name attribute.'
+                :'A visible form control inside a form with an HTTP(S) action has no name attribute, so submitted data may omit this field.',
+              category:'review',severity:'low',confidence:'inferred',element:field,
+              evidence:`type=${type||field.localName}`,extra:{worthChecking:true}
+            }));
+          }
+        }
+      });
+    }catch{}
+    return out;
+  }
   function embeddedFindings(){
     const out=[],seen=new Set();
-    for(const frame of document.querySelectorAll('iframe[src]')){
+    let framesInspected=0;
+    for(const frame of document.querySelectorAll('iframe')){
       const src=attr(frame,'src');
-      if(!src||seen.has(src))continue;
-      seen.add(src);
-      let parsed;try{parsed=new URL(src,location.href)}catch{continue}
+      const srcdoc=attr(frame,'srcdoc');
+      if(src&&seen.has(src))continue;
+      if(src)seen.add(src);
+      let parsed=null;
+      if(src){try{parsed=new URL(src,location.href)}catch{continue}}
       const title=attr(frame,'title');
-      const meaningful=parsed.pathname.length>1||parsed.search;
+      const meaningful=srcdoc||(parsed&&(parsed.pathname.length>1||parsed.search));
       if(meaningful&&!title.trim()&&Number(frame.clientWidth||0)>=120&&Number(frame.clientHeight||0)>=80){
+        const party=src?classifyResourceParty(src):{originClass:'same-origin',party:'first-party'};
         out.push(finding({
           ruleId:'ux.iframe-missing-title',
           title:'Embedded frame has no title',
           detail:'A visible iframe lacks a title attribute. Accessible names help screen-reader users understand embedded content.',
           category:'review',severity:'low',confidence:'inferred',element:frame,
-          evidence:sanitizeHttpUrl(parsed.href)||src,extra:{worthChecking:true}
+          evidence:sanitizeHttpUrl(parsed?.href)||src||'srcdoc',
+          extra:{worthChecking:true,originClass:party.originClass,party:party.party,embedRole:party.roleHint||'iframe'}
         }));
       }
+      let doc=null;
+      try{doc=frame.contentDocument}catch{doc=null}
+      if(!doc)continue;
+      if(framesInspected>=SAME_ORIGIN_IFRAME_BUDGET)continue;
+      framesInspected++;
+      const frameSel=selectorFor(frame);
+      const lang=attr(doc.documentElement,'lang');
+      if(!lang){
+        out.push(finding({
+          ruleId:'a11y.lang-missing',
+          title:'Embedded document language is missing',
+          detail:'Inside an embedded same-origin document, the root html element has no lang attribute.',
+          category:'fix',severity:'medium',confidence:'confirmed',element:doc.documentElement,targetType:'document',
+          evidence:'iframe-html-lang-missing',wcag:['3.1.1'],
+          extra:{embeddedContext:'same-origin-iframe',frameSelector:frameSel,spotlightSafe:false}
+        }));
+      }else{
+        try{new Intl.Locale(lang)}catch{
+          out.push(finding({
+            ruleId:'a11y.lang-invalid',
+            title:'Embedded document language is not a valid language tag',
+            detail:`Inside an embedded same-origin document, html lang="${clip(lang,40)}" is not a valid BCP 47 language tag.`,
+            category:'fix',severity:'medium',confidence:'confirmed',element:doc.documentElement,targetType:'document',
+            evidence:lang,wcag:['3.1.1'],
+            extra:{embeddedContext:'same-origin-iframe',frameSelector:frameSel,spotlightSafe:false}
+          }));
+        }
+      }
+      if(!text(doc.title)){
+        out.push(finding({
+          ruleId:'web.iframe-title-missing',
+          title:'Embedded document has no title',
+          detail:'Inside an embedded same-origin document, the document title is empty. This affects assistive technology context for the framed experience.',
+          category:'review',severity:'low',confidence:'inferred',targetType:'document',
+          evidence:'iframe-document-title-empty',
+          extra:{worthChecking:true,embeddedContext:'same-origin-iframe',frameSelector:frameSel,spotlightSafe:false}
+        }));
+      }
+      out.push(...formFindingsInDocument(doc,{frame,budget:4}));
+      const broken=[...doc.querySelectorAll('img[src]')].filter(img=>img.complete&&Number(img.naturalWidth)===0&&Number(img.naturalHeight)===0).slice(0,2);
+      for(const img of broken){
+        out.push(finding({
+          ruleId:'web.image-broken',
+          title:'Image failed to load inside same-origin iframe',
+          detail:'Inside an embedded same-origin document, an image completed loading with naturalWidth 0.',
+          category:'fix',severity:'medium',confidence:'confirmed',element:img,targetType:'document',
+          evidence:sanitizeResourceUrl(img.currentSrc||img.src||''),
+          extra:{resourceUrl:sanitizeResourceUrl(img.currentSrc||img.src||''),embeddedContext:'same-origin-iframe',frameSelector:frameSel,spotlightSafe:false}
+        }));
+      }
+      for(const btn of doc.querySelectorAll('button[aria-expanded], [role="button"][aria-expanded]')){
+        const expanded=attr(btn,'aria-expanded');
+        const panelId=attr(btn,'aria-controls');
+        if(!panelId||expanded!=='false')continue;
+        let present=false;
+        try{present=!!(doc.getElementById(panelId)||doc.querySelector(`[name="${CSS.escape(panelId)}"]`))}catch{}
+        if(present)continue;
+        out.push(finding({
+          ruleId:'ux.disclosure-target-missing',
+          title:'Collapsed control points at a missing panel',
+          detail:'Inside an embedded same-origin document, a disclosure control is collapsed but its aria-controls target was not found.',
+          category:'review',severity:'medium',confidence:'inferred',element:btn,targetType:'document',
+          evidence:`aria-controls=${panelId}`,
+          extra:{worthChecking:true,embeddedContext:'same-origin-iframe',frameSelector:frameSel,spotlightSafe:false}
+        }));
+      }
+    }
+    return out;
+  }
+  function isUnsafeInteractionTarget(el){
+    if(!el||el.nodeType!==1)return true;
+    if(el.closest?.('form'))return true;
+    if(el.matches?.('a[href]:not([href^="#"]),a[download],input,select,textarea,button[type="submit"]'))return true;
+    const label=`${attr(el,'aria-label')} ${clip(el.textContent,80)} ${String(el.className||'')} ${attr(el,'id')}`.toLowerCase();
+    if(/\b(buy|purchase|checkout|pay|delete|remove|logout|log out|sign out|sign in|signin|log in|login|unsubscribe|submit|send message|contact us|download|install|share|tweet|post|add to cart|place order|donate|subscribe|register|create account)\b/i.test(label))return true;
+    if(attr(el,'type').toLowerCase()==='submit')return true;
+    return false;
+  }
+  function panelVisibility(doc,panelId){
+    if(!doc||!panelId)return{found:false,visible:false};
+    let el=null;
+    try{el=doc.getElementById(panelId)||doc.querySelector(`[name="${CSS.escape(panelId)}"]`)}catch{return{found:false,visible:false}}
+    if(!el)return{found:false,visible:false};
+    try{
+      const style=doc.defaultView?.getComputedStyle?.(el)||getComputedStyle(el);
+      const rect=el.getBoundingClientRect?.()||{width:0,height:0};
+      const hidden=style.display==='none'||style.visibility==='hidden'||(style.opacity!==''&&Number(style.opacity)===0)||attr(el,'hidden')!==''||attr(el,'aria-hidden')==='true';
+      return{found:true,visible:!hidden&&(rect.width>0||rect.height>0||attr(el,'aria-hidden')!=='true')};
+    }catch{return{found:true,visible:true}}
+  }
+  function safeInteractionFindings(){
+    const out=[];
+    const coverage={
+      candidates:0,safelyTested:0,skippedUnsafe:0,skippedIneligible:0,passed:0,failed:0,
+      partialReason:'',topDocumentOnly:true,iframeDisclosures:'static-only'
+    };
+    lastInteractionCoverage=coverage;
+    const candidates=[];
+    const allDisclosure=[...document.querySelectorAll('button[aria-expanded][aria-controls], [role="button"][aria-expanded][aria-controls]')];
+    for(const btn of allDisclosure){
+      coverage.candidates++;
+      const panelId=attr(btn,'aria-controls').split(/\s+/).filter(Boolean)[0];
+      if(!panelId){coverage.skippedIneligible++;continue}
+      if(isUnsafeInteractionTarget(btn)){coverage.skippedUnsafe++;continue}
+      if(!resolveFragmentTarget(panelId)){coverage.skippedIneligible++;continue}
+      candidates.push(btn);
+      if(candidates.length>=SAFE_INTERACTION_BUDGET)break;
+    }
+    if(allDisclosure.length>SAFE_INTERACTION_BUDGET)coverage.partialReason='interaction-budget-exceeded';
+    if(!candidates.length){
+      coverage.partialReason=coverage.partialReason||(coverage.candidates?'no-safe-reversible-candidates':'no-disclosure-candidates');
+      return out;
+    }
+    for(const btn of candidates){
+      const panelId=attr(btn,'aria-controls').split(/\s+/).filter(Boolean)[0];
+      const initialExpanded=attr(btn,'aria-expanded');
+      if(initialExpanded!=='false'&&initialExpanded!=='true'){coverage.skippedIneligible++;continue}
+      const before=panelVisibility(document,panelId);
+      const expectedExpanded=initialExpanded==='false'?'true':'false';
+      coverage.safelyTested++;
+      let clickOk=false;
       try{
-        if(parsed.origin===location.origin&&frame.contentDocument){
-          const doc=frame.contentDocument;
-          const broken=[...doc.querySelectorAll('img[src]')].filter(img=>img.complete&&Number(img.naturalWidth)===0&&Number(img.naturalHeight)===0).slice(0,2);
-          for(const img of broken){
-            out.push(finding({
-              ruleId:'web.image-broken',
-              title:'Image failed to load inside same-origin iframe',
-              detail:'An image inside an accessible same-origin iframe completed loading with naturalWidth 0.',
-              category:'fix',severity:'medium',confidence:'confirmed',element:img,
-              evidence:sanitizeResourceUrl(img.currentSrc||img.src||''),extra:{resourceUrl:sanitizeResourceUrl(img.currentSrc||img.src||''),embeddedContext:'same-origin-iframe'}
-            }));
+        if(typeof btn.click==='function')btn.click();
+        else btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));
+        clickOk=true;
+      }catch{clickOk=false}
+      const afterExpanded=attr(btn,'aria-expanded');
+      const after=panelVisibility(document,panelId);
+      const changed=afterExpanded===expectedExpanded||(initialExpanded==='false'&&after.visible&&!before.visible)||(initialExpanded==='true'&&!after.visible&&before.visible);
+      let restored=false;
+      try{
+        if(changed&&attr(btn,'aria-expanded')!==initialExpanded){
+          if(typeof btn.click==='function')btn.click();
+        }
+        if(attr(btn,'aria-expanded')!==initialExpanded)btn.setAttribute('aria-expanded',initialExpanded);
+        // Restore panel visibility/hidden to the pre-click observation when possible.
+        const panel=document.getElementById(panelId)||document.querySelector(`[name="${CSS.escape(panelId)}"]`);
+        if(panel){
+          if(before.visible===false){
+            panel.setAttribute('hidden','');
+            if(attr(panel,'aria-hidden')==='false')panel.setAttribute('aria-hidden','true');
+          }else{
+            panel.removeAttribute('hidden');
+            if(attr(panel,'aria-hidden')==='true')panel.removeAttribute('aria-hidden');
           }
         }
-      }catch{}
+        const restoredVis=panelVisibility(document,panelId);
+        restored=attr(btn,'aria-expanded')===initialExpanded&&restoredVis.visible===before.visible;
+      }catch{restored=false}
+      const observation={
+        interactionType:'disclosure-toggle',
+        initialState:{ariaExpanded:initialExpanded,panelVisible:before.visible},
+        expectedState:{ariaExpanded:expectedExpanded},
+        observedState:{ariaExpanded:afterExpanded,panelVisible:after.visible,clickDispatched:clickOk},
+        restoredState:{ariaExpanded:attr(btn,'aria-expanded'),panelVisible:panelVisibility(document,panelId).visible,restored},
+        confidence:changed?'confirmed':'inferred',
+        failureReason:changed?'':(!clickOk?'click-dispatch-failed':'no-state-change')
+      };
+      if(changed){coverage.passed++;continue}
+      coverage.failed++;
+      out.push(finding({
+        ruleId:'ux.disclosure-toggle-failed',
+        title:'Disclosure control did not change state when activated',
+        detail:`A safe local disclosure control was activated in a non-destructive check. Expected aria-expanded to become "${expectedExpanded}" (or the controlled panel visibility to change), but no qualifying state change was observed. This does not identify the exact JavaScript root cause.`,
+        category:'review',severity:'medium',confidence:'inferred',element:btn,
+        evidence:`interaction=disclosure-toggle; initial=${initialExpanded}; observed=${afterExpanded}; restored=${restored}`,
+        extra:{worthChecking:true,interactionObservation:observation}
+      }));
+    }
+    if(!coverage.partialReason){
+      if(coverage.safelyTested&&coverage.failed===0)coverage.partialReason='top-document-disclosures-only';
+      else if(!coverage.safelyTested)coverage.partialReason=coverage.partialReason||'none-tested';
+      else coverage.partialReason='top-document-disclosures-only';
     }
     return out;
   }
@@ -1109,7 +1491,16 @@
     for(let i=0;i<path.length;i++){
       try{el=root.querySelector(path[i])}catch{return null}
       if(!el)return null;
-      if(i<path.length-1){if(!el.shadowRoot)return null;root=el.shadowRoot}
+      if(i<path.length-1){
+        if(el.shadowRoot){root=el.shadowRoot;continue}
+        if(el.localName==='iframe'){
+          try{
+            if(el.contentDocument){root=el.contentDocument;continue}
+          }catch{return null}
+          return null;
+        }
+        return null;
+      }
     }
     return el;
   }

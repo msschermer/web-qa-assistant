@@ -36,7 +36,7 @@ const SIGNAL_CLASS = {
   [SIGNALS.SECURITY]: 'security',
   [SIGNALS.MIXED_CONTENT]: 'security',
   [SIGNALS.RUNTIME]: 'implementation',
-  [SIGNALS.UX_REVIEW]: 'availability',
+  [SIGNALS.UX_REVIEW]: 'implementation',
   [SIGNALS.OVERFLOW]: 'implementation',
   [SIGNALS.PAGE_STRUCTURE]: 'implementation',
   [SIGNALS.SOCIAL]: 'implementation',
