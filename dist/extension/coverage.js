@@ -142,3 +142,30 @@ export function explainCoverageReasons(report = {}, extras = {}) {
   }
   return reasons;
 }
+
+/**
+ * After gateway merge, remote coverage may overwrite performance with "not monitored"
+ * even when current-page lab evidence remains on the report. Re-apply the lab-first rule.
+ */
+export function reconcilePerformanceCoverage(report = {}) {
+  if (!report || typeof report !== 'object') return report;
+  const coverage = { ...(report.coverage || {}) };
+  const prior = String(coverage.performance || '');
+  let connectorResult = null;
+  if (/^not monitored$/i.test(prior)) connectorResult = { status: 'complete', data: { monitored: false } };
+  else if (/^complete$/i.test(prior)) connectorResult = { status: 'complete', data: { monitored: true } };
+  else if (/^unavailable$/i.test(prior)) connectorResult = { status: 'unavailable' };
+  else if (/^not applicable$/i.test(prior)) connectorResult = { status: 'not_applicable' };
+  coverage.performance = resolvePerformanceCoverage(coverage, report.browserPerformance, connectorResult);
+  const next = { ...report, coverage };
+  next.coverageReasons = explainCoverageReasons(next, {
+    enrichmentFailed: /enrichment/i.test(String(report.coverageReasons?.published || report.coverageReasons?.performance || ''))
+  });
+  if (labPerformanceReady(report.browserPerformance) && /not monitored|unavailable|connector/i.test(prior + String(report.coverageReasons?.performance || ''))) {
+    next.coverageReasons = {
+      ...(next.coverageReasons || {}),
+      performance: COVERAGE_REASON.CONNECTOR_UNAVAILABLE
+    };
+  }
+  return next;
+}
