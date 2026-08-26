@@ -64,10 +64,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       });
     }
     report.coverage.links = 'pending';
-    const idleErrors = globalThis.__WEBQA_PAGE_DIAGNOSTICS__?.errors || [];
-    report.pageDiagnostics = {
-      errors: [...(report.pageDiagnostics?.errors || []), ...idleErrors].slice(-25)
-    };
     return report;
   }
   async function auditLinks() {

@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { JSDOM } from 'jsdom';
 import { finalizeCorrelatedFindings } from '../packages/findings/correlate.js';
 import { applyFindingPolicy } from '../packages/findings/policy.js';
+import { explainCoverageReasons, COVERAGE_REASON } from '../packages/findings/coverage.js';
 import { guidanceFor } from '../packages/frank/guidance.js';
 
 const source = fs.readFileSync('packages/rules/browser-rules.js', 'utf8');
@@ -80,6 +81,42 @@ test('batch-dev detects soft-404, form, hreflang, schema, interaction, and resou
   assert.ok(ids.includes('schema.jsonld-missing-type'));
   assert.ok(ids.includes('ux.disclosure-target-missing'));
   assert.ok(ids.includes('navigation.skip-link-target-missing'));
+  assert.equal(ids.filter(id => id === 'navigation.fragment-missing').length, 0);
+});
+
+test('x-default and en may share a URL without duplicate-target finding', () => {
+  const { report } = scan(cleanHtml);
+  assert.equal(ruleIds(report).includes('seo.hreflang-duplicate-target'), false);
+});
+
+test('broken image dedupes Performance API and DOM observations', () => {
+  const imgUrl = 'https://example.com/missing-photo.png';
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Img</title></head><body><img src="${imgUrl}" width="120" height="80"></body></html>`;
+  const resources = [{
+    name: imgUrl,
+    initiatorType: 'img',
+    responseStatus: 404,
+    transferSize: 0,
+    duration: 8
+  }];
+  const { report } = scan(html, { url: 'https://example.com/img', resources });
+  assert.equal(ruleIds(report).filter(id => id === 'web.image-broken').length, 1);
+});
+
+test('page diagnostics are not duplicated in scan output', () => {
+  const diag = [{ kind: 'page_error', message: 'early fail', source: 'https://example.com/a.js', line: 1 }];
+  const { report } = scan(cleanHtml, { pageDiagnostics: diag });
+  assert.equal(report.pageDiagnostics.errors.length, 1);
+  assert.equal(report.pageDiagnostics.errors[0].message, 'early fail');
+});
+
+test('extension-partial runtime maps to partial capture reason', () => {
+  const { report } = scan(cleanHtml, {
+    pageDiagnostics: [{ kind: 'page_error', message: 'early fail', source: '', line: 0 }]
+  });
+  report.coverageReasons = explainCoverageReasons(report);
+  assert.equal(report.coverage.runtime, 'extension-partial');
+  assert.equal(report.coverageReasons.runtime, COVERAGE_REASON.RUNTIME_EXTENSION_PARTIAL);
 });
 
 test('runtime and script failures share a root cause when correlated', () => {
@@ -101,7 +138,9 @@ test('Frank guidance covers soft-404 and resource failures without scanner jargo
   assert.match(soft.interpretation || soft.recommendation, /404|not-found|HTTP/i);
   const script = guidanceFor({ ruleId: 'runtime.script-failed', resourceUrl: 'https://example.com/a.js', title: 'script', detail: '', category: 'fix' });
   assert.match(script.remediation, /script/i);
-  assert.doesNotMatch(script.remediation, /install smush/i);
+  const uncaught = guidanceFor({ ruleId: 'runtime.uncaught-error', title: 'err', detail: '', category: 'fix' });
+  assert.match(uncaught.limitations, /extension-partial/i);
+  assert.doesNotMatch(uncaught.limitations, /do not collect this family/i);
 });
 
 test('extension partial runtime coverage when page diagnostics exist', () => {

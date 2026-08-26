@@ -340,12 +340,13 @@
     findings.push(...robotsGooglebotFindings());
     findings.push(...overflowFindings());
     findings.push(...resourceFailureFindings());
+    const brokenImageUrls=new Set(findings.filter(f=>f.ruleId==='web.image-broken').map(f=>f.extra?.resourceUrl||f.evidence||'').filter(Boolean));
     findings.push(...runtimeErrorFindings());
     findings.push(...pageDiagnosticRuntimeFindings());
 
     const browserPerformance=performanceSignals();
     findings.push(...performanceFindings(browserPerformance));
-    findings.push(...imageResourceFindings(browserPerformance));
+    findings.push(...imageResourceFindings(browserPerformance,brokenImageUrls));
     findings.push(...fragmentFindings());
     findings.push(...malformedLinkFindings());
     findings.push(...embeddedFindings());
@@ -817,13 +818,23 @@
     })];
   }
 
-  function imageResourceFindings(signals){
+  function isSkipLinkAnchor(a){
+    if(!a||a.localName!=='a')return false;
+    const raw=attr(a,'href');
+    if(!raw||!raw.startsWith('#'))return false;
+    const cls=String(a.className||'');
+    if(/\bskip-link\b/i.test(cls))return true;
+    return/\bskip[- ]?link\b/i.test(cls)||/\bskip\b/i.test(cls);
+  }
+  function imageResourceFindings(signals,skipBrokenUrls=new Set()){
     const out=[];
     // Broken / unloaded images where the browser completed decode with zero natural size.
     [...document.images].slice(0,80).forEach(img=>{
       if(!img.complete)return;
       const src=sanitizeResourceUrl(img.currentSrc||img.src||'');
+      const httpSrc=sanitizeHttpUrl(img.currentSrc||img.src||'')||src;
       if(!src||src.startsWith('data:'))return;
+      if(skipBrokenUrls.has(src)||skipBrokenUrls.has(httpSrc))return;
       if(Number(img.naturalWidth)===0&&Number(img.naturalHeight)===0){
         out.push(finding({ruleId:'web.image-broken',title:'Image failed to load',detail:'An image element completed loading with naturalWidth 0, which usually means the resource is missing or undecodable.',category:'fix',severity:'medium',element:img,evidence:src,extra:{resourceUrl:src}}));
       }
@@ -927,10 +938,12 @@
     const h1=String((page.h1s&&page.h1s[0])||document.querySelector('h1')?.textContent||'').toLowerCase();
     const bodyText=clip(document.body?.innerText||'',1200).toLowerCase();
     const notFoundRx=/\b(404|not found|page not found|page cannot be found|doesn't exist|does not exist|no longer available)\b/i;
-    let signals=0;
-    if(notFoundRx.test(title))signals++;
-    if(notFoundRx.test(h1))signals++;
-    if(notFoundRx.test(bodyText.slice(0,400)))signals++;
+    let lexical=0;
+    if(notFoundRx.test(title))lexical++;
+    if(notFoundRx.test(h1))lexical++;
+    if(notFoundRx.test(bodyText.slice(0,400)))lexical++;
+    if(lexical<1)return[];
+    let signals=lexical;
     const words=(bodyText.match(/\S+/g)||[]).length;
     if(words>0&&words<80)signals++;
     if(Number(page.linkCount||document.links.length)<4)signals++;
@@ -984,6 +997,7 @@
   function interactionFindings(){
     const out=[],seen=new Set();
     for(const el of document.querySelectorAll('[aria-controls]')){
+      if(attr(el,'aria-expanded')!=='')continue;
       const controls=attr(el,'aria-controls').split(/\s+/).filter(Boolean)[0];
       if(!controls||seen.has(`${controls}|${selectorFor(el)}`))continue;
       seen.add(`${controls}|${selectorFor(el)}`);
@@ -1051,6 +1065,7 @@
     for(const a of document.querySelectorAll('a[href^="#"]')){
       const raw=attr(a,'href');
       if(!raw||raw==='#'||/^#top$/i.test(raw))continue;
+      if(isSkipLinkAnchor(a))continue;
       let id='';
       try{id=decodeURIComponent(raw.slice(1))}catch{id=raw.slice(1)}
       if(!id||/^\/?$/.test(id))continue;

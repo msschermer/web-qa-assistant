@@ -30,6 +30,7 @@ export const COVERAGE_REASON = {
   CONNECTOR_UNAVAILABLE: 'connector-unavailable',
   AXE_UNAVAILABLE: 'axe-unavailable',
   RUNTIME_EXTENSION_LIMIT: 'runtime-not-captured-in-extension',
+  RUNTIME_EXTENSION_PARTIAL: 'runtime-partial-in-extension',
   ENRICHMENT_FAILED: 'enrichment-failed',
   NOT_APPLICABLE: 'not-applicable'
 };
@@ -87,7 +88,7 @@ export function explainCoverageReasons(report = {}, extras = {}) {
     }
     if (area === 'axe' && /unavailable/.test(value)) reasons.axe = COVERAGE_REASON.AXE_UNAVAILABLE;
     if (area === 'runtime' && /not applicable/.test(value)) reasons.runtime = COVERAGE_REASON.RUNTIME_EXTENSION_LIMIT;
-    if (area === 'runtime' && /extension-partial/.test(value)) reasons.runtime = COVERAGE_REASON.RUNTIME_EXTENSION_LIMIT;
+    if (area === 'runtime' && /extension-partial/.test(value)) reasons.runtime = COVERAGE_REASON.RUNTIME_EXTENSION_PARTIAL;
     if (area === 'renderer' && /unavailable|timeout|partial/.test(value)) reasons.renderer = extras.rendererTimeout ? COVERAGE_REASON.RENDERER_TIMEOUT : COVERAGE_REASON.CONNECTOR_UNAVAILABLE;
     if (area === 'published' && /unavailable|local-only/.test(value) && extras.enrichmentFailed) reasons.published = COVERAGE_REASON.ENRICHMENT_FAILED;
     if (area === 'ai' && /unavailable|deterministic/.test(value) && extras.enrichmentFailed) reasons.ai = COVERAGE_REASON.ENRICHMENT_FAILED;
