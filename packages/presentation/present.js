@@ -33,6 +33,13 @@ function friendlyTitle(f){
   if(id==='performance.browser.ttfb')return'Server response is slow in this browser';
   if(id==='performance.browser.weight')return'Page transfer is heavy in this browser';
   if(id==='performance.browser.cls')return'Layout shift is high in this browser';
+  if(id==='performance.browser.lcp-image-oversized')return'LCP image is substantially oversized';
+  if(id==='performance.browser.image-oversized'){
+    const n=Number(f.count||f.occurrences||1);
+    const mild=f.imageMetrics?.magnitude==='mild';
+    if(mild)return n>1?`${n} images are mildly larger than display need`:'Image source is mildly larger than display need';
+    return n>1?`${n} images are substantially oversized for their display size`:'Image is substantially oversized for its display size';
+  }
   if(/performance\./.test(id))return'Performance needs review';
   if(/blank-opener/.test(id))return'New-tab link should explicitly block opener access';
   if(/meta-refresh/.test(id))return'Page uses timed meta refresh';
@@ -55,8 +62,21 @@ export function presentFinding(finding={},environment={type:'unknown'}){
   let summary=clip(guidance.interpretation||f.detail||'',260);
   if(/broken-link|link-404|link-410/.test(id)&&f.link?.url){const text=clip(f.link?.text||'Internal link',70);summary=`${text} points to ${pathname(f.link.url)}, which returned a confirmed missing-page response.`}
   if(id==='performance.browser.lcp'&&f.performanceObservation?.largestContentfulPaintMs!=null)summary=`This browser observed LCP at ${(f.performanceObservation.largestContentfulPaintMs/1000).toFixed(1)}s. Treat it as a current lab observation, not a field regression.`;
-  if(id==='performance.browser.cls'&&f.performanceObservation?.cumulativeLayoutShift!=null)summary=`This browser observed cumulative layout shift of ${f.performanceObservation.cumulativeLayoutShift}. Treat it as a current lab observation, not a field Core Web Vitals score.`;
+  if(id==='performance.browser.cls'&&f.performanceObservation?.cumulativeLayoutShift!=null)summary=`This browser observed cumulative layout shift of ${f.performanceObservation.cumulativeLayoutShift}. Aggregate CLS only — no shift contributor was identified. Treat as a current lab observation, not a field Core Web Vitals score.`;
   if(id==='performance.browser.ttfb'&&f.performanceObservation?.ttfbMs!=null)summary=`This browser waited ${Math.round(f.performanceObservation.ttfbMs)}ms for the first byte before rendering work could begin.`;
+  if(id==='performance.browser.image-oversized'||id==='performance.browser.lcp-image-oversized'){
+    const m=f.imageMetrics||{};
+    if(m.intrinsicWidth&&m.renderedWidth&&m.requiredPhysicalWidth){
+      const transfer=Number.isFinite(m.transferBytes)?` · ${(m.transferBytes/1024).toFixed(0)} KB transfer`:'';
+      const lcp=m.isLcpResource||id.includes('lcp-image')?' · current LCP image':'';
+      summary=`Served ${m.intrinsicWidth}×${m.intrinsicHeight}, displayed ~${m.renderedWidth}×${m.renderedHeight}, ~${m.requiredPhysicalWidth}×${m.requiredPhysicalHeight} needed at ${m.devicePixelRatio}× DPR${transfer}${lcp}.`;
+    }
+  }
+  if(id==='performance.browser.weight'&&f.performanceObservation?.transferBytes!=null){
+    const p=f.performanceObservation;
+    const qualifier=p.transferIsLowerBound?'at least ':'';
+    summary=`This browser measured ${qualifier}${(p.transferBytes/1048576).toFixed(1)}MB transfer on this page load.`;
+  }
   return{
     areaId:area,areaLabel:meta.label,areaDescription:meta.description,tone:meta.tone,
     title:friendlyTitle(f),summary:summary||clip(f.detail,260)||'A verified QA condition needs review.',
