@@ -1,0 +1,19 @@
+{
+  "cycle": 1,
+  "commit": "1f180410e2598f706f1a0933652502579dfcd3ea",
+  "parent": "d0441385c10ac012410f8f49cdb5667475d648c3",
+  "message": "fix(autoqa): use installed Chrome and authorize corpus dogfood",
+  "judge": {
+    "decision": "ACCEPT",
+    "reasons": [
+      "Chrome-default AutoQA dogfood via CDP Extensions.loadUnpacked; authorize corpus dogfood; activate handoff; 127.0.0.1 host permissions"
+    ]
+  },
+  "artifacts": [
+    ".autoqa/runs/chrome-validation/local-clean",
+    ".autoqa/runs/chrome-validation/local-problems",
+    ".autoqa/runs/chrome-validation/public-example",
+    ".autoqa/runs/chrome-validation/public-example-org"
+  ],
+  "acceptedAt": "2026-08-27T16:27:00.000Z"
+}
