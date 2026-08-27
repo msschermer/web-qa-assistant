@@ -41,6 +41,7 @@ function anchor(href, text = 'Link', { nav = false, main = false, footer = false
 }
 function harness(anchors, sequences, { ids = [], externalFetch } = {}) {
   const queues = new Map(Object.entries(sequences).map(([url, rows]) => [url, [...rows]]));
+  const lastByUrl = new Map();
   const context = {
     URL, AbortController, setTimeout, clearTimeout, performance, CSS: { escape: v => String(v) },
     location: { href: 'https://example.com/source/', origin: 'https://example.com', protocol: 'https:', hostname: 'example.com' },
@@ -67,7 +68,8 @@ function harness(anchors, sequences, { ids = [], externalFetch } = {}) {
     fetch: async url => {
       if (externalFetch) return externalFetch(url);
       const queue = queues.get(String(url)) || [];
-      const next = queue.length ? queue.shift() : { status: 200 };
+      const next = queue.length ? queue.shift() : (lastByUrl.get(String(url)) || { status: 200 });
+      lastByUrl.set(String(url), next);
       if (next instanceof Error) throw next;
       if (next?.throw) throw next.throw;
       return { status: next.status, url: next.url || String(url), redirected: Boolean(next.redirected) };

@@ -186,10 +186,11 @@ Detailed procedures:
 
 `main` is the known-good release branch. Development happens on feature/fix branches. GitHub Actions runs the extension build, static checks and tests on every PR. A `v*` tag validates version alignment and packages both the clean extension zip and full source zip for the GitHub Release.
 
-Current delivery candidate: **1.7.4**.
+Current delivery candidate: **1.7.5**.
 
 
 ## Documentation
 
-- `RELEASE_NOTES_1.7.4.md` - current release changes
+- `RELEASE_NOTES_1.7.5.md` - current release changes
+- `RELEASE_NOTES_1.7.4.md` - previous release changes
 - `docs/FINAL-REVIEW-1.7.0.md` - final multi-role, adversarial, security, and product review gate

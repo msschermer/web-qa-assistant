@@ -60,7 +60,7 @@ git switch --detach ccdcddc
 cp .env.example .env
 ```
 
-Use commit `ccdcddc` or later on `origin/main` for a working server install. Tag `v1.7.4` (`e3ad225`) is missing the post-release `undici` dependency required by the renderer; do not check out that tag alone for server deployment until a patch tag supersedes it.
+Use tag `v1.7.5` or later on `origin/main` for a working server install. Tag `v1.7.4` (`e3ad225`) is missing the post-release `undici` dependency required by the renderer; do not check out that tag alone.
 
 Generate independent random values:
 
@@ -109,7 +109,7 @@ docker compose ps
 curl http://127.0.0.1:8787/api/health
 ```
 
-Expected API fields include version `1.7.4`, OpenAI configuration state and `publicAiEnabled`.
+Expected API fields include version `1.7.5`, OpenAI configuration state and `publicAiEnabled`.
 
 The renderer has a Docker healthcheck. The API waits for a healthy renderer before the normal container dependency is considered ready.
 
@@ -239,7 +239,7 @@ After a tested release is published, on the production droplet:
 ssh portfolio
 cd ~/web-qa-assistant
 git fetch origin --tags
-git switch --detach ccdcddc
+git switch --detach v1.7.5
 git describe --tags --always
 docker network ls | grep portfolio-infra_web
 docker compose -f docker-compose.yml -f docker-compose.portfolio.yml config --quiet
@@ -248,7 +248,7 @@ curl -s http://127.0.0.1:8787/api/health
 curl -s https://assistant.msschermer.us/api/health
 ```
 
-**Tag caveat:** package version **1.7.4** is correct, but tag `v1.7.4` (`e3ad225`) omits the post-release `undici` hotfix (`ccdcddc`) required for renderer boot. Production currently tracks `origin/main` at `ccdcddc`. For tag-based deploys, wait for a patch tag that includes the hotfix, or deploy the exact hotfix commit shown above.
+**Tag note:** deploy **1.7.5** from tag `v1.7.5`. That tag includes the renderer `undici` dependency. Historical tag `v1.7.4` (`e3ad225`) still omits that hotfix; do not use it for server deploys.
 
 Replace `ccdcddc` with the exact release commit or tag being deployed. Use `git switch --detach` so production tracks a fixed revision, not a moving branch.
 
@@ -257,7 +257,7 @@ Drop the `-f docker-compose.portfolio.yml` flags if you are not using the shared
 Confirm the upgrade landed:
 
 ```bash
-curl -s http://127.0.0.1:8787/api/health | grep 1.7.4
+curl -s http://127.0.0.1:8787/api/health | grep 1.7.5
 curl -s -H "x-web-qa-key: <team-access-token>" \
   http://127.0.0.1:8787/api/health/integrations
 ```

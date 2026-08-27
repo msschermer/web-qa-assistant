@@ -1,6 +1,7 @@
 import { targetIdForFinding } from './evidence.js';
 import { guidanceFor } from './guidance.js';
 import { sanitizeMarkupSnippet, suggestedMarkupFor } from './correlation.js';
+import { composeFixStepBody } from './guidance-composition.js';
 
 export const FRANK_STEP_TYPES=['spotlight','evidence','interpretation','comparison','trend','impact','remediation','verification','summary'];
 export const FRANK_PREVIEW_PROPERTIES=['color','background-color','font-size','line-height','outline','border-color'];
@@ -55,16 +56,43 @@ function trimSteps(steps,max=8){
   for(const s of steps){if(keep.size>=max)break;keep.add(s)}
   return steps.filter(s=>keep.has(s)).slice(0,max);
 }
-export function deterministicFrankPlan(graph){const f=graph.finding,targetId=targetIdForFinding(f),targetText=evidenceBy(graph,e=>e.kind==='text')[0]?.value||'',g=guidanceFor({...f,targetText},graph.environment||{}),steps=[];
+function documentObservationCopy(finding={}){
+  const rule=String(finding.ruleId||'');
+  const domain=String(finding.domain||'');
+  if(/ttfb|performance\.browser\.(cls|weight|lcp$)/i.test(rule)||domain==='performance'){
+    return{
+      headline:'Page-level performance observation',
+      body:'This measurement applies to the navigation as a whole rather than one visible element, so there is nothing on the page to highlight.'
+    };
+  }
+  if(/noindex|robots|canonical|title|description|hreflang|charset|meta-refresh|og-|schema|jsonld|viewport/i.test(rule)||domain==='markup'||domain==='discoverability'){
+    return{
+      headline:'Document metadata',
+      body:'This finding concerns page-level metadata rather than a visible element.'
+    };
+  }
+  if(/uncaught-error|resource-failed|script-failed|visible-error|mixed-content/i.test(rule)||domain==='runtime'||domain==='network'){
+    return{
+      headline:'Network / runtime observation',
+      body:'This observation comes from runtime or network evidence rather than one highlightable content element.'
+    };
+  }
+  return{
+    headline:'Document-level finding',
+    body:'This finding applies to the page as a whole rather than one visible element, so there is nothing on screen to spotlight.'
+  };
+}
+export function deterministicFrankPlan(graph){const f=graph.finding,targetId=targetIdForFinding(f),targetText=evidenceBy(graph,e=>e.kind==='text')[0]?.value||'',g=guidanceFor({...f,targetText,reviewContext:graph.reviewContext,imageMetrics:f.imageMetrics||graph.reviewContext?.selectedInstance},graph.environment||{}),steps=[];
   const presentation=String(f.targetability||'');
   const markupMode=presentation==='markup';
   const documentMode=markupMode||presentation==='document'||presentation==='none'||f.targetType==='historical';
   const unresolvedSpotlight=!targetId&&(presentation==='spotlight'||presentation==='multiple-elements'||f.targetType==='visual');
-  const readHeadline=markupMode?'Page configuration':documentMode?'What this finding means':targetId?'What is happening here':'What this finding means';
+  const docCopy=documentObservationCopy(f);
+  const readHeadline=markupMode?'Page configuration':documentMode?docCopy.headline:targetId?'What is happening here':'What this finding means';
   const readBody=markupMode
     ? `${g.interpretation} No on-page spotlight is required; the relevant markup is shown below.`
     : documentMode
-      ? `${g.interpretation} This is a document-level observation, so Frank does not fake a visual highlight.`
+      ? `${g.interpretation} ${docCopy.body}`
       : unresolvedSpotlight
         ? `${g.interpretation} The recorded element could not be re-anchored on the live page, so Frank will not guess a spotlight.`
         : g.interpretation;
@@ -72,9 +100,9 @@ export function deterministicFrankPlan(graph){const f=graph.finding,targetId=tar
   steps.push(step('read','interpretation',readHeadline,readBody,{targetId:stepTarget,evidence:stepEvidence(graph,'interpretation'),metrics:interpretationMetrics(graph),code:markupMode?safeCode(graph):''}));
   const comparisons=comparisonMetrics(graph);if(comparisons.length>=2)steps.push(step('compare','comparison','The observation points disagree','Browser and connected published-state values were gathered independently. The disagreement is the evidence.',{evidence:evidenceBy(graph,e=>['browser','meta-state'].includes(e.source)),metrics:comparisons}));const trends=trendMetrics(graph);if(trends.length&&f.targetType!=='historical')steps.push(step('trend','trend','History changes the priority','Performance Monitor adds recent history so a current value can be separated from a sustained regression.',{evidence:evidenceBy(graph,e=>e.source==='performance-monitor'),metrics:trends}));
   steps.push(step('impact','impact','Why this matters here',g.impact,{targetId:stepTarget,evidence:stepEvidence(graph,'impact')}));
-  steps.push(step('fix','remediation','What I would change',[g.recommendation,g.remediation].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).join(' '),{targetId:stepTarget,evidence:stepEvidence(graph,'remediation'),code:safeCode(graph)}));
+  steps.push(step('fix','remediation','What I would change',composeFixStepBody(g),{targetId:stepTarget,evidence:stepEvidence(graph,'remediation'),code:safeCode(graph)}));
   if(g.alternatives)steps.push(step('alternatives','evidence','What I ruled out',g.alternatives,{targetId:stepTarget,evidence:graph.evidence.slice(0,4)}));
   steps.push(step('verify','verification','Verify the correction',g.verify,{targetId:stepTarget,evidence:stepEvidence(graph,'verification')}));
   const sourceText=graph.sources.map(sourceLabel).join(', ')||'the current scan';
-  return{version:3,title:f.title,summary:`Frank is using ${sourceText}. Environment: ${graph.environment?.type||'unknown'} (${graph.environment?.confidenceLabel||'unconfirmed'}).`,mode:'deterministic',findingId:graph.findingId,sources:graph.sources,assessment:assessmentFor(f,g),steps:trimSteps(steps)}}
+  return{version:3,title:f.title,summary:`Frank is using ${sourceText}. Environment: ${graph.environment?.type||'unknown'} (${graph.environment?.confidenceLabel||'unconfirmed'}).`,mode:'deterministic',guidanceSource:'deterministic',findingId:graph.findingId,sources:graph.sources,assessment:assessmentFor(f,g),steps:trimSteps(steps)}}
 export function validateFrankPlan(plan,graph){if(!plan||plan.version!==3||!plan.assessment||!Array.isArray(plan.steps)||plan.steps.length<3||plan.steps.length>8)return false;const validTargets=new Set(Object.keys(graph.targets||{})),validEvidence=new Set((graph.evidence||[]).map(e=>e.id));let hasVerification=false;for(const s of plan.steps){if(!FRANK_STEP_TYPES.includes(s.type)||!s.headline||!s.body)return false;if(s.targetId&&!validTargets.has(s.targetId))return false;if((s.evidenceRefs||[]).some(id=>!validEvidence.has(id)))return false;if(s.preview?.enabled&&(!s.targetId||!FRANK_PREVIEW_PROPERTIES.includes(s.preview.property)||!s.preview.value))return false;if(s.type==='verification')hasVerification=true}return hasVerification}

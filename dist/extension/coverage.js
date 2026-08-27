@@ -94,6 +94,7 @@ export function emptyInconclusiveByCause(total = 0) {
     total: Number(total || 0),
     scannerBudgetAborted: 0,
     scannerTimeout: 0,
+    scannerCancelled: 0,
     remoteBlocked: 0,
     rateLimited: 0,
     corsOrOpaque: 0,
@@ -112,6 +113,7 @@ export function normalizeInconclusiveByCause(raw = null, fallbackTotal = 0) {
     total: Number(raw.total ?? fallbackTotal),
     scannerBudgetAborted: Number(raw.scannerBudgetAborted || 0),
     scannerTimeout: Number(raw.scannerTimeout || 0),
+    scannerCancelled: Number(raw.scannerCancelled || 0),
     remoteBlocked,
     rateLimited,
     corsOrOpaque: Number(raw.corsOrOpaque || 0),
@@ -166,6 +168,7 @@ export function inconclusiveCauseKey(cause = '') {
   const c = String(cause || '').trim();
   if (c === 'scanner-budget-aborted' || c === 'scannerBudgetAborted') return 'scannerBudgetAborted';
   if (c === 'scanner-timeout' || c === 'scannerTimeout') return 'scannerTimeout';
+  if (c === 'scanner-cancelled' || c === 'scannerCancelled') return 'scannerCancelled';
   if (c === 'remote-blocked' || c === 'remoteBlocked') return 'remoteBlocked';
   if (c === 'rate-limited' || c === 'rateLimited') return 'rateLimited';
   if (c === 'cors-or-opaque' || c === 'corsOrOpaque') return 'corsOrOpaque';
@@ -198,6 +201,7 @@ export function rebuildInconclusiveByCause(checks = []) {
 export function inconclusiveCauseSum(byCause = {}) {
   return Number(byCause.scannerBudgetAborted || 0)
     + Number(byCause.scannerTimeout || 0)
+    + Number(byCause.scannerCancelled || 0)
     + Number(byCause.remoteBlocked || 0)
     + Number(byCause.rateLimited || 0)
     + Number(byCause.corsOrOpaque || 0)
@@ -356,6 +360,10 @@ export function finalizeLinkAudit(audit = {}, extras = {}) {
       privilegedFallback,
       refinement,
       gatewayTruncatedInconclusive: privilegedFallback.notAttempted,
+      linksByOriginClass: audit.linksByOriginClass || undefined,
+      hostDiagnostics: Array.isArray(audit.hostDiagnostics) ? audit.hostDiagnostics.slice(0, 8) : undefined,
+      queueTerminationReason: audit.queueTerminationReason || audit.queueMetrics?.terminationReason || undefined,
+      queueMetrics: audit.queueMetrics || undefined,
       accountingOk: abortOk && attemptedOk && eligibleOk && causesOk && fallbackOk && refinementOk
     },
     coverageStatus: coverage
@@ -798,6 +806,8 @@ export function explainCoverageReasons(report = {}, extras = {}) {
     }
     if (area === 'renderer' && /unavailable|timeout|partial/.test(value)) reasons.renderer = extras.rendererTimeout ? COVERAGE_REASON.RENDERER_TIMEOUT : COVERAGE_REASON.CONNECTOR_UNAVAILABLE;
     if (area === 'published' && /unavailable|local-only/.test(value) && extras.enrichmentFailed) reasons.published = COVERAGE_REASON.ENRICHMENT_FAILED;
+    else if (area === 'published' && /unavailable/.test(value)) reasons.published = COVERAGE_REASON.CONNECTOR_UNAVAILABLE;
+    else if (area === 'published' && /local-only/.test(value)) reasons.published = COVERAGE_REASON.NOT_APPLICABLE;
     if (area === 'ai' && /unavailable|deterministic/.test(value) && extras.enrichmentFailed) reasons.ai = COVERAGE_REASON.ENRICHMENT_FAILED;
     if (area === 'wcag' && /unavailable/.test(value) && extras.enrichmentFailed) reasons.wcag = COVERAGE_REASON.ENRICHMENT_FAILED;
   }

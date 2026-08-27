@@ -96,9 +96,10 @@ test('deterministic Frank fallback counts as initial review completeness', () =>
 test('progress copy stays non-actionable and can include link queue counts', () => {
   assert.equal(scanProgressCopy(SCAN_PHASE.DISCOVERING), 'Scanning current page…');
   assert.equal(scanProgressCopy(SCAN_PHASE.VERIFYING_LINKS, { queued: 134, completed: 78 }), 'Checking 78 of 134 links…');
+  assert.equal(scanProgressCopy(SCAN_PHASE.VERIFYING_LINKS, { queued: 86, completed: 32, attempted: 47 }), 'Checking 47 of 86 links…');
   assert.equal(scanProgressCopy(SCAN_PHASE.INSPECTING_FRAMES), 'Inspecting embedded content…');
   assert.equal(scanProgressCopy(SCAN_PHASE.CORRELATING), 'Correlating findings…');
-  assert.equal(scanProgressCopy(SCAN_PHASE.FRANK_ANALYZING), 'Frank is reviewing the scan…');
+  assert.equal(scanProgressCopy(SCAN_PHASE.FRANK_ANALYZING), 'Composing scan guidance…');
   assert.doesNotMatch(scanProgressCopy(SCAN_PHASE.VERIFYING_LINKS, { queued: 134, completed: 78 }), /finding|issue|recommended/i);
 });
 
@@ -116,7 +117,8 @@ test('side panel keeps results locked until resultReady and reveals them togethe
   assert.doesNotMatch(rescan.split("const enriched")[0], /\brender\(\)/);
   assert.match(css, /data-result-ready=true/);
   assert.match(css, /\.recommendations-section/);
-  assert.match(js, /Results stay hidden until the scan and Frank/);
+  assert.match(js, /Results stay hidden until the scan finishes and scan guidance is composed/);
+  assert.doesNotMatch(js, /report\.guidanceSource = source/);
 });
 
 test('side panel render refuses to paint findings before readiness', () => {

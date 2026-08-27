@@ -1,6 +1,7 @@
 import { sanitizeUrlOriginPath } from '../ai/evidence-contract.js';
 import { explainCoverageReasons, buildCoverageAccounting, classifyCoverageReason, COVERAGE_CLASS } from '../findings/coverage.js';
 import { compactFrankPageLedger } from '../findings/evidence-ledger.js';
+import { scanGuidanceSource } from '../frank/review-state.js';
 
 export const BUG_REPORT_SCHEMA_V1 = 'web-qa-assistant-bug-report/v1';
 export const BUG_REPORT_SCHEMA_V2 = 'web-qa-assistant-bug-report/v2';
@@ -29,9 +30,10 @@ const TRACE_IGNORE = /^(frank-readiness|local-ai:readiness)$/;
 const HIGH_SIGNAL_TRACE = new Set([
   'scan-start','scan_started','scan-complete','scan_completed','scan-enrichment-failed','scan-failed',
   'sidepanel-render-failed','hydration-stale-build','gateway-test-start','gateway-test-complete','frank-request','frank-reasoning','frank-started',
+  'frank_review_requested','frank_review_started','frank_review_completed','frank_review_fallback',
   'local-ai:session-create-failed','local-ai:prompt-rejected','local-ai:prompt-accepted','local-ai:prompt-start'
 ]);
-const PAGE_ERROR_RULES = new Set(['runtime.uncaught-error']);
+const PAGE_ERROR_RULES = new Set(['runtime.uncaught-error', 'runtime.visible-error']);
 const RESOURCE_RULES = new Set([
   'runtime.script-failed','web.stylesheet-failed','web.image-broken','runtime.font-failed','runtime.resource-failed',
   'runtime.resource-failed-cross-origin','ux.embed-resource-failed'
@@ -247,7 +249,14 @@ function projectFindings(report, includeContext) {
     worthCheckingFurther: boundList(worth, DIAGNOSTIC_CAPS.findings),
     byArea,
     findingCount: (report.findings || []).length,
-    materialGroupCount: Number(report.attention?.materialGroupCount || 0)
+    materialGroupCount: Number(report.attention?.materialGroupCount || 0),
+    targets: (() => {
+      const rows = report.findings || [];
+      const visual = rows.filter(f => f.targetType === 'visual');
+      const valid = visual.filter(f => f.targetId && f.target?.status !== 'stale').length;
+      const stale = visual.filter(f => f.target?.status === 'stale' || (f.targetType === 'visual' && !f.targetId)).length;
+      return { instanceCount: visual.length, validTargets: valid, staleTargets: stale };
+    })()
   };
 }
 
@@ -281,13 +290,27 @@ function projectPerformance(report) {
     available: perf.available === true,
     lab: {
       coverage: labCoverage,
+      fcpMs: Number.isFinite(perf.firstContentfulPaintMs) ? perf.firstContentfulPaintMs : undefined,
       lcpMs: Number.isFinite(perf.largestContentfulPaintMs) ? perf.largestContentfulPaintMs : undefined,
       ttfbMs: Number.isFinite(perf.ttfbMs) ? perf.ttfbMs : undefined,
+      pageLoadMs: Number.isFinite(perf.pageLoadMs) ? perf.pageLoadMs : (Number.isFinite(perf.loadMs) ? perf.loadMs : undefined),
       cls: Number.isFinite(perf.cumulativeLayoutShift) ? perf.cumulativeLayoutShift : undefined,
       transferBytes: Number.isFinite(perf.transferBytes) ? perf.transferBytes : undefined,
       transferCount: Number.isFinite(perf.measuredTransferCount) ? perf.measuredTransferCount : undefined,
       resourceCount: Number.isFinite(perf.resourceCount) ? perf.resourceCount : undefined
     },
+    assessment: report?.performanceAssessment ? {
+      status: clip(report.performanceAssessment.status, 40) || undefined,
+      summary: clip(report.performanceAssessment.summary, 240) || undefined,
+      ttfbPresentation: clip(report.performanceAssessment.ttfbPresentation, 40) || undefined,
+      imageDelivery: report.performanceAssessment.imageDelivery ? {
+        assessment: clip(report.performanceAssessment.imageDelivery.assessment, 40) || undefined,
+        oversizedCount: Number(report.performanceAssessment.imageDelivery.oversizedCount || 0) || undefined,
+        timingCoverage: report.performanceAssessment.imageDelivery.timingCoverage || undefined
+      } : undefined,
+      actionableIssueCount: Array.isArray(report.performanceAssessment.actionableIssues) ? report.performanceAssessment.actionableIssues.length : undefined,
+      diagnosticObservationCount: Array.isArray(report.performanceAssessment.diagnosticObservations) ? report.performanceAssessment.diagnosticObservations.length : undefined
+    } : undefined,
     historicalMonitor: {
       coverage: historical,
       reason: monitorReason || (historical === 'unavailable' ? 'connector-unavailable' : undefined)
@@ -301,6 +324,51 @@ function projectPerformance(report) {
     resourceCount: Number.isFinite(perf.resourceCount) ? perf.resourceCount : undefined,
     coverage: labReady ? 'current-page' : clip(report?.coverage?.performance, 40),
     reason: monitorReason
+  };
+}
+
+function projectPublishedCoverage(pc) {
+  if (!pc || typeof pc !== 'object') return undefined;
+  return {
+    status: clip(pc.status, 40) || undefined,
+    attempted: pc.attempted === true,
+    source: clip(pc.source, 48) || undefined,
+    reason: redactText(pc.reason, 180) || undefined,
+    latencyMs: Number.isFinite(Number(pc.latencyMs)) ? Number(pc.latencyMs) : undefined
+  };
+}
+
+function projectLinkExecution(ex) {
+  if (!ex || typeof ex !== 'object') return undefined;
+  return {
+    uniqueUrls: Number(ex.uniqueUrls || 0) || undefined,
+    targetOriginUrls: Number(ex.targetOriginUrls || 0) || undefined,
+    relatedHostUrls: Number(ex.relatedHostUrls || 0) || undefined,
+    externalUrls: Number(ex.externalUrls || 0) || undefined,
+    primaryAttemptCount: Number(ex.primaryAttemptCount || 0) || undefined,
+    refinementCount: Number(ex.refinementCount || 0) || undefined,
+    cacheHits: Number(ex.cacheHits || 0) || undefined,
+    cacheMisses: Number(ex.cacheMisses || 0) || undefined,
+    primaryMs: Number(ex.primaryMs || 0) || undefined,
+    refinementMs: Number(ex.refinementMs || 0) || undefined,
+    queueTerminationReason: clip(ex.queueTerminationReason, 40) || undefined,
+    targetConcurrency: ex.targetConcurrency ? {
+      start: Number(ex.targetConcurrency.start || 0) || undefined,
+      peak: Number(ex.targetConcurrency.peak || 0) || undefined,
+      final: Number(ex.targetConcurrency.final || 0) || undefined
+    } : undefined,
+    externalPeakConcurrency: Number(ex.externalPeakConcurrency || 0) || undefined,
+    methods: ex.methods && typeof ex.methods === 'object' ? {
+      HEAD: Number(ex.methods.HEAD || 0) || undefined,
+      GET: Number(ex.methods.GET || 0) || undefined
+    } : undefined,
+    perOrigin: Array.isArray(ex.perOrigin) ? ex.perOrigin.slice(0, 24).map(row => ({
+      host: clip(row?.host, 80) || undefined,
+      originClass: clip(row?.originClass, 20) || undefined,
+      attempted: Number(row?.attempted || 0) || undefined,
+      healthy: Number(row?.healthy || 0) || undefined,
+      inconclusive: Number(row?.inconclusive || 0) || undefined
+    })) : undefined
   };
 }
 
@@ -327,6 +395,29 @@ function projectLinks(report) {
     privilegedProbe: clip(report?.linkAudit?.privilegedProbe, 40) || undefined,
     privilegedFallback: accounting.privilegedFallback || undefined,
     refinement: accounting.refinement || undefined,
+    originBreakdown: report?.linkAudit?.linksByOriginClass || accounting.linksByOriginClass || undefined,
+    hostDiagnostics: Array.isArray(report?.linkAudit?.hostDiagnostics) ? report.linkAudit.hostDiagnostics.slice(0, 8).map(row => ({
+      host: clip(row.host, 120),
+      originClass: clip(row.originClass, 20),
+      jobs: Number(row.jobs || 0),
+      completed: Number(row.completed || 0),
+      timeouts: Number(row.timeouts || 0),
+      status429: Number(row['429s'] || row.status429 || 0),
+      status5xx: Number(row['5xx'] || row.status5xx || 0),
+      networkFailures: Number(row.networkFailures || 0),
+      averageDurationMs: Number(row.averageDurationMs || 0) || undefined,
+      p95DurationMs: Number(row.p95DurationMs || 0) || undefined,
+      maxConcurrencyObserved: Number(row.maxConcurrencyObserved || 0) || undefined
+    })) : undefined,
+    queueTerminationReason: clip(report?.linkAudit?.queueTerminationReason || report?.linkAudit?.queueMetrics?.terminationReason, 40) || undefined,
+    queueMetrics: report?.linkAudit?.queueMetrics ? {
+      maxGlobalInFlight: Number(report.linkAudit.queueMetrics.maxGlobalInFlight || 0) || undefined,
+      maxTargetOriginInFlight: Number(report.linkAudit.queueMetrics.maxTargetOriginInFlight || 0) || undefined,
+      maxExternalPerHostInFlight: Number(report.linkAudit.queueMetrics.maxExternalPerHostInFlight || 0) || undefined,
+      completion: clip(report.linkAudit.queueMetrics.completion, 40) || undefined,
+      terminationReason: clip(report.linkAudit.queueMetrics.terminationReason, 40) || undefined,
+      emergencyFired: report.linkAudit.queueMetrics.emergencyFired === true
+    } : undefined,
     coverage,
     reason: accounting.probeBudgetPreventedCoverage
       ? (clip(report?.coverageReasons?.links, 60) || 'probe-budget-exhausted')
@@ -578,7 +669,13 @@ function projectFrank({ frank, localAi, includeContext }) {
       familyId,
       matched: false
     } : undefined,
-    localAi: localAi ? { status: clip(localAi.status, 30), code: clip(localAi.code, 100) } : undefined
+    localAi: localAi ? { status: clip(localAi.status, 30), code: clip(localAi.code, 100) } : undefined,
+    review: graph.reviewContext ? {
+      adapter: clip(graph.reviewContext.adapter, 80),
+      ruleFamily: clip(graph.reviewContext.ruleFamily, 80),
+      instanceCount: Number(graph.reviewContext.instanceCount || graph.reviewContext.instances?.length || 0) || undefined,
+      selectedInstance: Number(graph.reviewContext.selectedInstanceNumber || 0) || undefined
+    } : undefined
   };
   if (includeContext && frank) out.optIn = safeFrankContext(frank);
   if (includeContext && localAi?.candidate) out.localAi = { ...out.localAi, candidate: sanitize(localAi.candidate, { includePageText: true }) };
@@ -839,6 +936,7 @@ export function buildBugReport({
     materialGroupCount: 0,
     omittedBecause: status
   } : projectFindings(reportForProjection, includeContext);
+  const frankProjected = projectFrank({ frank, localAi, includeContext });
 
   const artifact = {
     kind: DIAGNOSTIC_KIND,
@@ -881,8 +979,74 @@ export function buildBugReport({
       extensionStatus: lastDiagnostic ? 'error' : 'ok',
       gateway: clip(reportForProjection?.connectedMode, 40) || undefined,
       renderer: clip(reportForProjection?.coverage?.renderer || reportForProjection?.coverage?.runtime, 40) || undefined,
-      frankMode: clip(frank?.plan?.mode || frank?.reasoning?.mode || readiness?.status, 40) || undefined,
-      chromeVersion: chromeVersion(userAgent)
+      frankMode: clip(frank?.plan?.mode || reportForProjection?.frankReview?.source || '', 40) || undefined,
+      guidanceSource: clip(scanGuidanceSource({
+        frankReview: reportForProjection?.frankReview,
+        frank,
+        priorityMode: reportForProjection?.priorityMode,
+        coverageAi: reportForProjection?.coverage?.ai,
+        hasVisibleGuidance: Boolean(reportForProjection?.priorityBrief || frank?.plan)
+      }), 40) || undefined,
+      modelReadiness: clip(readiness?.status, 40) || undefined,
+      chromeVersion: chromeVersion(userAgent),
+      page: reportForProjection?.environment ? {
+        kind: clip(reportForProjection.environment.type || reportForProjection.environment.kind, 30) || 'unknown',
+        confidence: clip(reportForProjection.environment.confidenceLabel, 20) || undefined,
+        source: clip(reportForProjection.environment.source, 20) || undefined,
+        signals: Array.isArray(reportForProjection.environment.signals) ? reportForProjection.environment.signals.slice(0, 8).map(s => clip(s, 80)) : undefined,
+        indexControl: reportForProjection.environment.indexControl ? {
+          assessment: clip(reportForProjection.environment.indexControl.assessment, 40) || undefined,
+          evidenceConfidence: clip(reportForProjection.environment.indexControl.evidenceConfidence, 30) || undefined,
+          finalizationStage: clip(reportForProjection.environment.indexControl.finalizationStage, 40) || undefined,
+          noindexDetected: reportForProjection.environment.indexControl.noindexDetected === true,
+          crawlRestricted: reportForProjection.environment.indexControl.crawlRestricted === true,
+          conflictingSignals: reportForProjection.environment.indexControl.conflictingSignals === true,
+          metaRobots: reportForProjection.environment.indexControl.metaRobots ? {
+            checked: reportForProjection.environment.indexControl.metaRobots.checked === true,
+            noindex: reportForProjection.environment.indexControl.metaRobots.noindex === true,
+            raw: clip(reportForProjection.environment.indexControl.metaRobots.raw, 120) || undefined
+          } : undefined,
+          publishedMetaRobots: reportForProjection.environment.indexControl.publishedMetaRobots ? {
+            checked: reportForProjection.environment.indexControl.publishedMetaRobots.checked === true,
+            noindex: reportForProjection.environment.indexControl.publishedMetaRobots.noindex === true,
+            raw: clip(reportForProjection.environment.indexControl.publishedMetaRobots.raw, 120) || undefined
+          } : undefined,
+          xRobotsTag: reportForProjection.environment.indexControl.xRobotsTag ? {
+            checked: reportForProjection.environment.indexControl.xRobotsTag.checked === true,
+            noindex: reportForProjection.environment.indexControl.xRobotsTag.noindex === true,
+            raw: clip(reportForProjection.environment.indexControl.xRobotsTag.raw, 120) || undefined
+          } : undefined,
+          robotsTxt: reportForProjection.environment.indexControl.robotsTxt ? {
+            checked: reportForProjection.environment.indexControl.robotsTxt.checked === true,
+            crawlAllowed: reportForProjection.environment.indexControl.robotsTxt.crawlAllowed,
+            matchedRule: clip(reportForProjection.environment.indexControl.robotsTxt.matchedRule, 80) || undefined
+          } : undefined,
+          checkedScope: reportForProjection.environment.indexControl.checkedScope || undefined
+        } : undefined,
+        canonical: reportForProjection.environment.canonicalContext ? {
+          observed: reportForProjection.environment.canonicalContext.observed === true,
+          host: clip(reportForProjection.environment.canonicalContext.normalizedHost, 80) || undefined,
+          relationship: clip(reportForProjection.environment.canonicalContext.relationshipToCurrentHost, 40) || undefined,
+          assessment: clip(reportForProjection.environment.canonicalContext.assessment, 40) || undefined
+        } : undefined,
+        launchReadiness: reportForProjection.environment.launchReadiness ? {
+          items: (reportForProjection.environment.launchReadiness.items || []).slice(0, 12).map(item => ({
+            id: clip(item.id, 60),
+            category: clip(item.category, 40),
+            title: clip(item.title, 180)
+          })),
+          checklist: (reportForProjection.environment.launchReadiness.checklist || []).slice(0, 8).map(row => clip(row, 120))
+        } : undefined,
+        presentationPolicy: reportForProjection.environment.presentationPolicy || undefined,
+        indexability: reportForProjection.environment.indexability ? {
+          blocked: reportForProjection.environment.indexability.blocked === true,
+          publishedBlocked: reportForProjection.environment.indexability.publishedBlocked === true,
+          renderedBlocked: reportForProjection.environment.indexability.renderedBlocked === true,
+          mismatch: reportForProjection.environment.indexability.mismatch === true,
+          assessment: clip(reportForProjection.environment.indexability.assessment, 40) || undefined
+        } : undefined,
+        noticeKind: clip(reportForProjection.environment.notice?.kind, 40) || undefined
+      } : undefined
     },
     coverage: reportForProjection?.coverage || undefined,
     coverageReasons,
@@ -921,11 +1085,78 @@ export function buildBugReport({
     inventory: reportForProjection?.page?.inventory || reportForProjection?.evidenceLedger?.inventory || undefined,
     evidenceLedger: reportForProjection?.evidenceLedger ? compactFrankPageLedger(reportForProjection.evidenceLedger) : undefined,
     findings,
+    findingTargets: findings?.targets ? {
+      valid: findings.targets.validTargets,
+      stale: findings.targets.staleTargets,
+      unavailable: Math.max(0, Number(findings.targets.instanceCount || 0) - Number(findings.targets.validTargets || 0) - Number(findings.targets.staleTargets || 0))
+    } : undefined,
     performance: projectPerformance(reportForProjection),
+    performanceAssessment: reportForProjection?.performanceAssessment ? {
+      status: clip(reportForProjection.performanceAssessment.status, 40) || undefined,
+      summary: clip(reportForProjection.performanceAssessment.summary, 240) || undefined,
+      metrics: reportForProjection.performanceAssessment.metrics || undefined,
+      imageDelivery: reportForProjection.performanceAssessment.imageDelivery || undefined,
+      actionableIssues: (reportForProjection.performanceAssessment.actionableIssues || []).slice(0, 8).map(row => ({
+        id: clip(row.id, 40),
+        title: clip(row.title, 120),
+        severity: clip(row.severity, 20)
+      })),
+      diagnosticObservations: (reportForProjection.performanceAssessment.diagnosticObservations || []).slice(0, 8).map(row => ({
+        id: clip(row.id, 40),
+        title: clip(row.title, 120)
+      }))
+    } : undefined,
+    guidance: {
+      source: clip(scanGuidanceSource({
+        frankReview: reportForProjection?.frankReview,
+        frank,
+        priorityMode: reportForProjection?.priorityMode,
+        coverageAi: reportForProjection?.coverage?.ai,
+        hasVisibleGuidance: Boolean(reportForProjection?.priorityBrief || frank?.plan)
+      }), 40),
+      modelReadiness: clip(readiness?.status, 40) || undefined
+    },
+    frankReview: reportForProjection?.frankReview ? {
+      modelReadiness: clip(reportForProjection.frankReview.modelReadiness || readiness?.status, 40) || undefined,
+      requested: reportForProjection.frankReview.requested === true,
+      started: reportForProjection.frankReview.started === true,
+      completed: reportForProjection.frankReview.completed === true,
+      source: clip(reportForProjection.frankReview.source, 40) || 'none',
+      failureReason: clip(reportForProjection.frankReview.failureReason || reportForProjection.frankReview.reason, 180) || undefined
+    } : {
+      modelReadiness: clip(readiness?.status, 40) || undefined,
+      requested: false,
+      started: false,
+      completed: false,
+      source: 'none',
+      failureReason: 'not-requested'
+    },
+    publishedCoverage: projectPublishedCoverage(reportForProjection?.publishedCoverage || reportForProjection?.environment?.publishedCoverage),
+    linkExecution: projectLinkExecution(reportForProjection?.linkAudit?.linkExecution || reportForProjection?.linkExecution),
+    guidanceComposition: frank?.plan?.steps ? {
+      adapter: clip(frank?.finding?.guidanceComposition?.adapter || frank?.plan?.guidanceSource, 40) || undefined,
+      structuredRemediationUsed: Boolean(frank?.finding?.structuredRemediation || frank?.finding?.guidanceComposition?.structuredRemediationUsed)
+    } : undefined,
+    visibleErrors: (() => {
+      const rows = (reportForProjection?.findings || []).filter(f => /visible-error/.test(String(f.ruleId || ''))).slice(0, 8);
+      if (!rows.length) return undefined;
+      return {
+        total: rows.length,
+        items: rows.map(f => ({
+          ...(includeContext ? { messageExcerpt: redactText(f.visibleError?.messageExcerpt || f.detail, 160) || undefined } : {}),
+          targetStatus: clip(f.target?.status, 30) || undefined,
+          visibility: clip(f.visibleError?.visibility, 30) || undefined,
+          role: clip(f.visibleError?.role, 40) || undefined,
+          originClass: clip(f.visibleError?.originClass, 40) || undefined,
+          firstObservedPhase: clip(f.visibleError?.firstObservedPhase, 40) || undefined
+        }))
+      };
+    })(),
+    injectedUi: globalThis.__WEBQA_INJECTED_UI__ || undefined,
     links: projectLinks(reportForProjection),
     pageDiagnostics: projectPageDiagnostics(reportForProjection, includeContext),
     webqaDiagnostics: projectWebqaDiagnostics({ lastDiagnostic, report: reportForProjection, lastScanAttempt, includeContext, trace }),
-    frank: projectFrank({ frank, localAi, includeContext }),
+    frank: frankProjected,
     timeline: projectTimeline({ trace, report: reportForProjection, lastDiagnostic })
   };
 

@@ -47,6 +47,7 @@ export function impactClassFor(finding = {}) {
   if (finding.impactClass && IMPACT_CLASSES[finding.impactClass]) return finding.impactClass;
   const signal = finding.signal || signalForFinding(finding);
   if (String(finding.confidence || '') === 'inconclusive') return 'coverage';
+  if (/visible-error/.test(String(finding.ruleId || ''))) return 'availability';
   if (/^performance\.browser\./.test(String(finding.ruleId || ''))) return 'performance';
   return SIGNAL_CLASS[signal] || 'implementation';
 }

@@ -93,13 +93,21 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       chrome.runtime.sendMessage({ type: 'SCAN_PROGRESS', phase: 'VERIFYING_LINKS', queued: 0, completed: 0 }).catch(() => {});
     } catch {}
     try {
+      let cacheSeed = [];
+      try {
+        const snap = await chrome.runtime.sendMessage({ type: 'LINK_CACHE_SNAPSHOT', pageUrl: location.href });
+        cacheSeed = Array.isArray(snap?.entries) ? snap.entries : [];
+      } catch {}
       const result = await window.WebQARules.auditLinks({
         limit: 500,
-        concurrency: 10,
+        concurrency: 16,
+        targetOriginConcurrency: 6,
+        externalPerHostConcurrency: 2,
         perHostConcurrency: 2,
         timeoutMs: 2500,
         retryTimeoutMs: 5000,
-        emergencyMs: 60000,
+        emergencyMs: 120000,
+        cacheSeed,
         onProgress: (metrics) => {
           try {
             chrome.runtime.sendMessage({
@@ -115,6 +123,11 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       });
       result.linkProbeMs = Math.round(((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - started);
       result.primaryLinkMs = Number(result.primaryLinkMs || result.linkProbeMs || 0);
+      try {
+        if (result.cacheExport?.length) {
+          await chrome.runtime.sendMessage({ type: 'LINK_CACHE_MERGE', entries: result.cacheExport });
+        }
+      } catch {}
       return result;
     } catch (error) {
       return {
@@ -131,35 +144,71 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   }
 
   function clearSimpleHighlight() {
-    document.querySelectorAll('[data-web-qa-highlight]').forEach(el => {
+    document.querySelectorAll('[data-web-qa-highlight],[data-webqa-highlight]').forEach(el => {
       el.style.outline = el.dataset.webQaOldOutline || '';
       el.style.outlineOffset = el.dataset.webQaOldOutlineOffset || '';
       delete el.dataset.webQaHighlight;
+      delete el.dataset.webqaHighlight;
       delete el.dataset.webQaOldOutline;
       delete el.dataset.webQaOldOutlineOffset;
+      el.removeAttribute('data-webqa-highlight');
+      el.removeAttribute('data-web-qa-highlight');
     });
   }
 
-  function find(selector) {
-    if (!selector) return null;
-    try { return document.querySelector(selector); }
-    catch { return null; }
-  }
-  function findTarget(targetId, selector = '') {
-    try { return window.WebQARules.resolveTarget(targetId, selector) || find(selector); }
-    catch { return find(selector); }
+  function injectedUiSnapshot() {
+    const highlights = document.querySelectorAll('[data-web-qa-highlight],[data-webqa-highlight]').length;
+    const overlays = document.querySelectorAll('[data-webqa-overlay],[data-webqa-ui="frank-overlay"]').length;
+    const marked = document.querySelectorAll('[data-webqa-ui],[data-web-qa-ui]').length;
+    return {
+      created: marked + highlights,
+      active: overlays + highlights,
+      residualAfterCleanup: 0,
+      highlightOverlays: highlights,
+      coachOverlays: overlays
+    };
   }
 
-  function highlight(targetId, selector) {
+  function cleanupInjectedUi() {
     clearSimpleHighlight();
-    const el = findTarget(targetId, selector);
-    if (!el) return { found: false };
+    const frank = document.getElementById('__web_qa_frank_root');
+    if (frank) frank.remove();
+    const residual = injectedUiSnapshot();
+    residual.residualAfterCleanup = residual.active;
+    try { globalThis.__WEBQA_INJECTED_UI__ = residual; } catch {}
+    return residual;
+  }
+
+  function findTarget(targetId, selector = '', ruleId = '') {
+    try {
+      const validated = window.WebQARules.validateResolvedTarget?.(targetId, selector, { ruleId });
+      if (validated) return validated;
+      const el = window.WebQARules.resolveTarget(targetId, selector);
+      return el ? { found: true, targetStatus: 'valid', el } : { found: false, targetStatus: 'stale', reason: 'The affected element changed after the scan. Recheck this issue to refresh its target.' };
+    } catch {
+      return { found: false, targetStatus: 'stale', reason: 'The affected element changed after the scan. Recheck this issue to refresh its target.' };
+    }
+  }
+  function liveElement(targetId, selector = '', ruleId = '') {
+    const validated = findTarget(targetId, selector, ruleId);
+    return validated?.found ? validated.el : null;
+  }
+
+  function highlight(targetId, selector, ruleId = '') {
+    clearSimpleHighlight();
+    const validated = findTarget(targetId, selector, ruleId);
+    if (!validated?.found || !validated.el) {
+      return { found: false, targetStatus: validated?.targetStatus || 'stale', reason: validated?.reason || 'The affected element changed after the scan. Recheck this issue to refresh its target.' };
+    }
+    const el = validated.el;
     el.dataset.webQaOldOutline = el.style.outline || '';
     el.dataset.webQaOldOutlineOffset = el.style.outlineOffset || '';
     el.dataset.webQaHighlight = '1';
+    el.setAttribute('data-webqa-highlight', '1');
+    el.setAttribute('data-webqa-ui', 'highlight');
     el.style.outline = '3px solid #B3261E';
     el.style.outlineOffset = '3px';
-    el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    el.scrollIntoView?.({ behavior: 'smooth', block: 'center', inline: 'nearest' });
     setTimeout(() => {
       if (!el.dataset.webQaHighlight) return;
       el.style.outline = el.dataset.webQaOldOutline || '';
@@ -167,8 +216,10 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       delete el.dataset.webQaHighlight;
       delete el.dataset.webQaOldOutline;
       delete el.dataset.webQaOldOutlineOffset;
+      el.removeAttribute('data-webqa-highlight');
+      if (el.getAttribute('data-webqa-ui') === 'highlight') el.removeAttribute('data-webqa-ui');
     }, 6000);
-    return { found: true };
+    return { found: true, targetStatus: 'valid', tag: (el.localName || '').toLowerCase() };
   }
 
   function targetContext(targetId, selector, ruleId) {
@@ -307,6 +358,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     if (old) old.remove();
     const host = document.createElement('div');
     host.id = '__web_qa_frank_root';
+    host.setAttribute('data-webqa-ui', 'frank-overlay');
+    host.setAttribute('data-webqa-overlay', 'frank');
     host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:auto;';
     document.documentElement.appendChild(host);
     const shadow = host.attachShadow({ mode: 'open' });
@@ -314,27 +367,66 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     return { host, shadow };
   }
 
-  function reasoningLabel(plan, reasoning = {}) {
-    const ai = plan?.mode === 'ai' && reasoning?.status === 'operational';
-    if (ai && reasoning.provider === 'chrome-built-in') return 'On-device reasoning';
-    if (ai) return 'Cloud reasoning · metered';
-    return 'Verified guidance';
+  function reasoningLabel(plan, reasoning = {}, readiness = {}) {
+    const source = plan?.guidanceSource || (plan?.mode === 'ai' ? 'frank-model' : 'deterministic');
+    const ai = plan?.mode === 'ai' && reasoning?.status === 'operational' && source === 'frank-model';
+    if (ai && reasoning.provider === 'chrome-built-in') return 'Frank · AI review';
+    if (ai) return 'Frank · AI review';
+    if (readiness?.status === 'downloading' || readiness?.status === 'warming' || readiness?.status === 'downloadable') {
+      return 'Verified scan guidance';
+    }
+    return 'Verified scan guidance';
+  }
+
+  function documentLevelHelper(finding = {}) {
+    const rule = String(finding.ruleId || '');
+    if (/ttfb|performance\.browser\.(cls|weight|lcp$)/i.test(rule)) {
+      return {
+        head: 'Page-level performance observation',
+        note: 'This measurement applies to the navigation as a whole rather than one visible element, so there is nothing on the page to highlight.'
+      };
+    }
+    if (/noindex|robots|canonical|title|description|hreflang|charset|meta-refresh|og-|schema|jsonld|viewport/i.test(rule)) {
+      return {
+        head: 'Document metadata',
+        note: 'This finding concerns page-level metadata rather than a visible element.'
+      };
+    }
+    if (/uncaught-error|resource-failed|script-failed|visible-error|mixed-content|weight/i.test(rule)) {
+      return {
+        head: 'Network / runtime observation',
+        note: 'This observation comes from runtime or network evidence rather than one highlightable content element.'
+      };
+    }
+    return {
+      head: 'Document-level finding',
+      note: 'This finding applies to the page as a whole rather than one visible element, so there is nothing on screen to spotlight.'
+    };
   }
 
   function frankTarget(step) {
     if (!frankSession || !step?.targetId) return null;
     const target = frankSession.targets?.[step.targetId] || {};
-    return findTarget(step.targetId, target.selector || '');
+    return liveElement(step.targetId, target.selector || '', target.ruleId || '');
   }
   function frankSelector(step) {
     if (!frankSession || !step?.targetId) return '';
     return frankSession.targets?.[step.targetId]?.selector || '';
   }
   function targetState(step) {
-    if (!step?.targetId) return { found: false, documentLevel: true, reason: 'This finding is about page-level markup rather than one visible element, so there is nothing on screen to spotlight.' };
+    if (!step?.targetId) {
+      const helper = documentLevelHelper(frankSession?.plan?.finding || {});
+      return { found: false, documentLevel: true, reason: helper.note, documentHead: helper.head };
+    }
     try {
-      const state = window.WebQARules.resolvedTargetState(step.targetId, frankSelector(step));
-      return { ...state, documentLevel: false };
+      const selector = frankSelector(step);
+      const ruleId = frankSession.targets?.[step.targetId]?.ruleId || frankSession.plan?.finding?.ruleId || '';
+      const validated = findTarget(step.targetId, selector, ruleId);
+      if (!validated?.found) {
+        return { found: false, documentLevel: false, visible: false, targetStatus: 'stale', reason: validated?.reason || 'The affected element changed after the scan. Recheck this issue to refresh its target.' };
+      }
+      const state = window.WebQARules.resolvedTargetState(step.targetId, selector);
+      return { ...state, found: true, documentLevel: false };
     } catch {
       return { found: !!frankTarget(step), documentLevel: false, reason: '' };
     }
@@ -399,7 +491,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const spotlight = shadow.querySelector('.spotlight');
     const backdrop = shadow.querySelector('.backdrop');
     const coach = shadow.querySelector('.coach');
-    const rect = el ? el.getBoundingClientRect() : null;
+    const rect = typeof el?.getBoundingClientRect === 'function' ? el.getBoundingClientRect() : null;
     if (!rect || rect.width < 1 || rect.height < 1) {
       spotlight.hidden = true;
       backdrop.hidden = false;
@@ -458,11 +550,12 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
     if (state.documentLevel) {
       const markupMode = /markup/i.test(String(frankSession?.plan?.finding?.targetability || ''));
+      const helper = documentLevelHelper(frankSession?.plan?.finding || {});
       anchor.dataset.tone = 'document';
-      head.textContent = markupMode ? 'Page configuration' : 'Document-level finding';
+      head.textContent = markupMode ? 'Page configuration' : (state.documentHead || helper.head);
       note.textContent = markupMode
         ? (state.reason || 'This finding is about document markup rather than a single visible element. The relevant sanitized markup is shown below.')
-        : (state.reason || 'This finding is about page-level behavior rather than one visible element, so Frank does not fake a spotlight.');
+        : (state.reason || helper.note);
     } else if (!step?.targetId && /spotlight|multiple/i.test(String(frankSession?.plan?.finding?.targetability || ''))) {
       anchor.dataset.tone = 'missing';
       head.textContent = 'Element not re-anchored';
@@ -583,7 +676,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     };
     shadow.querySelector('.scroll').scrollTop = 0;
     const el = frankTarget(step);
-    if (el) el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center', inline: 'nearest' });
+    if (el) el.scrollIntoView?.({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center', inline: 'nearest' });
     setTimeout(updateSpotlight, el ? 180 : 0);
     scheduleTargetRetry(step);
     if (notify) chrome.runtime.sendMessage({ type: 'FRANK_STEP_CHANGED', index: frankSession.index, stepId: step.id }).catch(() => {});
@@ -636,7 +729,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   }
 
   function endFrank(notify = true) {
-    if (!frankSession) return { ended: true };
+    if (!frankSession) return { ended: true, injectedUi: cleanupInjectedUi() };
     resetPreview();
     clearTimeout(frankSession.retryTimer);
     clearTimeout(frankSession.reflowTimer);
@@ -647,8 +740,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     frankSession.host.remove();
     frankSession = null;
     try { returnFocus?.focus?.({ preventScroll: true }); } catch {}
+    const injectedUi = cleanupInjectedUi();
     if (notify) chrome.runtime.sendMessage({ type: 'FRANK_CLOSED' }).catch(() => {});
-    return { ended: true };
+    return { ended: true, injectedUi };
   }
 
   function onFrankViewportChange() {
@@ -658,7 +752,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     frankSession.reflowTimer = setTimeout(() => updateSpotlight(), 180);
   }
 
-  function startFrank(plan, targets = {}, reasoning = {}) {
+  function startFrank(plan, targets = {}, reasoning = {}, readiness = {}) {
     endFrank(false);
     const { host, shadow } = createFrankRoot();
     const returnFocus = document.activeElement;
@@ -675,8 +769,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       else if (event.key === 'ArrowRight' && !event.target?.matches?.('input,textarea,select,[contenteditable=true]')) renderFrank((frankSession?.index || 0) + 1, true);
       else if (event.key === 'ArrowLeft' && !event.target?.matches?.('input,textarea,select,[contenteditable=true]')) renderFrank((frankSession?.index || 0) - 1, true);
     };
-    frankSession = { plan, targets, reasoning, host, shadow, index: 0, keyHandler, previewRestore: null, returnFocus, retryTimer: null, reflowTimer: null, returning: false, tabId: null, windowId: null };
-    shadow.querySelector('.device').textContent = reasoningLabel(plan, reasoning);
+    frankSession = { plan, targets, reasoning, readiness, host, shadow, index: 0, keyHandler, previewRestore: null, returnFocus, retryTimer: null, reflowTimer: null, returning: false, tabId: null, windowId: null };
+    shadow.querySelector('.device').textContent = reasoningLabel(plan, reasoning, readiness);
     shadow.querySelector('.return-qa').addEventListener('click', () => returnToQa());
     shadow.querySelector('.report-bug')?.addEventListener('click', () => {
       chrome.runtime.sendMessage({ type: 'OPEN_REPORT_BUG_FROM_FRANK', windowId: frankSession?.windowId }).catch(() => {});
@@ -702,8 +796,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const allowed = new Set(['color', 'background-color', 'font-size', 'line-height', 'outline', 'border-color']);
     if (!allowed.has(preview.property) || !preview.value || preview.value.length > 120 || !CSS.supports(preview.property, preview.value)) return { ok: false, error: 'The suggested preview is not a safe supported CSS change.' };
     const selector = frankSession.targets?.[targetId]?.selector || '';
-    const el = findTarget(targetId, selector);
-    if (!el) return { ok: false, error: 'The affected element is no longer present.' };
+    const el = liveElement(targetId, selector);
+    if (!el?.style) return { ok: false, error: 'The affected element is no longer present.' };
     resetPreview();
     frankSession.previewRestore = { el, property: preview.property, value: el.style.getPropertyValue(preview.property), priority: el.style.getPropertyPriority(preview.property) };
     el.style.setProperty(preview.property, preview.value, 'important');
@@ -720,13 +814,19 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       catch (error) { send({ findings: [], incompleteChecks: [], resolvedUrls: [], error: error?.message || 'External probe apply failed.' }); }
       return;
     }
-    if (msg.type === 'RECHECK_LINK') { window.WebQARules.recheckLink(msg.url || '').then(send).catch(error => send({ verificationState: 'inconclusive', confidence: 'inconclusive', error: error?.message || 'Link recheck failed.' })); return true; }
-    if (msg.type === 'HIGHLIGHT') { send(highlight(msg.targetId, msg.selector)); return; }
+    if (msg.type === 'RECHECK_LINK') {
+      chrome.runtime.sendMessage({ type: 'LINK_CACHE_INVALIDATE', url: msg.url || '' }).catch(() => {});
+      window.WebQARules.recheckLink(msg.url || '').then(send).catch(error => send({ verificationState: 'inconclusive', confidence: 'inconclusive', error: error?.message || 'Link recheck failed.' }));
+      return true;
+    }
+    if (msg.type === 'HIGHLIGHT') { send(highlight(msg.targetId, msg.selector, msg.ruleId)); return; }
     if (msg.type === 'TARGET_CONTEXT') { send(targetContext(msg.targetId, msg.selector, msg.ruleId)); return; }
     if (msg.type === 'ENABLE_WATCH') { send(enableWatch()); return; }
-    if (msg.type === 'FRANK_START') { send(startFrank(msg.plan, msg.targets || {}, msg.reasoning || {})); return; }
+    if (msg.type === 'FRANK_START') { send(startFrank(msg.plan, msg.targets || {}, msg.reasoning || {}, msg.readiness || {})); return; }
     if (msg.type === 'FRANK_GOTO') { send(renderFrank(msg.index, false)); return; }
     if (msg.type === 'FRANK_END') { send(endFrank(false)); return; }
+    if (msg.type === 'INJECTED_UI_STATUS') { send(injectedUiSnapshot()); return; }
+    if (msg.type === 'CLEANUP_INJECTED_UI') { send(cleanupInjectedUi()); return; }
     if (msg.type === 'FRANK_PREVIEW') { send(previewFrank(msg.targetId, msg.preview)); return; }
     if (msg.type === 'FRANK_RESET_PREVIEW') { resetPreview(); send({ ok: true }); return; }
   });

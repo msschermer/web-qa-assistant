@@ -11,11 +11,23 @@
   const SAME_ORIGIN_IFRAME_HARD_CEILING=32;
   const SAME_ORIGIN_IFRAME_MAX_DEPTH=3;
   const LINK_PROBE_HARD_CEILING=500;
-  const LINK_PROBE_CONCURRENCY=10;
-  const LINK_PROBE_PER_HOST_CONCURRENCY=2;
+  const LINK_PROBE_CONCURRENCY=16;
+  const LINK_PROBE_TARGET_ORIGIN_CONCURRENCY=6;
+  const LINK_PROBE_TARGET_ORIGIN_CEILING=16;
+  const LINK_PROBE_TARGET_WITH_EXTERNAL_CEILING=12;
+  const LINK_PROBE_EXTERNAL_PER_HOST_CONCURRENCY=2;
+  const LINK_PROBE_EXTERNAL_GLOBAL=4;
+  const LINK_PROBE_PER_HOST_CONCURRENCY=LINK_PROBE_EXTERNAL_PER_HOST_CONCURRENCY;
   const LINK_PROBE_TIMEOUT_MS=2500;
+  const LINK_PROBE_TARGET_TIMEOUT_MS=4000;
   const LINK_PROBE_RETRY_TIMEOUT_MS=5000;
-  const LINK_PROBE_EMERGENCY_MS=60000;
+  const LINK_PROBE_EMERGENCY_MS=120000;
+  const LINK_PROBE_HEALTHY_WINDOW=4;
+  const LINK_CACHE_TTL_HEALTHY_INTERNAL_MS=8*60*1000;
+  const LINK_CACHE_TTL_HEALTHY_EXTERNAL_MS=3*60*1000;
+  const LINK_CACHE_TTL_BROKEN_MS=90*1000;
+  const LINK_CACHE_TTL_REDIRECT_MS=2*60*1000;
+  const LINK_CACHE_MAX_ENTRIES=400;
   const SAFE_INTERACTION_BUDGET=6;
   const SAFE_INTERACTION_PER_FRAME=2;
   const INTERACTION_SETTLE_MAX_MS=120;
@@ -67,6 +79,7 @@
   }
   function hash(input){let h=2166136261;for(let i=0;i<input.length;i++){h^=input.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36)}
   let lastFrameRecords=null;
+  let lastScanId='';
   function collectFrameRecords(){
     const records=[];
     const seenDocs=new Set();
@@ -184,11 +197,29 @@
     return null;
   }
   function resolveSelector(selector){return deepQuery(selector)}
+  function resolveFramePath(selector){
+    const parts=String(selector||'').split(' >> ').map(s=>s.trim()).filter(Boolean);
+    if(parts.length<2)return null;
+    let root=document;
+    for(let i=0;i<parts.length-1;i++){
+      let frame=null;
+      try{frame=root.querySelector(parts[i])}catch{return null}
+      if(!frame||String(frame.localName||'').toLowerCase()!=='iframe')return null;
+      try{root=frame.contentDocument}catch{return null}
+      if(!root)return null;
+    }
+    try{return root.querySelector(parts[parts.length-1])||null}catch{return null}
+  }
+  function queryInRoot(root,selector){
+    if(!root||!selector)return null;
+    try{return root.querySelector(selector)}catch{return null}
+  }
   function presentationForElement(el){
     if(!el)return'page';
+    const tag=(el.localName||'').toLowerCase();
     if(el.ownerDocument&&el.ownerDocument!==document){
-      // Interior iframe nodes are not safely spotlightable in the parent page;
-      // Frank should treat them as markup/document guidance with frame context.
+      // Same-origin iframe images can be highlighted in the framed document.
+      if(['img','image','video'].includes(tag))return'visual';
       return'document';
     }
     if(document.head?.contains(el)||['META','LINK','TITLE','SCRIPT','STYLE'].includes(el.tagName))return'document';
@@ -196,7 +227,15 @@
   }
   // A structural description that survives a re-render, so an element can be
   // recognised again even when its generated classes or DOM position changed.
+  function fingerprintUrl(raw){
+    const value=String(raw||'').trim();
+    if(!value||/^(javascript|data|vbscript|file|blob):/i.test(value))return '';
+    if(/^https?:/i.test(value))return sanitizeHttpUrl(value)||'';
+    if(/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value))return '';
+    return value.split(/[?#]/)[0].slice(0,300);
+  }
   function describeTarget(el){
+    const currentSrc=fingerprintUrl(el.currentSrc||'')||fingerprintUrl(attr(el,'src'));
     return{
       tag:(el.localName||'').toLowerCase(),
       elId:el.id||'',
@@ -206,8 +245,9 @@
       name:attr(el,'name'),
       alt:attr(el,'alt'),
       type:attr(el,'type'),
-      src:attr(el,'src').slice(0,300),
-      href:attr(el,'href').slice(0,300),
+      src:fingerprintUrl(attr(el,'src')),
+      currentSrc:String(currentSrc||'').slice(0,300),
+      href:fingerprintUrl(attr(el,'href')),
       text:clip(el.textContent,120)
     };
   }
@@ -215,6 +255,7 @@
     if(!el||el.nodeType!==1||(el.localName||'').toLowerCase()!==d.tag)return 0;
     let score=0;
     if(d.elId&&el.id===d.elId)score+=6;
+    if(d.currentSrc&&sanitizeResourceUrl(el.currentSrc||'').slice(0,300)===d.currentSrc)score+=6;
     if(d.src&&attr(el,'src').slice(0,300)===d.src)score+=5;
     if(d.href&&attr(el,'href').slice(0,300)===d.href)score+=4;
     if(d.alt&&attr(el,'alt')===d.alt)score+=3;
@@ -235,6 +276,8 @@
   // the first match when it genuinely cannot tell them apart.
   function selectorCandidate(selector,targetId){
     if(!selector)return null;
+    const framed=resolveFramePath(selector);
+    if(framed)return framed;
     let nodes=[];
     try{nodes=[...document.querySelectorAll(selector)]}catch{nodes=[]}
     if(!nodes.length)return deepQuery(selector);
@@ -303,10 +346,12 @@
     if(cached?.isConnected){lastResolutionStage='live-reference';return cached}
     const stages=targetId?[
       ['selector',()=>selectorCandidate(selector,targetId)],
-      ['relaxed-selector',()=>relaxedSelectorMatch(selector)],
+      ['frame-path',()=>resolveFramePath(selector)],
+      ['relaxed-selector',()=>relaxedSelectorMatch(selector.includes(' >> ')?selector.split(' >> ').pop():selector)],
       ['fingerprint',()=>fingerprintResolve(targetId)]
     ]:[
       ['selector',()=>resolveSelector(selector)],
+      ['frame-path',()=>resolveFramePath(selector)],
       ['relaxed-selector',()=>relaxedSelectorMatch(selector)]
     ];
     lastResolutionStage='';
@@ -346,14 +391,54 @@
     return{found:false,via:'unresolved',visible:false,tag:d?.tag||'',selector,selectorMatches,reason,
       described:d?{text:d.text,alt:d.alt,href:d.href,src:d.src,classes:d.classes.join(' ')}:null};
   }
+  const STALE_TARGET_REASON='The affected element changed after the scan. Recheck this issue to refresh its target.';
+  function elementMatchesFingerprint(el,d){
+    if(!el||!d?.tag)return false;
+    if((el.localName||'').toLowerCase()!==d.tag)return false;
+    return scoreCandidate(el,d)>=4;
+  }
+  function validateResolvedTarget(targetId,selector='',expected={}){
+    const el=resolveTarget(targetId,selector);
+    if(!el?.isConnected)return{found:false,targetStatus:'stale',reason:STALE_TARGET_REASON,el:null};
+    const d=targetFingerprints.get(targetId);
+    const tag=(el.localName||'').toLowerCase();
+    if(expected.elementType&&tag!==String(expected.elementType).toLowerCase()){
+      return{found:false,targetStatus:'stale',reason:STALE_TARGET_REASON,el:null};
+    }
+    if(/image-oversized/.test(String(expected.ruleId||''))&&tag!=='img'&&tag!=='image'){
+      return{found:false,targetStatus:'stale',reason:STALE_TARGET_REASON,el:null};
+    }
+    if(d?.tag&&!elementMatchesFingerprint(el,d)){
+      return{found:false,targetStatus:'stale',reason:STALE_TARGET_REASON,el:null};
+    }
+    if(d?.tag&&tag!==d.tag)return{found:false,targetStatus:'stale',reason:STALE_TARGET_REASON,el:null};
+    return{found:true,targetStatus:'valid',reason:'',el,tag};
+  }
   function finding({ruleId,title,detail,category='review',severity='medium',selector='',element=null,targetType='',evidence='',sources=['browser'],wcag=[],helpUrl='',count=1,confidence='confirmed',verification=null,extra={}}){
     const resolved=element||resolveSelector(selector);
     const frameCtx=resolved?frameContextFor(resolved):null;
     const finalSelector=selector||selectorFor(resolved);
     const presentation=targetType||presentationForElement(resolved);
     const fingerprint=hash(`${ruleId}|${finalSelector}|${clip(evidence,220)}`);
-    const targetId=presentation==='visual'&&resolved&&!frameCtx?registerTarget(resolved,`${ruleId}|${fingerprint}`):'';
-    const merged={...(frameCtx||{}),...extra};
+    const tag=(resolved?.localName||'').toLowerCase();
+    const iframeVisual=Boolean(frameCtx&&['img','image','video'].includes(tag)&&presentation==='visual');
+    const targetId=presentation==='visual'&&resolved&&(!frameCtx||iframeVisual)?registerTarget(resolved,`${ruleId}|${fingerprint}`):'';
+    const rect=(()=>{try{const r=resolved?.getBoundingClientRect?.();if(!r)return null;return{x:Math.round(r.x),y:Math.round(r.y),width:Math.round(r.width),height:Math.round(r.height)}}catch{return null}})();
+    const described=resolved?describeTarget(resolved):null;
+    const target={
+      instanceId:targetId||`inst_${fingerprint}`,
+      scanId:lastScanId,
+      ruleId,
+      framePath:frameCtx?.embeddedContext||'top-document',
+      elementType:tag,
+      stableLocator:finalSelector,
+      fallbackLocator:resolved?.id?`#${CSS.escape(resolved.id)}`:'',
+      targetFingerprint:described,
+      boundingRectAtScan:rect,
+      status:targetId?'valid':(presentation==='visual'?'unavailable':'none'),
+      confidence:targetId?'high':'none'
+    };
+    const merged={...(frameCtx||{}),...extra,target,instanceId:target.instanceId};
     return {id:`${ruleId}:${fingerprint}`,ruleId,title,detail,category,severity,selector:finalSelector,targetId,targetType:presentation,evidence:clip(evidence,520),sources,wcag,helpUrl,count,fingerprint,confidence,verification:verification||{state:confidence,method:'deterministic browser observation',attempts:1,evidence:[]},...merged};
   }
   function headingSkip(headings){let previous=null;for(const h of headings){const level=Number(h.tagName.slice(1));if(previous&&level>previous+1)return h;previous=level}return null}
@@ -402,12 +487,16 @@
     const canonicalEl=document.querySelector('link[rel~="canonical"]'),descEl=document.querySelector('meta[name="description" i]'),robotsEl=document.querySelector('meta[name="robots" i]'),viewportEl=document.querySelector('meta[name="viewport" i]'),generatorEl=document.querySelector('meta[name="generator" i]'),h1s=[...document.querySelectorAll('h1')],schema=schemaState();
     let canonical='';try{canonical=canonicalEl?.href||''}catch{}
     const resourceHints=[...document.querySelectorAll('script[src],link[href],img[src]')].slice(0,80).map(el=>attr(el,'src')||attr(el,'href')).filter(Boolean);
-    return{url:location.href,origin:location.origin,hostname:location.hostname,pathname:location.pathname,title:document.title||'',description:attr(descEl,'content'),canonical,robots:attr(robotsEl,'content'),lang:attr(document.documentElement,'lang'),viewport:attr(viewportEl,'content'),generator:attr(generatorEl,'content'),resourceHints,h1s:h1s.map(h=>clip(h.textContent,160)),schemaTypes:schema.types,schemaBlockCount:schema.blockCount,formCount:document.forms.length,imageCount:document.images.length,linkCount:document.links.length,interactiveCount:document.querySelectorAll('a,button,input,select,textarea,[role="button"],[tabindex]').length,embeddedCoverage:collectEmbeddedCoverage(),httpStatus:Number(globalThis.__WEBQA_HTTP_STATUS__)||null};
+    const formActions=[...document.forms].slice(0,8).map(form=>{try{return new URL(form.getAttribute('action')||location.href,location.href).href}catch{return''}}).filter(Boolean);
+    const embedHosts=[...document.querySelectorAll('iframe[src]')].slice(0,8).map(el=>{try{return new URL(el.src,location.href).hostname}catch{return''}}).filter(Boolean);
+    return{url:location.href,origin:location.origin,hostname:location.hostname,pathname:location.pathname,title:document.title||'',description:attr(descEl,'content'),canonical,robots:attr(robotsEl,'content'),lang:attr(document.documentElement,'lang'),viewport:attr(viewportEl,'content'),generator:attr(generatorEl,'content'),resourceHints,formActions,embedHosts,h1s:h1s.map(h=>clip(h.textContent,160)),schemaTypes:schema.types,schemaBlockCount:schema.blockCount,formCount:document.forms.length,imageCount:document.images.length,linkCount:document.links.length,interactiveCount:document.querySelectorAll('a,button,input,select,textarea,[role="button"],[tabindex]').length,embeddedCoverage:collectEmbeddedCoverage(),httpStatus:Number(globalThis.__WEBQA_HTTP_STATUS__)||null};
   }
 
   function run(){
     clearTargetMarkers();targetRegistry.clear();targetFingerprints.clear();
     lastEmbeddedInspection=null;lastFrameRecords=null;
+    lastScanId=`scan_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
+    try{globalThis.__WEBQA_SCAN_PHASE__='initial-scan'}catch{}
     const runStarted=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
     const findings=[],page=pageSummary(),titleEl=document.querySelector('title'),descEl=document.querySelector('meta[name="description" i]'),canonicalEl=document.querySelector('link[rel~="canonical"]'),robotsEl=document.querySelector('meta[name="robots" i]'),viewportEl=document.querySelector('meta[name="viewport" i]'),headings=[...document.querySelectorAll('h1,h2,h3,h4,h5,h6')],h1s=headings.filter(h=>h.tagName==='H1');
 
@@ -477,6 +566,7 @@
     findings.push(...resourceFailureFindings());
     const brokenImageUrls=new Set(findings.filter(f=>f.ruleId==='web.image-broken').map(f=>f.extra?.resourceUrl||f.evidence||'').filter(Boolean));
     findings.push(...runtimeErrorFindings());
+    findings.push(...visibleErrorFindings());
     findings.push(...pageDiagnosticRuntimeFindings());
 
     const tPerf=nowMs();
@@ -638,19 +728,56 @@
             selector:selectorFor(el),
             url:sanitizeResourceUrl(lcp.url||el.currentSrc||el.src||''),
             size:Number(lcp.size||0),
+            loadTime:Number.isFinite(Number(lcp.loadTime))?Math.round(lcp.loadTime):undefined,
+            renderTime:Number.isFinite(Number(lcp.renderTime))?Math.round(lcp.renderTime):undefined,
             intrinsic:el.naturalWidth?{width:Number(el.naturalWidth)||0,height:Number(el.naturalHeight)||0}:null,
             rendered:{width:Math.round(rect.width||0),height:Math.round(rect.height||0)}
           };
         }catch{}
       }
       const knownResources=resources.filter(r=>(Number(r.transferSize)||0)>0);
+      const imageEntries=resources.filter(r=>{
+        const type=String(r.initiatorType||'');
+        const name=String(r.name||'');
+        return type==='img'||/\.(avif|webp|jpe?g|png|gif|svg)(\?|#|$)/i.test(name);
+      }).slice(0,40);
+      const imageTimings=imageEntries.map(r=>{
+        const transferSize=Number(r.transferSize);
+        const decodedBodySize=Number(r.decodedBodySize);
+        const durationMs=Math.round(Number(r.duration)||0);
+        const transferObservable=Number.isFinite(transferSize)&&transferSize>0;
+        return{
+          name:sanitizeResourceUrl(r.name),
+          initiatorType:r.initiatorType||'img',
+          durationMs,
+          responseEnd:Math.round(Number(r.responseEnd)||0),
+          transferSize:transferObservable?transferSize:undefined,
+          transferSizeObservable:transferObservable,
+          decodedBodySize:Number.isFinite(decodedBodySize)&&decodedBodySize>0?decodedBodySize:undefined,
+          timingVisible:durationMs>0||Number(r.responseEnd)>0,
+          sameOrigin:(()=>{try{return new URL(r.name,location.href).origin===location.origin}catch{return false}})()
+        };
+      });
       return{
         available:true,
         measurement:'lab',
         note:'Measured in the inspecting browser on this machine and network. Treat as a directional signal, not a field score.',
         ttfbMs:Math.round(nav.responseStart-nav.requestStart),
-        domContentLoadedMs:Math.round(nav.domContentLoadedEventEnd),
-        loadMs:Math.round(nav.loadEventEnd||nav.duration||0),
+        domContentLoadedMs:(()=>{
+          const end=Number(nav.domContentLoadedEventEnd);
+          if(!Number.isFinite(end)||end<=0)return null;
+          return Math.round(end-(Number(nav.startTime)||0));
+        })(),
+        pageLoadMs:(()=>{
+          const end=Number(nav.loadEventEnd);
+          if(!Number.isFinite(end)||end<=0)return null;
+          return Math.round(end-(Number(nav.startTime)||0));
+        })(),
+        loadMs:(()=>{
+          const end=Number(nav.loadEventEnd);
+          if(!Number.isFinite(end)||end<=0)return null;
+          return Math.round(end-(Number(nav.startTime)||0));
+        })(),
         firstContentfulPaintMs:fcp?Math.round(fcp.startTime):null,
         largestContentfulPaintMs:lcp?Math.round(lcp.startTime):null,
         lcpElement,
@@ -661,7 +788,8 @@
         resourceCount:resources.length,
         resourceMix:byType,
         cumulativeLayoutShift:Math.round(latestCls*1000)/1000,
-        heaviest:knownResources.slice().sort((a,b)=>(Number(b.transferSize)||0)-(Number(a.transferSize)||0)).slice(0,5).map(r=>({name:sanitizeResourceUrl(r.name),type:r.initiatorType||'other',bytes:Number(r.transferSize)||0,durationMs:Math.round(r.duration||0)}))
+        heaviest:knownResources.slice().sort((a,b)=>(Number(b.transferSize)||0)-(Number(a.transferSize)||0)).slice(0,5).map(r=>({name:sanitizeResourceUrl(r.name),type:r.initiatorType||'other',bytes:Number(r.transferSize)||0,durationMs:Math.round(r.duration||0)})),
+        imageTimings
       };
     }catch(error){return{available:false,reason:String(error?.message||error)}}
   }
@@ -676,7 +804,7 @@
       out.push(finding({ruleId:'performance.browser.lcp',title:'Largest contentful paint is slow in this browser',confidence:'inferred',detail:`Largest contentful paint was observed at ${(signals.largestContentfulPaintMs/1000).toFixed(1)}s on this machine and network.${elementNote} This is a lab observation, not a field score.`,category:'review',severity:'medium',selector:signals.lcpElement?.selector||'',element:null,targetType:signals.lcpElement?.selector?'visual':'page',evidence:`lcp=${signals.largestContentfulPaintMs}ms`,extra:{performanceObservation:signals,resourceUrl:signals.lcpElement?.url||''}}));
     }
     if(Number.isFinite(signals.ttfbMs)&&signals.ttfbMs>1800)
-      out.push(finding({ruleId:'performance.browser.ttfb',title:'Server response time is slow in this browser',confidence:'inferred',detail:`Time to first byte was ${signals.ttfbMs}ms. That points at server or origin response time rather than front-end assets.`,category:'review',severity:'medium',targetType:'page',evidence:`ttfb=${signals.ttfbMs}ms`,extra:{performanceObservation:signals}}));
+      out.push(finding({ruleId:'performance.browser.ttfb',title:'Server response was slow in this browser',confidence:'inferred',detail:`Time to first byte was ${signals.ttfbMs}ms in this lab navigation. That is a diagnostic observation about initial response timing, not proof of a backend defect or a full-page performance failure.`,category:'review',severity:'medium',targetType:'page',evidence:`ttfb=${signals.ttfbMs}ms`,extra:{performanceObservation:signals,scope:'network',domain:'performance'}}));
     if(Number.isFinite(signals.transferBytes)&&signals.transferBytes>6000000){
       const qualifier=signals.transferIsLowerBound?'At least ':'Approximately ';
       const coverage=signals.transferIsLowerBound?` ${signals.unknownTransferCount} transfer size${signals.unknownTransferCount===1?' was':'s were'} unavailable because cached or cross-origin resources may not expose transfer size.`:'';
@@ -1186,6 +1314,112 @@
     }
     return{items,observedFailureEvents,confirmedCount,inconclusiveCount};
   }
+  function visibleErrorFindings(){
+    const ERROR_TEXT=/\b(error|invalid|failed|failure|exception|unable to|something went wrong|an error occurred|request failed)\b/i;
+    const SEMANTIC=/(^|[\s_-])(error|invalid|failed|failure|exception|alert|toast|banner|notification|status)([\s_-]|$)/i;
+    const out=[];
+    const seen=new Set();
+    const candidates=[];
+    const pushCandidate=(el,signals)=>{
+      if(!el||el.nodeType!==1||seen.has(el))return;
+      if(el.closest?.('[data-web-qa-ui],[data-webqa-ui],[data-web-qa-highlight],[data-webqa-overlay]'))return;
+      seen.add(el);
+      candidates.push({el,signals});
+    };
+    try{
+      document.querySelectorAll('[role="alert"], [aria-live="assertive"], [aria-live="polite"]').forEach(el=>{
+        pushCandidate(el,['aria-live-or-alert']);
+      });
+      document.querySelectorAll('[class*="error" i], [class*="toast" i], [class*="alert" i], [id*="error" i], [class*="invalid" i], [class*="failure" i]').forEach(el=>{
+        pushCandidate(el,['semantic-class']);
+      });
+      document.querySelectorAll('[aria-invalid="true"]').forEach(el=>{
+        const described=(()=>{
+          const ids=String(el.getAttribute('aria-describedby')||'').split(/\s+/).filter(Boolean);
+          for(const id of ids){
+            try{const node=document.getElementById(id);if(node)return node}catch{}
+          }
+          return el.closest?.('.error,.invalid,[class*="error" i],[class*="invalid" i]')||null;
+        })();
+        if(described)pushCandidate(described,['aria-invalid-related']);
+      });
+    }catch{}
+    for(const {el,signals} of candidates.slice(0,40)){
+      let visible=false;
+      let fixed=false;
+      try{
+        const style=getComputedStyle(el);
+        if(style.display==='none'||style.visibility==='hidden'||Number(style.opacity)===0)continue;
+        const rect=el.getBoundingClientRect();
+        if(rect.width<8||rect.height<8)continue;
+        if(rect.bottom<0||rect.top>innerHeight||rect.right<0||rect.left>innerWidth)continue;
+        visible=true;
+        fixed=/fixed|sticky/i.test(style.position);
+      }catch{continue}
+      const text=clip(String(el.textContent||'').replace(/\s+/g,' ').trim(),180);
+      if(!text||text.length<4)continue;
+      // Ignore long article/body copy: require short notification-like text.
+      if(text.length>220)continue;
+      if(/^(h1|h2|h3|article|main|section)$/i.test(el.localName||'')&&!signals.includes('aria-live-or-alert'))continue;
+      const role=String(el.getAttribute?.('role')||'').toLowerCase();
+      const live=String(el.getAttribute?.('aria-live')||'').toLowerCase();
+      const classId=`${el.className||''} ${el.id||''}`;
+      const semanticHit=SEMANTIC.test(classId)||SEMANTIC.test(role);
+      const textHit=ERROR_TEXT.test(text);
+      const signalSet=new Set(signals);
+      if(role==='alert'||live==='assertive')signalSet.add('aria-live-or-alert');
+      if(fixed)signalSet.add('fixed-or-sticky');
+      if(semanticHit)signalSet.add('semantic-class');
+      if(textHit)signalSet.add('error-like-text');
+      if(signalSet.has('aria-invalid-related'))signalSet.add('form-validation');
+      // Require corroboration: text alone is never enough.
+      const strength=[...signalSet];
+      const confirmed=
+        (signalSet.has('aria-live-or-alert')&&visible&&textHit)
+        ||(signalSet.has('fixed-or-sticky')&&signalSet.has('semantic-class')&&textHit)
+        ||(signalSet.has('form-validation')&&textHit&&visible)
+        ||(signalSet.has('semantic-class')&&signalSet.has('error-like-text')&&(role==='status'||role==='alert'||fixed));
+      if(!confirmed)continue;
+      const party=(()=>{
+        try{
+          const src=el.closest?.('[src],[data-src]')?.getAttribute?.('src')||'';
+          if(src){
+            const u=new URL(src,location.href);
+            if(u.origin!==location.origin)return{originClass:'third-party',host:u.hostname};
+          }
+        }catch{}
+        if(/\b(cookie|chat|intercom|zendesk|hubspot|grecaptcha|stripe)\b/i.test(classId))return{originClass:'third-party-probable',host:''};
+        return{originClass:'page',host:location.hostname};
+      })();
+      const firstObservedPhase=globalThis.__WEBQA_SCAN_PHASE__||'during-scan';
+      out.push(finding({
+        ruleId:'runtime.visible-error',
+        title:'Visible error message detected',
+        detail:`The page is displaying an error message to users: "${text}". This was visible during the scan and should be reviewed before launch.${party.originClass.startsWith('third-party')?' The message appears associated with a third-party widget.':''}`,
+        category:'fix',
+        severity:'high',
+        confidence:'confirmed',
+        element:el,
+        evidence:`visible-error; text=${text}; signals=${strength.join(',')}`,
+        extra:{
+          scope:'element',
+          domain:'runtime',
+          visibleError:{
+            messageExcerpt:text,
+            visibility:'visible',
+            role:role||live||'',
+            classId:clip(classId,120),
+            positioning:fixed?'fixed-or-sticky':'static-or-relative',
+            originClass:party.originClass,
+            firstObservedPhase,
+            signals:strength.slice(0,8)
+          }
+        }
+      }));
+      if(out.length>=5)break;
+    }
+    return out;
+  }
   function runtimeErrorFindings(){
     const bucket=globalThis.__WEBQA_RUNTIME_ERRORS__;
     const count=Math.max(0,Math.min(20,Number(bucket?.count||0)));
@@ -1270,7 +1504,12 @@
       pixelAreaOversizeRatio:Math.round(pixelAreaOversizeRatio*100)/100,
       transferBytes:Number.isFinite(transferBytes)?transferBytes:undefined,
       responsiveSourcePresent,
+      srcsetPresent:Boolean(srcset),
       sizesPresent:Boolean(sizes),
+      pictureElement:inPicture,
+      inPicture,
+      currentSrc:selectedSource,
+      src:sanitizeResourceUrl(img.getAttribute?.('src')||img.src||''),
       selectedSource,
       isLcpResource,
       magnitude,
@@ -1303,7 +1542,15 @@
       }
     });
     const oversized=[];
-    [...document.images].slice(0,60).forEach(img=>{
+    const images=[];
+    const pushImages=(root)=>{
+      try{images.push(...(root.images||root.querySelectorAll?.('img')||[]))}catch{}
+    };
+    pushImages(document);
+    for(const rec of (lastFrameRecords||collectFrameRecords())){
+      if(rec.accessible&&rec.doc)pushImages(rec.doc);
+    }
+    [...images].slice(0,80).forEach(img=>{
       const assessment=assessImageDelivery(img,{lcpUrl});
       if(!assessment)return;
       const src=assessment.selectedSource;
@@ -2715,7 +2962,7 @@
     const out=[],seen=new Set();
     for(const a of document.querySelectorAll('a[href]')){
       const raw=attr(a,'href');
-      if(!raw||raw.startsWith('#')||/^(mailto:|tel:|javascript:|data:)/i.test(raw))continue;
+      if(!raw||raw.startsWith('#')||/^(mailto:|tel:|sms:|javascript:|data:)/i.test(raw))continue;
       let ok=true;try{new URL(raw,location.href)}catch{ok=false}
       if(ok)continue;
       const key=clip(raw,180);if(seen.has(key))continue;seen.add(key);
@@ -2769,7 +3016,39 @@
         selector,element:resolved,targetType:resolved?'visual':'page',evidence:first.html||'',sources:['axe'],wcag,helpUrl:rule.helpUrl||'',count:nodes.length||1,
         confidence:incomplete?'inconclusive':'confirmed',
         verification:{state:incomplete?'inconclusive':'confirmed',method:incomplete?'axe manual-review result':'axe automated violation',attempts:1,evidence:[first.failureSummary||rule.description||'']},
-        extra:{axe:{impact:rule.impact||'',failureSummary:first.failureSummary||'',message:first.message||'',tags:rule.tags||[],incomplete,checks:checkDetails(first),targetPath:path},semantics:semanticContextFor(resolved,rule.id)}
+        extra:(()=>{
+          const axe={impact:rule.impact||'',failureSummary:first.failureSummary||'',message:first.message||'',tags:rule.tags||[],incomplete,checks:checkDetails(first),targetPath:path};
+          const base={axe,semantics:semanticContextFor(resolved,rule.id)};
+          if(String(rule.id||'')==='link-in-text-block'){
+            try{
+              const hints=resolved?(()=>{
+                const style=getComputedStyle(resolved);
+                const line=String(style.textDecorationLine||style.textDecoration||'');
+                return{textDecorationLine:line,persistentNonColorIndicator:/underline/i.test(line)};
+              })():null;
+              base.linkInTextHints=hints||undefined;
+              // Keep underline/contrast hints on the finding; presentation merges axe check contrast.
+              let contrastRatio=null;
+              for(const bucket of ['any','all','none']){
+                for(const row of (axe.checks?.[bucket]||[])){
+                  const cr=Number(row?.data?.contrastRatio??row?.data?.contrast);
+                  if(Number.isFinite(cr))contrastRatio=cr;
+                }
+              }
+              if(!Number.isFinite(contrastRatio)){
+                const m=String(axe.failureSummary||'').match(/([\d.]+)\s*:\s*1/);
+                if(m)contrastRatio=Number(m[1]);
+              }
+              base.linkInText={
+                persistentNonColorIndicator:hints?hints.persistentNonColorIndicator:undefined,
+                textDecorationLine:hints?.textDecorationLine||undefined,
+                linkSurroundingContrast:Number.isFinite(contrastRatio)?contrastRatio:undefined,
+                requiredAlternativeContrast:3
+              };
+            }catch{}
+          }
+          return base;
+        })()
       });
     };
     (results.violations||[]).forEach(r=>out.push(convert(r,false)));
@@ -2780,7 +3059,7 @@
   function classifyLink(anchor){
     if(!anchor||anchor?.hasAttribute?.('download'))return null;
     const raw=anchor?.getAttribute?.('href')||'';
-    if(!raw||raw.startsWith('#')||/^(mailto:|tel:|javascript:|data:)/i.test(raw))return null;
+      if(!raw||raw.startsWith('#')||/^(mailto:|tel:|sms:|javascript:|data:)/i.test(raw))return null;
     try{
       const u=new URL(raw,location.href);
       if(!/^https?:$/.test(u.protocol))return null;
@@ -2800,32 +3079,128 @@
     const prominence=inNav||inHeader?'navigation':cta?'cta':inMain?'primary':inFooter?'footer':'normal';
     return{text:textValue,location:inNav?'navigation':inHeader?'header':inMain?'main':inFooter?'footer':'body',prominence};
   }
-  function cachedLinkResult(url){
+  function cacheTtlMs(result,internal){
+    const state=String(result?.verificationState||'');
+    const cause=String(result?.cause||'');
+    if(state==='inconclusive'||state==='unprobed')return 0;
+    if(['scanner-timeout','scanner-cancelled','scanner-budget-aborted'].includes(cause))return 0;
+    if(state==='confirmed-failure')return LINK_CACHE_TTL_BROKEN_MS;
+    if(result?.result?.redirected)return LINK_CACHE_TTL_REDIRECT_MS;
+    if(state==='healthy')return internal?LINK_CACHE_TTL_HEALTHY_INTERNAL_MS:LINK_CACHE_TTL_HEALTHY_EXTERNAL_MS;
+    return 0;
+  }
+  function pruneLinkCache(){
+    const ts=Date.now();
+    for(const[key,hit]of linkVerificationCache){
+      if(!hit||!Number.isFinite(Number(hit.expiresAt))||ts>hit.expiresAt)linkVerificationCache.delete(key);
+    }
+    while(linkVerificationCache.size>LINK_CACHE_MAX_ENTRIES){
+      const oldest=linkVerificationCache.keys().next().value;
+      linkVerificationCache.delete(oldest);
+    }
+  }
+  function cachedLinkResult(url,{bypass=false,internal}={}){
+    if(bypass)return null;
     const hit=linkVerificationCache.get(url);
     if(!hit)return null;
-    if(Date.now()>hit.expiresAt){linkVerificationCache.delete(url);return null}
-    return {...hit.result,cached:true};
+    if(!Number.isFinite(Number(hit.expiresAt))||Date.now()>hit.expiresAt){linkVerificationCache.delete(url);return null}
+    if(typeof internal==='boolean'&&Boolean(hit.internal)!==internal)return null;
+    const ageMs=Math.max(0,Date.now()-Number(hit.verifiedAt||0));
+    return{...hit.result,cached:true,cacheHit:true,verifiedAt:hit.verifiedAt,ageMs};
   }
-  function cacheLinkResult(url,result){
-    const ttl=result.verificationState==='healthy'?60000:result.verificationState==='confirmed-failure'?30000:10000;
-    const stored={result:{...result,cached:false},expiresAt:Date.now()+ttl};
+  function cacheLinkResult(url,result,{internal=true}={}){
+    const ttl=cacheTtlMs(result,internal);
+    if(!ttl)return;
+    const verifiedAt=Date.now();
+    const stored={result:{...result,cached:false},expiresAt:verifiedAt+ttl,verifiedAt,internal:!!internal};
     linkVerificationCache.set(url,stored);
     const finalUrl=result.result?.finalUrl;
     if(finalUrl&&finalUrl!==url&&result.verificationState==='healthy'){
       linkVerificationCache.set(finalUrl,stored);
     }
+    pruneLinkCache();
   }
-  async function probeUrl(url,{timeoutMs=3500,internal=true}={}){
-    const controller=new AbortController(),started=performance.now();
-    const timer=setTimeout(()=>controller.abort(),timeoutMs);
+  function hydrateLinkCache(entries=[]){
+    const ts=Date.now();
+    for(const row of (Array.isArray(entries)?entries:[]).slice(0,LINK_CACHE_MAX_ENTRIES)){
+      const key=String(row?.url||'');
+      if(!key||!row?.result)continue;
+      try{if(!/^https?:$/i.test(new URL(key).protocol))continue}catch{continue}
+      const expiresAt=Number(row.expiresAt);
+      if(!Number.isFinite(expiresAt)||expiresAt<=ts)continue;
+      const internal=row.internal!==false;
+      if(cacheTtlMs(row.result,internal)<=0)continue;
+      linkVerificationCache.set(key,{result:{...row.result,cached:false},expiresAt,verifiedAt:Number(row.verifiedAt)||ts,internal});
+    }
+    pruneLinkCache();
+  }
+  function exportLinkCache({pageUrl=''}={}){
+    pruneLinkCache();
+    let pageOrigin='';
+    try{pageOrigin=pageUrl?new URL(pageUrl).origin:''}catch{pageOrigin=''}
+    return[...linkVerificationCache.entries()].flatMap(([url,row])=>{
+      if(pageOrigin&&row.internal!==false){
+        try{if(new URL(url).origin!==pageOrigin)return[]}catch{return[]}
+      }
+      return[{url,result:row.result,verifiedAt:row.verifiedAt,expiresAt:row.expiresAt,internal:row.internal}];
+    });
+  }
+  function observeProtocol(url){
     try{
-      const res=await fetch(url,{method:'GET',redirect:'follow',credentials:internal?'same-origin':'omit',cache:'no-store',signal:controller.signal,headers:{'Accept':'text/html,application/xhtml+xml,application/json;q=0.8,*/*;q=0.5'}});
-      return{state:'complete',status:res.status,finalUrl:res.url||url,redirected:res.redirected,durationMs:Math.round(performance.now()-started)};
+      const entries=performance.getEntriesByName(url,'resource')||[];
+      const last=entries[entries.length-1];
+      return String(last?.nextHopProtocol||'');
+    }catch{return ''}
+  }
+  async function cancelBody(res){
+    try{if(res?.body?.cancel)await res.body.cancel()}catch{}
+  }
+  async function probeOnce(url,{timeoutMs=3500,internal=true,method='GET'}={}){
+    const controller=new AbortController(),started=performance.now();
+    const timer=setTimeout(()=>controller.abort('probe-timeout'),timeoutMs);
+    const verb=String(method||'GET').toUpperCase()==='HEAD'?'HEAD':'GET';
+    try{
+      const res=await fetch(url,{method:verb,redirect:'follow',credentials:internal?'same-origin':'omit',cache:'no-cache',keepalive:true,signal:controller.signal,headers:{'Accept':'text/html,application/xhtml+xml,application/json;q=0.8,*/*;q=0.5'}});
+      await cancelBody(res);
+      return{state:'complete',status:res.status,finalUrl:res.url||url,redirected:res.redirected,durationMs:Math.round(performance.now()-started),method:verb,protocol:observeProtocol(res.url||url)};
     }catch(error){
       const message=error?.message||'request failed';
-      const state=error?.name==='AbortError'?'timeout':/redirect/i.test(message)?'redirect-error':'unavailable';
-      return{state,status:0,error:message,finalUrl:url,durationMs:Math.round(performance.now()-started)};
+      const aborted=error?.name==='AbortError';
+      const reason=String(controller.signal?.reason||error?.cause||'');
+      let state='unavailable';
+      if(aborted){
+        state=(reason==='probe-cancelled'||reason==='scanner-cancelled')?'cancelled':'timeout';
+      }else if(/redirect/i.test(message))state='redirect-error';
+      return{state,status:0,error:message,abortReason:aborted?(reason||'abort'):'',finalUrl:url,durationMs:Math.round(performance.now()-started),method:verb};
     }finally{clearTimeout(timer)}
+  }
+  function headNeedsGet(result){
+    if(!result||result.state!=='complete')return true;
+    const status=Number(result.status||0);
+    if([405,501,400,403,401,429].includes(status))return true;
+    if(status===0)return true;
+    return false;
+  }
+  async function probeUrl(url,{timeoutMs=3500,internal=true,preferHead=true}={}){
+    if(preferHead){
+      const head=await probeOnce(url,{timeoutMs,internal,method:'HEAD'});
+      if(head.state==='complete'&&!headNeedsGet(head)){
+        const status=Number(head.status||0);
+        // Confirm missing/server-error over GET so mishandled HEAD cannot become a false broken link.
+        if(status===404||status===410||status>=500){
+          const get=await probeOnce(url,{timeoutMs,internal,method:'GET'});
+          get.priorMethod='HEAD';
+          return get;
+        }
+        return head;
+      }
+      const get=await probeOnce(url,{timeoutMs,internal,method:'GET'});
+      get.priorMethod='HEAD';
+      get.headStatus=head.status||0;
+      get.headState=head.state;
+      return get;
+    }
+    return probeOnce(url,{timeoutMs,internal,method:'GET'});
   }
   function probeClass(result){
     if(!result||result.state!=='complete')return'inconclusive';
@@ -2840,14 +3215,55 @@
     try{return new URL(url).host}catch{return ''}
   }
   function emptyHostProbeState(){
-    return{state:'healthy',inFlight:0,consecutive429:0,consecutive403:0,consecutiveTimeout:0,inferCause:''};
+    return{state:'healthy',inFlight:0,consecutive429:0,consecutive403:0,consecutiveTimeout:0,inferCause:'',originClass:'external'};
+  }
+  function originOfUrl(url){
+    try{return new URL(url).origin}catch{return ''}
+  }
+  function emptyOriginBucket(){
+    return{eligible:0,attempted:0,healthy:0,broken:0,inconclusive:0,unprobed:0};
+  }
+  function percentile(values,p){
+    if(!values.length)return 0;
+    const sorted=[...values].sort((a,b)=>a-b);
+    const idx=Math.min(sorted.length-1,Math.max(0,Math.ceil(p*sorted.length)-1));
+    return Math.round(sorted[idx]||0);
+  }
+  function average(values){
+    if(!values.length)return 0;
+    return Math.round(values.reduce((s,n)=>s+n,0)/values.length);
+  }
+  function compactHostDiagnostics(hosts,limit=8){
+    const rows=[...hosts.values()].map(row=>{
+      const durations=row.durations||[];
+      const problems=(row.timeouts||0)+(row.status429||0)+(row.status5xx||0)+(row.networkFailures||0);
+      return{
+        host:row.host,
+        originClass:row.originClass||'external',
+        jobs:row.jobs||0,
+        completed:row.completed||0,
+        timeouts:row.timeouts||0,
+        '429s':row.status429||0,
+        '5xx':row.status5xx||0,
+        networkFailures:row.networkFailures||0,
+        averageDurationMs:average(durations),
+        p95DurationMs:percentile(durations,.95),
+        maxDurationMs:durations.length?Math.round(Math.max(...durations)):0,
+        maxConcurrencyObserved:row.maxConcurrencyObserved||0,
+        _score:problems*1000+Math.max(...durations,0)
+      };
+    }).sort((a,b)=>b._score-a._score).slice(0,limit);
+    return rows.map(({_score,...rest})=>rest);
   }
   async function runPrimaryVerificationQueue(entries,{
     globalConcurrency=LINK_PROBE_CONCURRENCY,
-    perHostConcurrency=LINK_PROBE_PER_HOST_CONCURRENCY,
+    perHostConcurrency=LINK_PROBE_EXTERNAL_PER_HOST_CONCURRENCY,
+    targetOriginConcurrency=LINK_PROBE_TARGET_ORIGIN_CONCURRENCY,
+    externalPerHostConcurrency=LINK_PROBE_EXTERNAL_PER_HOST_CONCURRENCY,
     timeoutMs=LINK_PROBE_TIMEOUT_MS,
     retryTimeoutMs=LINK_PROBE_RETRY_TIMEOUT_MS,
     emergencyMs=LINK_PROBE_EMERGENCY_MS,
+    targetOrigin='',
     onProgress=null
   }={}){
     const n=entries.length;
@@ -2857,14 +3273,28 @@
     let globalInFlight=0;
     let maxGlobalInFlight=0;
     let maxPerHostInFlight=0;
+    let maxTargetOriginInFlight=0;
+    let maxExternalPerHostInFlight=0;
     let completed=0;
     let emergencyFired=false;
+    const pageOrigin=targetOrigin||(()=>{try{return location.origin}catch{return ''}})();
+    const totalCeiling=Math.max(2,Math.min(LINK_PROBE_CONCURRENCY,Number(globalConcurrency)||LINK_PROBE_CONCURRENCY));
+    const externalCap=Math.max(1,Number(externalPerHostConcurrency||perHostConcurrency||LINK_PROBE_EXTERNAL_PER_HOST_CONCURRENCY));
+    const targetStart=Math.max(externalCap,Number(targetOriginConcurrency||LINK_PROBE_TARGET_ORIGIN_CONCURRENCY));
+    let targetCap=Math.min(targetStart,totalCeiling);
     const emergencyAt=performance.now()+Number(emergencyMs||LINK_PROBE_EMERGENCY_MS);
     const hosts=new Map();
+    const hostDiag=new Map();
+    const targetDurations=[];
+    let consecutiveTarget429=0,consecutiveTarget5xx=0,consecutiveTargetNet=0;
     let waiters=[];
     function hostState(host){
       if(!hosts.has(host))hosts.set(host,emptyHostProbeState());
       return hosts.get(host);
+    }
+    function diag(host,originClass){
+      if(!hostDiag.has(host))hostDiag.set(host,{host,originClass,jobs:0,completed:0,timeouts:0,status429:0,status5xx:0,networkFailures:0,durations:[],maxConcurrencyObserved:0});
+      return hostDiag.get(host);
     }
     function notify(){
       const q=waiters;waiters=[];
@@ -2872,6 +3302,122 @@
     }
     function waitForSlot(){
       return new Promise(resolve=>{waiters.push(resolve)});
+    }
+    function emitProgress(){
+      onProgress?.({queued:n,completed,attempted:completed+globalInFlight,inFlight:globalInFlight,pending:pendingCount});
+    }
+    function relatedHostName(a,b){
+      const al=String(a||'').split('.').filter(Boolean);
+      const bl=String(b||'').split('.').filter(Boolean);
+      if(al.length<2||bl.length<2)return false;
+      return al.slice(-2).join('.')===bl.slice(-2).join('.');
+    }
+    function originClassFor(url){
+      try{
+        const u=new URL(url);
+        if(pageOrigin&&u.origin===pageOrigin)return'target';
+        const pageHost=pageOrigin?new URL(pageOrigin).hostname:'';
+        if(pageHost&&relatedHostName(u.hostname,pageHost))return'related';
+        return'external';
+      }catch{return'external'}
+    }
+    function hostCap(originClass){
+      return originClass==='target'?Math.max(2,effectiveTargetCap()):externalCap;
+    }
+    function remainingExternalJobs(phaseClaimed){
+      let left=0;
+      for(let i=0;i<n;i++){
+        if(phaseClaimed[i])continue;
+        if(originClassFor(entries[i].url)!=='target')left++;
+      }
+      return left;
+    }
+    function effectiveTargetCap(){
+      const withExternal=remainingExternal>0?LINK_PROBE_TARGET_WITH_EXTERNAL_CEILING:LINK_PROBE_TARGET_ORIGIN_CEILING;
+      return Math.max(2,Math.min(targetCap,withExternal,LINK_PROBE_TARGET_ORIGIN_CEILING));
+    }
+    function queuePriority(job){
+      const oc=originClassFor(job.url);
+      if(oc==='target'){
+        try{
+          const u=new URL(job.url);
+          if(u.pathname===location.pathname&&u.search===location.search)return 3;
+        }catch{}
+        return 1;
+      }
+      if(oc==='related')return 2;
+      return 4;
+    }
+    entries.sort((a,b)=>queuePriority(a)-queuePriority(b));
+    const claimOrder=[];
+    const methodCounts={HEAD:0,GET:0};
+    const protocolCounts={h2:0,h3:0,http1:0,other:0};
+    let cacheHits=0,cacheMisses=0,primaryAttemptCount=0,refinementCount=0;
+    let targetBusyMs=0,targetPoolStarted=0;
+    let remainingExternal=entries.filter(e=>originClassFor(e.url)!=='target').length;
+    function noteMethod(result){
+      const attempts=result?.attempts?.length?result.attempts:[result?.result].filter(Boolean);
+      for(const row of attempts){
+        const m=String(row?.method||'GET').toUpperCase();
+        if(m==='HEAD')methodCounts.HEAD++;
+        else methodCounts.GET++;
+        const proto=String(row?.protocol||'').toLowerCase();
+        if(proto==='h3'||proto==='http/3')protocolCounts.h3++;
+        else if(proto==='h2'||proto==='http/2')protocolCounts.h2++;
+        else if(proto==='http/1.1'||proto==='http/1.0')protocolCounts.http1++;
+        else if(proto)protocolCounts.other++;
+      }
+    }
+    function nextTargetStep(cap){
+      const steps=[6,8,10,12];
+      const found=steps.find(s=>s>cap);
+      if(found!=null)return Math.min(found,LINK_PROBE_TARGET_ORIGIN_CEILING);
+      return Math.min(cap+2,LINK_PROBE_TARGET_ORIGIN_CEILING);
+    }
+    let targetHealthyStreak=0;
+    function adaptTarget(verified,originClass){
+      if(originClass!=='target')return;
+      const status=Number(verified?.result?.status||0);
+      const state=String(verified?.result?.state||'');
+      const duration=Number(verified?.result?.durationMs||0);
+      const cause=String(verified?.cause||'');
+      if(status===429||cause==='rate-limited'){
+        consecutiveTarget429++;
+        if(consecutiveTarget429>=2){targetCap=Math.max(2,Math.floor(targetCap/2));targetHealthyStreak=0}
+      }else consecutiveTarget429=0;
+      if(status>=500){
+        consecutiveTarget5xx++;
+        if(consecutiveTarget5xx>=2){targetCap=Math.max(2,Math.floor(targetCap/2));targetHealthyStreak=0}
+      }else consecutiveTarget5xx=0;
+      if(state==='unavailable'||cause==='network-failure'||/reset|econnreset/i.test(String(verified?.result?.error||''))){
+        consecutiveTargetNet++;
+        if(consecutiveTargetNet>=3){targetCap=Math.max(2,Math.floor(targetCap/2));targetHealthyStreak=0}
+      }else consecutiveTargetNet=0;
+      if(duration>0){
+        targetDurations.push(duration);
+        if(targetDurations.length>=8){
+          const baseline=average(targetDurations.slice(0,6));
+          const recent=average(targetDurations.slice(-6));
+          if(baseline>0&&recent>baseline*2.2&&recent>1800){targetCap=Math.max(2,Math.floor(targetCap/2));targetHealthyStreak=0}
+        }
+      }
+      const healthy=status>=200&&status<400&&state!=='timeout'&&state!=='unavailable';
+      if(healthy){
+        targetHealthyStreak++;
+        if(targetHealthyStreak>=LINK_PROBE_HEALTHY_WINDOW&&targetCap<LINK_PROBE_TARGET_ORIGIN_CEILING){
+          targetCap=Math.min(nextTargetStep(targetCap),totalCeiling,LINK_PROBE_TARGET_ORIGIN_CEILING);
+          targetHealthyStreak=0;
+        }
+      }else if(status>0||state==='timeout')targetHealthyStreak=0;
+    }
+    function shouldRefine(verified){
+      if(!verified)return false;
+      const state=String(verified.verificationState||'');
+      if(state==='healthy'||state==='confirmed-failure'||state==='unprobed')return false;
+      const status=Number(verified.result?.status||0);
+      const cause=String(verified.cause||'');
+      if([401,403,429].includes(status)||cause==='rate-limited'||cause==='remote-blocked')return false;
+      return state==='inconclusive';
     }
     function noteHostOutcome(host,verified){
       const hs=hostState(host);
@@ -2890,96 +3436,189 @@
         if(hs.consecutiveTimeout>=4&&hs.state==='healthy'){hs.state='throttled';hs.inferCause='scanner-timeout'}
       }else hs.consecutiveTimeout=0;
     }
-    function claimJob(){
+    function recordDiag(host,originClass,verified){
+      const row=diag(host,originClass);
+      row.completed++;
+      const status=Number(verified?.result?.status||0);
+      const state=String(verified?.result?.state||'');
+      const duration=Number(verified?.result?.durationMs||0);
+      if(duration>0)row.durations.push(duration);
+      if(state==='timeout'||verified?.cause==='scanner-timeout')row.timeouts++;
+      if(status===429)row.status429++;
+      if(status>=500)row.status5xx++;
+      if(verified?.cause==='network-failure'||state==='unavailable')row.networkFailures++;
+    }
+    function claimJob(phaseClaimed,poolKind){
       if(!pendingCount)return null;
+      if(globalInFlight>=totalCeiling)return null;
       let blockedByHost=false;
       for(let i=0;i<n;i++){
-        if(claimed[i])continue;
+        if(phaseClaimed[i])continue;
         const job=entries[i];
+        const originClass=originClassFor(job.url);
+        const isTarget=originClass==='target';
+        if(poolKind==='target'&&!isTarget)continue;
+        if(poolKind==='external'&&isTarget)continue;
         const host=hostOfUrl(job.url);
         const hs=hostState(host);
+        hs.originClass=originClass;
         if(hs.state==='throttled'||hs.state==='remote-blocked'){
-          claimed[i]=1;pendingCount--;
-          return{index:i,job,host,hs,inferred:true};
+          phaseClaimed[i]=1;pendingCount--;
+          claimOrder.push(originClass);
+          return{index:i,job,host,hs,originClass,inferred:true};
         }
-        if(hs.inFlight>=perHostConcurrency){blockedByHost=true;continue}
-        claimed[i]=1;pendingCount--;
-        return{index:i,job,host,hs,inferred:false};
+        if(poolKind==='external'){
+          const externalInFlight=[...hosts.values()].filter(h=>h.originClass!=='target').reduce((s,h)=>s+h.inFlight,0);
+          if(externalInFlight>=LINK_PROBE_EXTERNAL_GLOBAL){blockedByHost=true;continue}
+        }else if(hs.inFlight>=effectiveTargetCap()){blockedByHost=true;continue}
+        if(!isTarget&&hs.inFlight>=externalCap){blockedByHost=true;continue}
+        phaseClaimed[i]=1;pendingCount--;
+        claimOrder.push(originClass);
+        return{index:i,job,host,hs,originClass,inferred:false};
       }
       return blockedByHost?null:null;
     }
-    async function verifyOne(job){
-      const cached=cachedLinkResult(job.url);
-      if(cached)return cached;
-      const first=await probeUrl(job.url,{timeoutMs,internal:job.internal!==false});
+    function probeTimeoutFor(originClass){
+      if(originClass!=='target')return timeoutMs;
+      if(Number(timeoutMs)>0&&Number(timeoutMs)<LINK_PROBE_TIMEOUT_MS)return Number(timeoutMs);
+      return Math.max(timeoutMs,LINK_PROBE_TARGET_TIMEOUT_MS);
+    }
+    async function verifyPrimary(job,originClass){
+      const cached=cachedLinkResult(job.url,{internal:job.internal!==false});
+      if(cached){cacheHits++;return cached}
+      cacheMisses++;
+      primaryAttemptCount++;
+      const first=await probeUrl(job.url,{timeoutMs:probeTimeoutFor(originClass),internal:job.internal!==false});
       if(probeClass(first)==='healthy'){
         const verified={verificationState:'healthy',confidence:'confirmed',result:first,attempts:[first]};
-        cacheLinkResult(job.url,verified);
+        cacheLinkResult(job.url,verified,{internal:job.internal!==false});
         return verified;
       }
+      const status=Number(first?.status||0);
+      if([401,403,429].includes(status)){
+        return{verificationState:'inconclusive',confidence:'inconclusive',result:first,attempts:[first],cause:status===429?'rate-limited':'remote-blocked'};
+      }
+      return{verificationState:'inconclusive',confidence:'inconclusive',result:first,attempts:[first],cause:inconclusiveCause({},{...first},{internal:job.internal!==false})};
+    }
+    async function verifyRefinement(job,originClass,prior){
+      refinementCount++;
+      const first=prior?.result||await probeUrl(job.url,{timeoutMs:probeTimeoutFor(originClass),internal:job.internal!==false});
       const verified=await verifyLink(job.url,first,{
         retryTimeoutMs,
         thirdTimeoutMs:retryTimeoutMs,
         degraded:false,
         internal:job.internal!==false
       });
-      cacheLinkResult(job.url,verified);
+      cacheLinkResult(job.url,verified,{internal:job.internal!==false});
       return verified;
     }
-    async function worker(){
-      while(pendingCount>0||globalInFlight>0){
-        if(performance.now()>=emergencyAt){emergencyFired=true;notify();break}
-        const claimedJob=claimJob();
-        if(!claimedJob){
-          if(!pendingCount&&!globalInFlight)break;
-          if(!pendingCount)break;
-          const wait=waitForSlot();
-          const timeout=new Promise(resolve=>setTimeout(resolve,12));
-          await Promise.race([wait,timeout]);
-          continue;
-        }
-        const {index,job,host,hs,inferred}=claimedJob;
-        if(inferred){
-          const cause=hs.state==='remote-blocked'?'remote-blocked':hs.inferCause||(hs.state==='throttled'?'rate-limited':'scanner-timeout');
-          results[index]={
-            verificationState:'inconclusive',
-            confidence:'inconclusive',
-            result:{state:'host-throttled',status:0,finalUrl:job.url,durationMs:0},
-            attempts:[],
-            cause,
-            hostInferred:true
-          };
-          completed++;
-          onProgress?.({queued:n,completed,inFlight:globalInFlight,pending:pendingCount});
-          continue;
-        }
-        hs.inFlight++;
-        globalInFlight++;
-        maxGlobalInFlight=Math.max(maxGlobalInFlight,globalInFlight);
-        maxPerHostInFlight=Math.max(maxPerHostInFlight,hs.inFlight);
-        try{
-          const verified=await verifyOne(job);
-          results[index]=verified;
-          noteHostOutcome(host,verified);
-        }catch{
-          results[index]={
-            verificationState:'inconclusive',
-            confidence:'inconclusive',
-            result:{state:'unavailable',status:0,finalUrl:job.url,durationMs:0,error:'probe-failed'},
-            attempts:[],
-            cause:'network-failure'
-          };
-        }finally{
-          hs.inFlight--;
-          globalInFlight--;
-          completed++;
-          onProgress?.({queued:n,completed,inFlight:globalInFlight,pending:pendingCount});
-          notify();
+    async function runPool(phaseClaimed,poolKind,phase,workerCount){
+      async function worker(){
+        while(pendingCount>0||globalInFlight>0){
+          if(performance.now()>=emergencyAt){emergencyFired=true;notify();break}
+          const claimedJob=claimJob(phaseClaimed,poolKind);
+          if(!claimedJob){
+            if(!pendingCount)break;
+            const wait=waitForSlot();
+            const timeout=new Promise(resolve=>setTimeout(resolve,16));
+            await Promise.race([wait,timeout]);
+            continue;
+          }
+          const {index,job,host,hs,originClass,inferred}=claimedJob;
+          const stats=diag(host,originClass);
+          stats.jobs++;
+          if(inferred){
+            const cause=hs.state==='remote-blocked'?'remote-blocked':hs.inferCause||(hs.state==='throttled'?'rate-limited':'scanner-timeout');
+            results[index]={
+              verificationState:'inconclusive',
+              confidence:'inconclusive',
+              result:{state:'host-throttled',status:0,finalUrl:job.url,durationMs:0},
+              attempts:[],
+              cause,
+              hostInferred:true,
+              originClass
+            };
+            stats.completed++;
+            completed++;
+            if(originClass!=='target')remainingExternal=Math.max(0,remainingExternal-1);
+            emitProgress();
+            notify();
+            continue;
+          }
+          const busyStarted=performance.now();
+          hs.inFlight++;
+          globalInFlight++;
+          maxGlobalInFlight=Math.max(maxGlobalInFlight,globalInFlight);
+          maxPerHostInFlight=Math.max(maxPerHostInFlight,hs.inFlight);
+          stats.maxConcurrencyObserved=Math.max(stats.maxConcurrencyObserved,hs.inFlight);
+          if(originClass==='target')maxTargetOriginInFlight=Math.max(maxTargetOriginInFlight,hs.inFlight);
+          else maxExternalPerHostInFlight=Math.max(maxExternalPerHostInFlight,hs.inFlight);
+          emitProgress();
+          try{
+            const verified=phase==='refinement'
+              ?await verifyRefinement(job,originClass,results[index])
+              :await verifyPrimary(job,originClass);
+            verified.originClass=originClass;
+            results[index]=verified;
+            noteMethod(verified);
+            noteHostOutcome(host,verified);
+            recordDiag(host,originClass,verified);
+            adaptTarget(verified,originClass);
+          }catch{
+            results[index]={
+              verificationState:'inconclusive',
+              confidence:'inconclusive',
+              result:{state:'unavailable',status:0,finalUrl:job.url,durationMs:0,error:'probe-failed'},
+              attempts:[],
+              cause:'network-failure',
+              originClass
+            };
+            recordDiag(host,originClass,results[index]);
+          }finally{
+            if(originClass==='target')targetBusyMs+=performance.now()-busyStarted;
+            if(originClass!=='target')remainingExternal=Math.max(0,remainingExternal-1);
+            hs.inFlight--;
+            globalInFlight--;
+            if(phase==='primary')completed++;
+            emitProgress();
+            notify();
+          }
         }
       }
+      const count=Math.min(Math.max(1,workerCount),Math.max(1,n));
+      if(n)await Promise.all(Array.from({length:count},()=>worker()));
     }
-    const workers=Math.min(Math.max(1,globalConcurrency),Math.max(1,n));
-    if(n)await Promise.all(Array.from({length:workers},()=>worker()));
+    async function runPhase(phase){
+      const phaseClaimed=new Uint8Array(n);
+      pendingCount=0;
+      for(let i=0;i<n;i++){
+        if(phase==='primary'){
+          phaseClaimed[i]=0;
+          pendingCount++;
+        }else if(shouldRefine(results[i])){
+          phaseClaimed[i]=0;
+          pendingCount++;
+        }else phaseClaimed[i]=1;
+      }
+      if(!pendingCount)return;
+      remainingExternal=0;
+      for(let i=0;i<n;i++){
+        if(!phaseClaimed[i]&&originClassFor(entries[i].url)!=='target')remainingExternal++;
+      }
+      const targetWorkers=Math.min(LINK_PROBE_TARGET_ORIGIN_CEILING,totalCeiling,n);
+      const externalWorkers=Math.min(LINK_PROBE_EXTERNAL_GLOBAL,totalCeiling,n);
+      await Promise.all([
+        runPool(phaseClaimed,'target',phase,targetWorkers),
+        runPool(phaseClaimed,'external',phase,externalWorkers)
+      ]);
+    }
+    const primaryStarted=performance.now();
+    targetPoolStarted=primaryStarted;
+    if(n)await runPhase('primary');
+    const primaryMs=Math.round(performance.now()-primaryStarted);
+    const refineStarted=performance.now();
+    if(n&&!emergencyFired)await runPhase('refinement');
+    const refinementMs=Math.round(performance.now()-refineStarted);
     for(let i=0;i<n;i++){
       if(results[i])continue;
       results[i]={
@@ -2988,18 +3627,40 @@
         result:null,
         attempts:[],
         budgetExhausted:true,
-        cause:'scanner-budget-aborted'
+        cause:'scanner-budget-aborted',
+        originClass:originClassFor(entries[i]?.url)
       };
     }
+    const targetPoolMs=Math.max(1,Math.round(performance.now()-targetPoolStarted));
     return{
       results,
       metrics:{
         maxGlobalInFlight,
         maxPerHostInFlight,
+        maxTargetOriginInFlight,
+        maxExternalPerHostInFlight,
+        targetOriginConcurrencyStart:targetStart,
+        targetOriginConcurrencyEnd:targetCap,
+        targetOriginConcurrencyPeak:maxTargetOriginInFlight,
+        externalPerHostConcurrency:externalCap,
+        externalGlobalConcurrency:LINK_PROBE_EXTERNAL_GLOBAL,
         emergencyFired,
         completed:results.filter(r=>r&&r.verificationState!=='unprobed').length,
         pendingAtEnd:results.filter(r=>r?.verificationState==='unprobed').length,
-        completion:emergencyFired?'emergency':'queue-empty'
+        completion:emergencyFired?'emergency':'queue-empty',
+        terminationReason:emergencyFired?'emergency-deadline':'queue-drained',
+        claimOrder:claimOrder.slice(0,160),
+        hostDiagnostics:compactHostDiagnostics(hostDiag),
+        primaryAttemptCount,
+        refinementCount,
+        cacheHits,
+        cacheMisses,
+        methods:methodCounts,
+        protocols:protocolCounts,
+        primaryMs,
+        refinementMs,
+        targetIdleWorkerMs:Math.max(0,Math.round((targetPoolMs*Math.max(1,maxTargetOriginInFlight))-targetBusyMs)),
+        averageTargetWorkers:maxTargetOriginInFlight?Math.round((targetBusyMs/targetPoolMs)*10)/10:0
       }
     };
   }
@@ -3012,11 +3673,11 @@
       return{verificationState:'inconclusive',confidence:'inconclusive',result:first,attempts,cause:firstStatus===429?'rate-limited':'remote-blocked'};
     }
     // External timeout/opaque failures rarely gain evidence from a same-origin browser retry.
-    if(!internal&&(first.state==='timeout'||first.state==='unavailable'||firstStatus===0)){
-      const cause=first.state==='timeout'?'scanner-timeout':/cors|opaque|failed to fetch|typeerror/i.test(String(first.error||''))?'cors-or-opaque':'network-failure';
+    if(!internal&&(first.state==='timeout'||first.state==='cancelled'||first.state==='unavailable'||firstStatus===0)){
+      const cause=first.state==='timeout'?'scanner-timeout':first.state==='cancelled'?'scanner-cancelled':/cors|opaque|failed to fetch|typeerror/i.test(String(first.error||''))?'cors-or-opaque':'network-failure';
       return{verificationState:'inconclusive',confidence:'inconclusive',result:first,attempts,cause};
     }
-    const second=await probeUrl(url,{timeoutMs:degraded?Math.max(retryTimeoutMs,8000):retryTimeoutMs,internal});
+    const second=await probeUrl(url,{timeoutMs:degraded?Math.max(retryTimeoutMs,8000):retryTimeoutMs,internal,preferHead:false});
     attempts.push(second);
     const secondClass=probeClass(second);
     if(secondClass==='healthy')return{verificationState:'healthy',confidence:'confirmed',result:second,attempts};
@@ -3029,7 +3690,7 @@
     const oneFailure=[firstClass,secondClass].filter(x=>x==='missing'||x==='server-error'||x==='redirect-error');
     const oneInconclusive=[firstClass,secondClass].some(x=>x==='inconclusive');
     if(oneFailure.length===1&&oneInconclusive){
-      const third=await probeUrl(url,{timeoutMs:thirdTimeoutMs,internal});
+      const third=await probeUrl(url,{timeoutMs:thirdTimeoutMs,internal,preferHead:false});
       attempts.push(third);
       const thirdClass=probeClass(third);
       if(thirdClass==='healthy')return{verificationState:'healthy',confidence:'confirmed',result:third,attempts};
@@ -3040,11 +3701,18 @@
     const last=attempts[attempts.length-1];
     return{verificationState:'inconclusive',confidence:'inconclusive',result:last,attempts,cause:inconclusiveCause({},{...last},{internal})};
   }
+  function invalidateCachedLink(url){
+    const hit=linkVerificationCache.get(url);
+    linkVerificationCache.delete(url);
+    const finalUrl=hit?.result?.result?.finalUrl;
+    if(finalUrl)linkVerificationCache.delete(finalUrl);
+  }
   async function recheckLink(url,{timeoutMs=4500,retryTimeoutMs=8000}={}){
     let internal=true;try{internal=new URL(url).origin===location.origin}catch{}
-    const first=await probeUrl(url,{timeoutMs,internal});
+    invalidateCachedLink(url);
+    const first=await probeUrl(url,{timeoutMs,internal,preferHead:true});
     const result=await verifyLink(url,first,{retryTimeoutMs,thirdTimeoutMs:retryTimeoutMs,degraded:false,internal});
-    cacheLinkResult(url,result);
+    cacheLinkResult(url,result,{internal});
     return {
       url,
       verificationState:result.verificationState,
@@ -3052,12 +3720,14 @@
       failureClass:result.failureClass||'',
       status:result.result?.status||0,
       finalUrl:result.result?.finalUrl||url,
-      attempts:(result.attempts||[]).map((a,index)=>({attempt:index+1,state:a.state,status:a.status||0,durationMs:a.durationMs||0,finalUrl:a.finalUrl||url}))
+      cacheBypass:true,
+      attempts:(result.attempts||[]).map((a,index)=>({attempt:index+1,state:a.state,status:a.status||0,durationMs:a.durationMs||0,finalUrl:a.finalUrl||url,method:a.method||'GET'}))
     };
   }
 
   function inconclusiveCause(verified={},result={},{internal=true}={}){
     if(verified.budgetExhausted||result.state==='budget-exhausted')return'scanner-budget-aborted';
+    if(result.state==='cancelled')return'scanner-cancelled';
     if(result.state==='timeout')return'scanner-timeout';
     const status=Number(result.status||0);
     if(status===429)return'rate-limited';
@@ -3089,13 +3759,17 @@
   async function auditLinks({
     limit=LINK_PROBE_HARD_CEILING,
     concurrency=LINK_PROBE_CONCURRENCY,
-    perHostConcurrency=LINK_PROBE_PER_HOST_CONCURRENCY,
+    perHostConcurrency=LINK_PROBE_EXTERNAL_PER_HOST_CONCURRENCY,
+    targetOriginConcurrency=LINK_PROBE_TARGET_ORIGIN_CONCURRENCY,
+    externalPerHostConcurrency=LINK_PROBE_EXTERNAL_PER_HOST_CONCURRENCY,
     timeoutMs=LINK_PROBE_TIMEOUT_MS,
     retryTimeoutMs=LINK_PROBE_RETRY_TIMEOUT_MS,
     budgetMs,
     emergencyMs,
-    onProgress=null
+    onProgress=null,
+    cacheSeed=null
   }={}){
+    if(Array.isArray(cacheSeed)&&cacheSeed.length)hydrateLinkCache(cacheSeed);
     const allGroups=new Map();
     for(const a of collectLinkAnchors()){
       const classified=classifyLink(a);if(!classified)continue;
@@ -3112,16 +3786,22 @@
     const unprobedByLimit=Math.max(0,discovered-entries.length);
     const emergencyDeadline=Number(emergencyMs??budgetMs??LINK_PROBE_EMERGENCY_MS);
     const startedAt=performance.now();
+    const pageOrigin=(()=>{try{return location.origin}catch{return ''}})();
     const queued=await runPrimaryVerificationQueue(entries,{
       globalConcurrency:concurrency,
-      perHostConcurrency,
+      perHostConcurrency:externalPerHostConcurrency||perHostConcurrency,
+      targetOriginConcurrency,
+      externalPerHostConcurrency:externalPerHostConcurrency||perHostConcurrency,
       timeoutMs,
       retryTimeoutMs,
       emergencyMs:emergencyDeadline,
+      targetOrigin:pageOrigin,
       onProgress
     });
     const verificationResults=queued.results;
-    const primaryLinkMs=Math.round(performance.now()-startedAt);
+    const qm=queued.metrics||{};
+    const primaryLinkMs=Number(qm.primaryMs)||Math.round(performance.now()-startedAt);
+    const refinementLinkMs=Number(qm.refinementMs)||0;
 
     const findings=[],incompleteChecks=[],externalCandidates=[],unprobedChecks=[];
     let healthy=0,confirmedIssues=0,cachedCount=0,inconclusiveCount=0,scannerAborted=0;
@@ -3129,6 +3809,7 @@
       total:0,
       scannerBudgetAborted:0,
       scannerTimeout:0,
+      scannerCancelled:0,
       remoteBlocked:0,
       rateLimited:0,
       corsOrOpaque:0,
@@ -3140,6 +3821,7 @@
     const causeKey=cause=>{
       if(cause==='scanner-budget-aborted')return'scannerBudgetAborted';
       if(cause==='scanner-timeout')return'scannerTimeout';
+      if(cause==='scanner-cancelled')return'scannerCancelled';
       if(cause==='remote-blocked')return'remoteBlocked';
       if(cause==='rate-limited')return'rateLimited';
       if(cause==='cors-or-opaque')return'corsOrOpaque';
@@ -3148,23 +3830,47 @@
       if(cause==='ambiguous-response')return'ambiguousResponse';
       return'other';
     };
+    const linksByOriginClass={targetOrigin:emptyOriginBucket(),related:emptyOriginBucket(),external:emptyOriginBucket()};
+    const originBucket=url=>{
+      const oc=(()=>{try{
+        const u=new URL(url);
+        if(u.origin===pageOrigin)return'targetOrigin';
+        const pageHost=pageOrigin?new URL(pageOrigin).hostname:'';
+        const host=u.hostname;
+        const a=host.split('.').filter(Boolean);
+        const b=String(pageHost||'').split('.').filter(Boolean);
+        if(a.length>=2&&b.length>=2&&a.slice(-2).join('.')===b.slice(-2).join('.'))return'related';
+        return'external';
+      }catch{return'external'}})();
+      return oc;
+    };
+    const destinations=entries.map(entry=>({
+      url:entry.url,
+      internal:!!entry.internal,
+      originClass:originBucket(entry.url)==='targetOrigin'?'target':originBucket(entry.url)
+    })).slice(0,240);
     entries.forEach((entry,i)=>{
       const verified=verificationResults[i]||{verificationState:'inconclusive',confidence:'inconclusive',attempts:[]};
+      const bucket=linksByOriginClass[originBucket(entry.url)];
+      bucket.eligible++;
       if(verified.cached)cachedCount++;
       if(verified.verificationState==='unprobed'){
+        bucket.unprobed++;
         let path='';try{path=new URL(entry.url).pathname}catch{path=entry.url}
         unprobedChecks.push({kind:entry.internal?'internal-link':'external-link',url:entry.url,path,text:'',reason:'probe-budget-exhausted',cause:'scanner-budget-aborted',status:0,attempts:[]});
         return;
       }
+      bucket.attempted++;
       const first=entry.anchors[0],ctx=linkContext(first);
       const sources=entry.anchors.slice(0,12).map(a=>({...linkContext(a),selector:selectorFor(a),scope:frameContextFor(a)?.embeddedContext||'top-document'}));
       const result=verified.result||verified.attempts?.[verified.attempts.length-1]||{status:0,state:'unavailable',finalUrl:entry.url};
       const attemptEvidence=(verified.attempts||[]).map((a,index)=>({attempt:index+1,state:a.state,status:a.status||0,durationMs:a.durationMs||0,finalUrl:a.finalUrl||entry.url}));
       const method=entry.internal?'same-origin browser GET with independent retry':'cross-origin GET with independent retry';
       const extra={link:{url:entry.url,internal:!!entry.internal,sourceUrl:location.href,status:result.status||0,state:result.state||'unknown',finalUrl:result.finalUrl||entry.url,redirected:!!result.redirected,occurrences:entry.anchors.length,sources,scope:[...entry.frames][0]||'top-document',frames:[...entry.frames],...ctx},verification:{state:verified.verificationState,method,attempts:attemptEvidence.length,evidence:attemptEvidence}};
-      if(verified.verificationState==='healthy'){healthy++;return}
+      if(verified.verificationState==='healthy'){healthy++;bucket.healthy++;return}
       if(verified.verificationState==='inconclusive'){
         inconclusiveCount++;
+        bucket.inconclusive++;
         const cause=verified.cause||inconclusiveCause(verified,result,{internal:entry.internal!==false});
         inconclusiveByCause.total++;
         inconclusiveByCause[causeKey(cause)]++;
@@ -3191,6 +3897,7 @@
         return;
       }
       confirmedIssues++;
+      bucket.broken++;
       if(verified.failureClass==='missing'){
         const status=result.status===410?410:404;
         const ruleId=entry.internal?`navigation.link-${status}`:`navigation.link-${status}-external`;
@@ -3210,6 +3917,15 @@
     const probeBudgetPreventedCoverage=unprobed>0||scannerAborted>0;
     const coverageState=probeBudgetPreventedCoverage?'partial':'complete';
     const emptyRefinement={eligible:0,queued:0,attempted:0,resolvedHealthy:0,resolvedBroken:0,stillInconclusive:0,notAttempted:0,budgetAborted:0,truncated:false};
+    const originCounts={targetOrigin:linksByOriginClass.targetOrigin.eligible,related:linksByOriginClass.related.eligible,external:linksByOriginClass.external.eligible};
+    const perOrigin=(qm.hostDiagnostics||[]).slice(0,8).map(row=>({
+      host:row.host,
+      originClass:row.originClass,
+      p50DurationMs:row.averageDurationMs||0,
+      p95DurationMs:row.p95DurationMs||0,
+      maxDurationMs:row.maxDurationMs||row.p95DurationMs||0,
+      maxConcurrencyObserved:row.maxConcurrencyObserved||0
+    }));
     return{
       findings,
       discovered,eligible,attempted,checked:attempted,verifiedHealthy:healthy,confirmedIssues,
@@ -3221,9 +3937,38 @@
       probeBudgetPreventedCoverage,
       status:coverageState,
       queueMetrics:queued.metrics,
+      linksByOriginClass,
+      destinations,
+      hostDiagnostics:queued.metrics.hostDiagnostics||[],
+      queueTerminationReason:queued.metrics.terminationReason||queued.metrics.completion||'',
       primaryLinkMs,
-      refinementLinkMs:0,
-      refinement:emptyRefinement
+      refinementLinkMs,
+      cacheExport:exportLinkCache(),
+      linkExecution:{
+        uniqueUrls:discovered,
+        targetOriginUrls:originCounts.targetOrigin,
+        relatedHostUrls:originCounts.related,
+        externalUrls:originCounts.external,
+        primaryAttemptCount:Number(qm.primaryAttemptCount||attempted),
+        refinementCount:Number(qm.refinementCount||0),
+        gatewayFallbackCount:0,
+        cacheHits:Number(qm.cacheHits||cachedCount||0),
+        cacheMisses:Number(qm.cacheMisses||0),
+        methods:qm.methods||{HEAD:0,GET:0},
+        protocols:qm.protocols||undefined,
+        targetConcurrency:{start:qm.targetOriginConcurrencyStart,peak:qm.maxTargetOriginInFlight,final:qm.targetOriginConcurrencyEnd},
+        externalPeakConcurrency:qm.maxExternalPerHostInFlight,
+        primaryMs:primaryLinkMs,
+        refinementMs:refinementLinkMs,
+        queueTerminationReason:qm.terminationReason||qm.completion||'',
+        perOrigin
+      },
+      refinement:{
+        ...emptyRefinement,
+        eligible:Number(qm.refinementCount||0),
+        queued:Number(qm.refinementCount||0),
+        attempted:Number(qm.refinementCount||0)
+      }
     };
   }
   function applyExternalProbeResults(candidates=[], probeRows=[]){
@@ -3318,12 +4063,17 @@
       privilegedFallback:linkResult.privilegedFallback,
       refinement:linkResult.refinement,
       queueMetrics:linkResult.queueMetrics,
+      linksByOriginClass:linkResult.linksByOriginClass,
+      destinations:linkResult.destinations||[],
+      hostDiagnostics:linkResult.hostDiagnostics,
+      queueTerminationReason:linkResult.queueTerminationReason||linkResult.queueMetrics?.terminationReason,
       primaryLinkMs:Number(linkResult.primaryLinkMs||0)||undefined,
-      refinementLinkMs:Number(linkResult.refinementLinkMs||0)||undefined
+      refinementLinkMs:Number(linkResult.refinementLinkMs||0)||undefined,
+      linkExecution:linkResult.linkExecution||undefined
     };
     const scanTimings={
       ...(local.scanTimings||{}),
-      linkProbeMs:Number(linkResult.primaryLinkMs||local.scanTimings?.linkProbeMs||0)
+      linkProbeMs:Number(linkResult.primaryLinkMs||0)+Number(linkResult.refinementLinkMs||0)||Number(local.scanTimings?.linkProbeMs||0)
     };
     return{...local,browserPerformance:local.browserPerformance||null,findings:[...seen.values()],linkAudit,coverage:{...local.coverage,links:linksStatus,axe:axeResults?'complete':'unavailable',runtime:runtimeStatus},coverageScope,scanTimings,diagnostics:local.diagnostics||null,pageDiagnostics:local.pageDiagnostics||null};
   }
@@ -3339,9 +4089,11 @@
     globalThis.__WEBQA_RUNTIME_ERRORS__={count,samples,source:'renderer'};
   }
 
-  globalThis.WebQARules={run,axeFindings,resolvedTargetState,auditLinks,recheckLink,applyExternalProbeResults,merge,recordRuntimeErrors,selectorFor,resolveTarget,performanceSignals,preparePerformanceSignals,prepareSafeInteractions,semanticContextFor,targetContextFor(targetId,selector='',ruleId=''){
-    const el=resolveTarget(targetId,selector);if(!el)return null;
+  globalThis.WebQARules={run,axeFindings,resolvedTargetState,validateResolvedTarget,auditLinks,recheckLink,applyExternalProbeResults,merge,recordRuntimeErrors,hydrateLinkCache,exportLinkCache,clearLinkCache(){linkVerificationCache.clear()},selectorFor,resolveTarget,performanceSignals,preparePerformanceSignals,prepareSafeInteractions,semanticContextFor,targetContextFor(targetId,selector='',ruleId=''){
+    const validated=validateResolvedTarget(targetId,selector,{ruleId});
+    if(!validated.found)return {found:false,targetStatus:validated.targetStatus,reason:validated.reason};
+    const el=validated.el;
     const style=getComputedStyle(el),rect=el.getBoundingClientRect();
-    return{found:true,tag:el.tagName.toLowerCase(),selector:selector||selectorFor(el),markup:clip(cleanMarkup(el.outerHTML),1400),text:clip(el.innerText||el.textContent,500),semantics:semanticContextFor(el,ruleId),rect:{x:Math.round(rect.x),y:Math.round(rect.y),width:Math.round(rect.width),height:Math.round(rect.height)},styles:{color:style.color,backgroundColor:style.backgroundColor,fontSize:style.fontSize,fontWeight:style.fontWeight,lineHeight:style.lineHeight,display:style.display,position:style.position}};
+    return{found:true,targetStatus:'valid',tag:el.tagName.toLowerCase(),selector:selector||selectorFor(el),markup:clip(cleanMarkup(el.outerHTML),1400),text:clip(el.innerText||el.textContent,500),semantics:semanticContextFor(el,ruleId),rect:{x:Math.round(rect.x),y:Math.round(rect.y),width:Math.round(rect.width),height:Math.round(rect.height)},styles:{color:style.color,backgroundColor:style.backgroundColor,fontSize:style.fontSize,fontWeight:style.fontWeight,lineHeight:style.lineHeight,display:style.display,position:style.position}};
   }};
 })();

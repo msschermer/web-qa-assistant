@@ -1,4 +1,5 @@
 import { guidanceFor } from './guidance.js';
+import { linkInTextEvidence, linkInTextTitle, linkInTextDiagnosis } from './link-in-text.js';
 
 export const QA_AREA_META = Object.freeze({
   availability:{label:'Navigation',short:'Navigation',description:'Links, destinations, forms and routes that affect whether people can complete the journey.',tone:'critical'},
@@ -16,21 +17,21 @@ function clip(value,max=220){const s=String(value??'').replace(/\s+/g,' ').trim(
 function pathname(value){try{const u=new URL(value);return `${u.pathname}${u.search? '…':''}`||'/'}catch{return clip(value,90)}}
 function ruleTitle(f){return clip(f.title||String(f.ruleId||'').replace(/[._-]+/g,' ')||'QA finding',120)}
 function priorityLabel(f){if(f.frankPriority==='blocker'||f.severity==='critical')return'Fix first';if(f.frankPriority==='high'||f.severity==='high')return'High priority';if(f.frankPriority==='low'||f.severity==='low')return'Lower priority';return'Recommended'}
-function confidenceLabel(f){if(f.confidence==='corroborated')return'Corroborated';if(f.confidence==='confirmed')return'Confirmed';if(f.confidence==='inferred')return'Needs review';if(f.confidence==='inconclusive')return'Unverified';return''}
+function confidenceLabel(f){if(f.confidence==='corroborated')return'Corroborated';if(f.confidence==='confirmed')return'Confirmed';if(f.confidence==='observed')return'Observed';if(f.confidence==='inferred')return'Inferred';if(f.confidence==='inconclusive')return'Unable to verify';if(f.confidence==='needs-review')return'Needs review';return''}
 
 function friendlyTitle(f){
   const id=String(f.ruleId||'');
   if(/broken-link|link-404|link-410/.test(id))return'Broken internal link';
   if(/link-5xx/.test(id))return'Linked page is returning a server error';
   if(/link-redirect-error/.test(id))return'Internal link has a redirect problem';
-  if(/noindex/.test(id))return'Page is blocked from search indexing';
+  if(/noindex/.test(id))return'A noindex directive was detected';
   if(/canonical-cross-host|canonical-mismatch/.test(id))return'Canonical URL conflicts with this page';
   if(/canonical-missing/.test(id))return'Canonical URL is missing';
   if(/canonical-multiple/.test(id))return'Multiple canonical URLs are published';
   if(/title-multiple/.test(id))return'Multiple page titles are published';
   if(/description-missing/.test(id))return'Meta description is missing';
   if(id==='performance.browser.lcp')return'Largest contentful paint is slow in this browser';
-  if(id==='performance.browser.ttfb')return'Server response is slow in this browser';
+  if(id==='performance.browser.ttfb')return'First byte was slow in this browser';
   if(id==='performance.browser.weight')return'Page transfer is heavy in this browser';
   if(id==='performance.browser.cls')return'Layout shift is high in this browser';
   if(id==='performance.browser.lcp-image-oversized')return'LCP image is substantially oversized';
@@ -46,6 +47,10 @@ function friendlyTitle(f){
   if(/charset-missing/.test(id))return'Character encoding is not clearly declared';
   if(/target-size/.test(id))return'Clickable target is too small or tightly spaced';
   if(/color-contrast/.test(id))return'Text contrast is below the required level';
+  if(/link-in-text-block/.test(id)){
+    const evidence=linkInTextEvidence(f, f.linkInTextHints || f.linkInText);
+    return linkInTextTitle(evidence);
+  }
   if(/(?:label|button-name|link-name|aria.*name|input.*name)/.test(id))return'Interactive control needs an accessible name';
   if(/image-alt|role-img|input-image|object-alt|area-alt/.test(id))return'Image text alternative needs attention';
   if(/focus|keyboard|tabindex/.test(id))return'Keyboard or focus behavior needs attention';
@@ -64,6 +69,10 @@ export function presentFinding(finding={},environment={type:'unknown'}){
   if(id==='performance.browser.lcp'&&f.performanceObservation?.largestContentfulPaintMs!=null)summary=`This browser observed LCP at ${(f.performanceObservation.largestContentfulPaintMs/1000).toFixed(1)}s. Treat it as a current lab observation, not a field regression.`;
   if(id==='performance.browser.cls'&&f.performanceObservation?.cumulativeLayoutShift!=null)summary=`This browser observed cumulative layout shift of ${f.performanceObservation.cumulativeLayoutShift}. Aggregate CLS only — no shift contributor was identified. Treat as a current lab observation, not a field Core Web Vitals score.`;
   if(id==='performance.browser.ttfb'&&f.performanceObservation?.ttfbMs!=null)summary=`This browser waited ${Math.round(f.performanceObservation.ttfbMs)}ms for the first byte before rendering work could begin.`;
+  if(/link-in-text-block/.test(id)){
+    const evidence=linkInTextEvidence(f, f.linkInTextHints || f.linkInText);
+    summary=clip(linkInTextDiagnosis(evidence),280);
+  }
   if(id==='performance.browser.image-oversized'||id==='performance.browser.lcp-image-oversized'){
     const m=f.imageMetrics||{};
     if(m.intrinsicWidth&&m.renderedWidth&&m.requiredPhysicalWidth){

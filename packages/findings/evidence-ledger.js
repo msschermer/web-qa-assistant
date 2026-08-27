@@ -6,7 +6,7 @@
  * Adaptive compression never drops a material group. It only shortens titles,
  * evidence blurbs, and representative targets as group volume grows.
  */
-import { composeAttention } from './compose.js';
+import { composeAttention, groupFindings } from './compose.js';
 import { buildCoverageAccounting } from './coverage.js';
 
 function clip(value, n = 220) {
@@ -141,7 +141,14 @@ export function buildEvidenceLedger(report = {}, {
   const rows = Array.isArray(findings) ? findings : (Array.isArray(report.findings) ? report.findings : []);
   const composed = composition || composeAttention(rows, { limit: uiLimit });
   const accounting = buildCoverageAccounting(report);
-  const allGroups = composed.allGroups || [];
+  const allGroups = [...(composed.allGroups || [])];
+  const contextRows = rows.filter(f => ['environment-context', 'launch-check'].includes(String(f.presentationDisposition || '')));
+  if (contextRows.length) {
+    const existing = new Set(allGroups.map(g => g.key));
+    for (const group of groupFindings(contextRows)) {
+      if (!existing.has(group.key)) allGroups.push(group);
+    }
+  }
   const tier = ledgerDetailTier(allGroups.length);
   const detailedKeys = new Set((composed.groups || []).map((g) => g.key));
   const groups = allGroups.map((g) => compactEvidenceGroup(g, {

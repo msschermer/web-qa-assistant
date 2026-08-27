@@ -23,6 +23,7 @@ function anchor(href,text='Profile',{nav=false,main=false,footer=false,classes='
 }
 function harness(anchors,sequences){
   const queues=new Map(Object.entries(sequences).map(([url,rows])=>[url,[...rows]]));
+  const lastByUrl=new Map();
   let fetchCount=0;
   const context={
     URL,AbortController,setTimeout,clearTimeout,performance,
@@ -39,7 +40,8 @@ function harness(anchors,sequences){
     fetch:async url=>{
       fetchCount++;
       const queue=queues.get(String(url))||[];
-      const next=queue.length?queue.shift():{status:200};
+      const next=queue.length?queue.shift():(lastByUrl.get(String(url))||{status:200});
+      lastByUrl.set(String(url),next);
       if(next instanceof Error)throw next;
       if(next?.throw)throw next.throw;
       return {status:next.status,url:next.url||String(url),redirected:Boolean(next.redirected)};
@@ -289,11 +291,12 @@ test('default hard ceiling is a safety limit, not a 36-link functional cap',()=>
   const source=fs.readFileSync('packages/rules/browser-rules.js','utf8');
   const content=fs.readFileSync('apps/extension/content.js','utf8');
   assert.match(source,/LINK_PROBE_HARD_CEILING\s*=\s*500/);
-  assert.match(source,/LINK_PROBE_EMERGENCY_MS\s*=\s*60000/);
+  assert.match(source,/LINK_PROBE_EMERGENCY_MS\s*=\s*120000/);
+  assert.match(source,/LINK_PROBE_TARGET_ORIGIN_CONCURRENCY\s*=\s*6/);
   assert.match(source,/runPrimaryVerificationQueue/);
   assert.doesNotMatch(source,/LINK_PROBE_BUDGET_MS\s*=\s*20000/);
   assert.doesNotMatch(source,/limit:\s*36/);
   assert.doesNotMatch(source,/SAME_ORIGIN_IFRAME_BUDGET\s*=\s*3/);
-  assert.match(content,/emergencyMs: 60000/);
+  assert.match(content,/emergencyMs: 120000/);
   assert.doesNotMatch(content,/budgetMs: 20000/);
 });

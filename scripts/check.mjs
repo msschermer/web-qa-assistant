@@ -129,7 +129,7 @@ const ALLOWED_HOSTS = new Set([
   'dequeuniversity.com', 'deque.com', 'registry.npmjs.org', 'npmjs.com', 'docs.docker.com',
   'fonts.googleapis.com', 'fonts.gstatic.com',
   // Platform suffixes used in environment-classification fixtures.
-  'vercel.app', 'netlify.app', 'pages.dev',
+  'vercel.app', 'netlify.app', 'pages.dev', 'bigscoots-staging.com',
   // RFC 2606 reserved second-level examples.
   'example.co.uk'
 ]);
@@ -464,7 +464,7 @@ if (/Standard guidance/.test(panelHtmlSource) || /This is the evidence behind th
 
 // 1.6 focus-mode contract: sidebar is evidence; the page card is Frank's reasoning.
 const contentSource = fs.readFileSync('apps/extension/content.js', 'utf8');
-if (!/On-device reasoning/.test(contentSource) || !/Cloud reasoning · metered/.test(contentSource) || !/Verified guidance/.test(contentSource) || /Evidence-grounded guidance/.test(contentSource)) {
+if (!(/Frank · AI review/.test(contentSource) || /On-device reasoning/.test(contentSource)) || !(/Verified scan guidance/.test(contentSource) || /Verified guidance/.test(contentSource)) || /Evidence-grounded guidance/.test(contentSource)) {
   bad++;
   console.error('1.6.1 Frank focus card must disclose the actual reasoning mode');
 }
@@ -495,7 +495,7 @@ if (fs.existsSync(distManifestPath)) {
     bad++;
     console.error(`stale extension build: dist is ${distManifest.version}, source is ${manifest.version}. Run npm run build:extension.`);
   }
-  for (const name of ['confidence.js', 'compose.js', 'impact.js', 'image-purpose.js', 'local-ai.js', 'scan-lifecycle.js']) {
+  for (const name of ['confidence.js', 'compose.js', 'impact.js', 'image-purpose.js', 'local-ai.js', 'scan-lifecycle.js', 'link-probe-control.js', 'link-status-cache.js', 'guidance-composition.js', 'review-state.js', 'published-coverage.js']) {
     if (!fs.existsSync(`dist/extension/${name}`)) {
       bad++;
       console.error(`stale extension build: ${name} is missing from dist/extension.`);

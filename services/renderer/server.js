@@ -126,7 +126,7 @@ app.post('/scan', async (req, res) => {
       try { await window.WebQARules.prepareSafeInteractions?.(); } catch {}
       const local = window.WebQARules.run(); let axe = null; let links = { findings: [], checked: 0, status: 'unavailable' };
       try { axe = await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] } }); } catch {}
-      try { links = await window.WebQARules.auditLinks({ limit: 500, concurrency: 10, perHostConcurrency: 2, timeoutMs: 2500, retryTimeoutMs: 5000, emergencyMs: 60000 }); } catch {
+      try { links = await window.WebQARules.auditLinks({ limit: 500, concurrency: 12, targetOriginConcurrency: 6, externalPerHostConcurrency: 2, perHostConcurrency: 2, timeoutMs: 2500, retryTimeoutMs: 5000, emergencyMs: 120000 }); } catch {
         links = { findings: [], checked: 0, attempted: 0, status: 'unavailable' };
       }
       if (runtimeErrorCount >= 0) local.coverage = { ...local.coverage, runtime: 'renderer' };

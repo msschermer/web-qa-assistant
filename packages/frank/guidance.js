@@ -1,6 +1,8 @@
 // Purpose-aware image guidance. The deterministic classifier decides what the
 // image is for; this only turns that verdict into an implementation instruction.
 // When the classifier says "uncertain" the fork is correct and is kept.
+import { linkInTextEvidence, linkInTextDiagnosis, linkInTextRemediation } from '../findings/link-in-text.js';
+
 function imageAdvice(f){
   const p=f.semantics?.imagePurpose||f.imagePurpose||null;
   const purpose=String(p?.purpose||'uncertain');
@@ -70,6 +72,19 @@ function nearestPassingForeground(fgValue,bgValue,requiredValue){const fg=hexRgb
 function axeAdvice(f){
   const id=String(f.ruleId||'');
   const summary=String(f.axe?.failureSummary||'').replace(/^Fix (?:any|all) of the following:\s*/i,'').trim();
+  if(/link-in-text-block/.test(id)){
+    const evidence=linkInTextEvidence(f, f.linkInTextHints || f.linkInText);
+    const rem=linkInTextRemediation(evidence);
+    return{
+      interpretation:linkInTextDiagnosis(evidence),
+      impact:'When an inline link is not visually distinct from surrounding text, people with low vision or color-vision deficiencies can miss that the text is actionable.',
+      recommendation:rem.recommendation,
+      remediation:rem.remediation,
+      structuredRemediation:rem.structuredRemediation,
+      guidanceComposition:rem.guidanceComposition,
+      verify:'Rerun the accessibility scan on the same link and confirm link-in-text-block no longer fails. Check the resting state for a persistent underline or equivalent, and separately confirm ordinary text-vs-background contrast if that rule applies.'
+    };
+  }
   if(/color-contrast/.test(id)){
     const c=contrastFactsFromFinding(f)||{},text=String(f.targetText||'').trim(),label=text?`The affected text "${text.slice(0,80)}"`:'The affected text';
     const observed=c.contrastRatio!=null?contrastRatio(c.contrastRatio):'below the required threshold',required=c.expectedContrastRatio!=null?contrastRatio(c.expectedContrastRatio):'the applicable WCAG threshold';
@@ -151,14 +166,78 @@ function normalizeGuidance(g){
     remediation:g.remediation||'',
     alternatives:g.alternatives||'',
     verify:g.verify||'',
-    limitations:g.limitations||''
+    limitations:g.limitations||'',
+    structuredRemediation:g.structuredRemediation||null,
+    guidanceComposition:g.guidanceComposition||null
   };
+}
+function publishedUnavailable(f,environment={}){
+  const pc=f.reviewContext?.publishedCoverage||environment?.publishedCoverage||environment?.environment?.publishedCoverage;
+  const status=String(pc?.status||pc?.publishedCoverage||'');
+  if(!status||status==='complete')return null;
+  return{status,reason:String(pc.reason||'').slice(0,120)};
+}
+function humanizePublishedReason(reason=''){
+  const r=String(reason||'').trim();
+  if(!r)return'';
+  const labels={
+    'meta-state-missing':'published HTML was not retrieved',
+    'published-snapshot-missing':'published HTML was not retrieved',
+    'connector-unavailable':'the published-state connector was not available',
+    'local-only':'this scan stayed local-only',
+    'not-attempted':'published-response checks were not attempted'
+  };
+  if(labels[r])return labels[r];
+  if(/\s/.test(r))return r.slice(0,120);
+  return r.replace(/-/g,' ').slice(0,120);
+}
+function publishedLimitation(f,environment={}){
+  const pub=publishedUnavailable(f,environment);
+  if(!pub)return'';
+  const reason=pub.reason?` (${humanizePublishedReason(pub.reason)})`:'';
+  const id=String(f.ruleId||'');
+  if(/noindex/.test(id))return` We observed a noindex (or equivalent) directive in the rendered page, but published-response checks were unavailable in this scan${reason}.`;
+  if(/canonical/.test(id))return` This canonical observation is from the rendered page. Published-response checks were unavailable in this scan${reason}.`;
+  if(/robots/.test(id))return` This robots observation is from the sources Web QA checked. Published-response checks were unavailable in this scan${reason}.`;
+  return` Published-response checks were unavailable in this scan${reason}.`;
+}
+function constrainVerifyToCheckedSources(verify,pub){
+  if(!pub||!verify)return verify||'';
+  let text=String(verify);
+  text=text.replace(/,\s*Meta State,\s*and/gi,' and');
+  text=text.replace(/\s+and Meta State/gi,'');
+  text=text.replace(/Browser and Meta State/gi,'Browser');
+  text=text.replace(/Browser and published-state evidence/gi,'Browser evidence');
+  text=text.replace(/,\s*then rescan with Meta State and Frank\.?/gi,', then rescan.');
+  text=text.replace(/with Meta State and Frank/gi,'with the sources that were available');
+  if(!/published-response checks were unavailable|do not require Meta State/i.test(text)){
+    text=`${text} Published-response checks were unavailable in this scan, so do not require Meta State to confirm the fix.`;
+  }
+  return text.replace(/\s+/g,' ').trim();
+}
+function nonProductionType(environment={}){
+  const type=String(environment.type||'');
+  return ['staging','preview','local','development'].includes(type)?type:'';
 }
 function rawGuidanceFor(f,environment={type:'unknown'}){
   const id=String(f.ruleId||'');
   if(/noindex-self-canonical|canonical-path-conflict/.test(id))return{interpretation:'Conflicting discoverability signals need review. The page emits more than one indexing/consolidation cue, and intent cannot be inferred safely from the scan alone.',impact:'Search engines may consolidate or suppress the page differently than editors expect.',recommendation:'Decide the intended indexing and preferred-URL state, then make every publishing layer agree.',remediation:'Choose one intended outcome (indexable self-canonical, noindex, or consolidate elsewhere) and align robots meta, X-Robots-Tag, and canonical declarations. Do not change production indexing based only on this review finding.',verify:'Rescan and confirm Browser and published-state evidence agree on one intentional policy.'};
   if(/noindex/.test(id)){
-    if(['staging','preview','local'].includes(environment.type))return{impact:'Index blocking is normally appropriate for this non-production environment.',remediation:'No production fix is recommended here. Keep the environment out of search indexes unless your deployment policy says otherwise.',verify:'Before or after publishing to production, scan the production URL and confirm no unintended noindex directive remains.'};
+    const nonProd=nonProductionType(environment);
+    if(nonProd)return{
+      interpretation:'A noindex directive is present and is consistent with this detected non-production environment.',
+      impact:'Index blocking is normally appropriate for this non-production environment.',
+      recommendation:'Add removal of this directive to the launch checklist rather than treating it as a current-page production defect.',
+      remediation:'No production fix is recommended here. Keep the environment out of search indexes until launch, then remove noindex and X-Robots-Tag restrictions on the production hostname.',
+      verify:'Before publishing to production, scan the production URL and confirm no unintended noindex directive remains.'
+    };
+    if(environment.type!=='production')return{
+      interpretation:'A noindex directive was detected, but this host could not be classified as staging or production.',
+      impact:'Do not assume this is a staging site or a production defect until the environment is confirmed.',
+      recommendation:'Confirm the environment, then either treat noindex as a go-live checklist item or as a production indexing problem.',
+      remediation:'Do not remove noindex solely because this scan observed it. If the host is staging, keep the block until launch. If it is production, remove noindex from robots meta and X-Robots-Tag only when the page should be indexed.',
+      verify:'Set the environment explicitly if you know it, or scan the intended production hostname and confirm the indexing policy there.'
+    };
     return{interpretation:'This production page is publishing a noindex directive, which explicitly tells supporting search engines not to include the page in their index.',impact:'A noindex directive can prevent a production page from being included in search results.',recommendation:'Remove the noindex directive if this page is intended to be discoverable in search.',remediation:'Remove noindex from the source that publishes it. Check both the HTML robots meta tag and X-Robots-Tag response headers, then confirm templates or SEO plugins are not re-adding it.',verify:'Rescan the production URL and confirm Browser, Meta State, and response-header evidence no longer contain noindex.'};
   }
   if(/link-review/.test(id)){
@@ -208,10 +287,29 @@ function rawGuidanceFor(f,environment={type:'unknown'}){
   if(/description-missing/.test(id))return{interpretation:'No meta description was observed. Search engines may still generate their own snippet, so this is optimization context rather than proof of a ranking problem.',impact:'A missing description removes one opportunity to provide a deliberate search-result summary.',recommendation:'Add a useful description when this page benefits from a controlled summary.',remediation:'Publish one concise meta description that accurately summarizes the page and gives searchers a reason to click. Avoid boilerplate duplication.',verify:'Reload and rescan; confirm one intended description is present.'};
   if(/description-multiple/.test(id))return{impact:'Multiple descriptions can make the intended search snippet signal ambiguous.',recommendation:'Keep one intended meta description.',remediation:'Remove duplicate description tags generated by overlapping templates, plugins, or application code.',verify:'Reload and rescan; confirm exactly one description remains.'};
   if(/robots-block-all/.test(id)){
-    if(['staging','preview','local'].includes(environment.type))return{impact:'Blocking crawlers is normally appropriate for this non-production environment.',remediation:'No production fix is recommended on this host. Keep the environment blocked unless your deployment policy says otherwise.',verify:'Scan the real production hostname separately and confirm its robots.txt does not inherit the staging Disallow: / rule.'};
+    const nonProd=nonProductionType(environment);
+    if(nonProd)return{impact:`Restricting crawlers is normally appropriate for this ${nonProd} environment.`,remediation:'No production fix is recommended on this host. Keep the crawl restriction unless your deployment policy says otherwise. robots.txt Disallow does not by itself prove the URL cannot appear in search results.',verify:'Scan the real production hostname separately and confirm its robots.txt does not inherit the non-production Disallow: / rule.'};
+    if(environment.type!=='production')return{impact:'A global Disallow: / rule may be intentional or accidental; the environment could not be classified.',remediation:'Confirm whether this host is production before removing the crawl block.',verify:'Scan the intended production hostname and confirm its robots.txt policy separately.'};
     return{impact:'A global Disallow: / rule can prevent compliant crawlers from crawling the production site.',remediation:'Remove or narrow the global Disallow rule in the production robots.txt. Make sure the production deployment is not inheriting a staging robots file or environment variable.',verify:'Fetch robots.txt from the production hostname and confirm the global block is gone, then rescan with Meta State and Frank.'};
   }
-  if(/robots-mismatch|robots-conflict/.test(id))return{impact:'Conflicting indexing directives make crawler behavior unpredictable and can hide content unintentionally.',remediation:'Resolve the directives at their publishing sources so HTML robots metadata and response headers agree on the intended indexing state.',verify:'Rescan and confirm Browser and published-state evidence report one consistent robots policy.'};
+  if(/robots-mismatch|robots-conflict/.test(id)){
+    const nonProd=nonProductionType(environment);
+    if(nonProd)return{
+      interpretation:'Published and rendered indexing directives currently disagree on this non-production host.',
+      impact:`That mismatch is useful go-live context, not a current ${nonProd}-page defect.`,
+      recommendation:'Before production launch, verify all indexing directives converge.',
+      remediation:'Keep crawl and indexing controls on the go-live checklist. A robots.txt restriction is not the same as a noindex directive. On the production hostname, confirm robots meta, X-Robots-Tag, and rendered metadata agree on the intended indexing state.',
+      verify:'Scan production after launch and confirm Browser and published-state evidence report one consistent robots policy.'
+    };
+    if(environment.type!=='production')return{
+      interpretation:'Published and rendered indexing directives disagree, and the environment could not be classified as staging or production.',
+      impact:'Do not assume this is expected staging behavior.',
+      recommendation:'Confirm the environment, then align indexing directives to the intended policy.',
+      remediation:'If this is staging, keep indexing blocked until launch and note the mismatch on the go-live checklist. If this is production, resolve the disagreement now.',
+      verify:'Set the environment explicitly if you know it, then rescan.'
+    };
+    return{impact:'Conflicting indexing directives make crawler behavior unpredictable and can hide content unintentionally.',remediation:'Resolve the directives at their publishing sources so HTML robots metadata and response headers agree on the intended indexing state.',verify:'Rescan and confirm Browser and published-state evidence report one consistent robots policy.'};
+  }
   if(/jsonld-invalid/.test(id))return{impact:'Invalid JSON-LD cannot be reliably parsed by consumers of structured data.',remediation:'Correct the JSON syntax in the exact failing JSON-LD block. Validate commas, quoting, braces, and generated values before changing the schema semantics.',verify:'Rescan and confirm the JSON-LD parses successfully, then validate the resulting schema entity separately.'};
   if(/duplicate-id/.test(id))return{interpretation:'The same element id appears more than once in the rendered document.',impact:'Duplicate IDs can cause labels, ARIA references, fragment links, CSS selectors, and scripts to resolve to the wrong element.',remediation:'Give each duplicated ID a unique value, then update every for, aria-labelledby, aria-describedby, fragment link, CSS selector, and script reference that points to the renamed ID.',verify:'Rescan and confirm the duplicate-ID finding is gone, then test any form labels or scripted interactions that referenced the changed ID.'};
   if(/insecure-form-action/.test(id))return{impact:'A secure page submitting data to HTTP can expose form data in transit and creates mixed-security behavior.',remediation:'Change the form action to a trusted HTTPS endpoint and verify any proxy, CRM, or intake integration accepts HTTPS at that destination.',verify:'Submit a safe test entry and confirm the browser sends the request over HTTPS with the expected success response.'};
@@ -245,8 +343,42 @@ function rawGuidanceFor(f,environment={type:'unknown'}){
   if(/charset-missing/.test(id))return{interpretation:'No rendered meta charset declaration was observed; the HTTP response may still declare the encoding.',impact:'Ambiguous character encoding can cause incorrect text interpretation in edge cases.',recommendation:'Confirm UTF-8 is declared reliably, preferably in the HTTP Content-Type header and early in the document head.',remediation:'If the response does not already declare UTF-8, add the appropriate response header and/or an early <meta charset="utf-8"> declaration.',verify:'Check the response Content-Type and rendered head, then rescan.'};
   if(/meta-refresh/.test(id))return{interpretation:'The page uses client-side meta refresh for timed navigation or reload.',impact:'Meta refresh can interrupt reading, create unexpected navigation, and complicate accessibility and analytics.',recommendation:'Replace meta refresh with an appropriate server redirect or deliberate application navigation when possible.',remediation:'For a permanent or temporary destination change, use an HTTP 3xx redirect. For application behavior, trigger navigation explicitly and give users control rather than relying on timed refresh.',verify:'Reload the page and confirm the meta refresh is gone and the replacement navigation behaves as intended.'};
   if(/og-incomplete/.test(id))return{interpretation:'One or more core Open Graph title or description fields were not observed.',impact:'Shared links may receive incomplete or platform-generated social previews.',recommendation:'Add the missing Open Graph fields if social sharing is important for this page.',remediation:'Publish an og:title and og:description that accurately represent the page. Keep them aligned with the page content rather than copying unrelated marketing text.',verify:'Rescan and use a social-preview debugger or platform validator to confirm the intended fields are published.'};
+  if(/visible-error/.test(id)){
+    const ve=f.visibleError||{};
+    const excerpt=ve.messageExcerpt?`"${ve.messageExcerpt}"`:'an on-page error message';
+    const third=String(ve.originClass||'').startsWith('third-party');
+    return{
+      interpretation:`The page is displaying a visible error to users: ${excerpt}.${third?' The message appears associated with a third-party widget.':' Web QA could not always determine which component produced it.'}`,
+      impact:'A visible application error is a directly broken user experience and should outrank low-value structural observations.',
+      recommendation:'Reproduce the message, identify the owning component, and clear or replace the error before launch.',
+      remediation:`Inspect the highlighted error UI${third?' and the related third-party integration':''}. Confirm whether it was present at load or appeared later. Do not invent a backend root cause from the message text alone.`,
+      verify:'Reload and confirm the error UI is gone for the intended user path, then rescan.'
+    };
+  }
   if(id.startsWith('axe.'))return axeAdvice(f);
-  if(id==='performance.browser.ttfb')return{interpretation:`This browser observed a time to first byte of ${f.performanceObservation?.ttfbMs??'an elevated'}ms. That isolates the delay to navigation/server response before front-end rendering work.`,impact:'Slow server response delays every later rendering milestone on this navigation.',recommendation:'Investigate origin, application, cache, CDN, and redirect latency before optimizing front-end assets.',remediation:'Check cache status and CDN/origin timing, backend work performed before the response begins, database/API latency, and unnecessary redirect hops. Do not blame JavaScript or image rendering for TTFB without separate evidence.',verify:'Repeat the same navigation under comparable conditions and confirm TTFB improves; compare with monitored history or field data when available.'};
+  if(id==='performance.browser.ttfb'){
+    const ms=f.performanceObservation?.ttfbMs;
+    const pa=f.reviewContext?.performanceAssessment||environment?.performanceAssessment;
+    const lcp=pa?.metrics?.lcp?.valueMs??f.performanceObservation?.largestContentfulPaintMs;
+    const fcp=pa?.metrics?.fcp?.valueMs??f.performanceObservation?.firstContentfulPaintMs;
+    const cls=pa?.metrics?.cls?.value??f.performanceObservation?.cumulativeLayoutShift;
+    const pageLoad=pa?.metrics?.pageLoad?.valueMs??f.performanceObservation?.pageLoadMs;
+    const rel=[];
+    if(Number.isFinite(Number(fcp)))rel.push(`FCP ${(Number(fcp)/1000).toFixed(2)}s`);
+    if(Number.isFinite(Number(lcp)))rel.push(`LCP ${(Number(lcp)/1000).toFixed(2)}s`);
+    if(Number.isFinite(Number(cls)))rel.push(`CLS ${Number(cls)}`);
+    if(Number.isFinite(Number(pageLoad)))rel.push(`page load ${(Number(pageLoad)/1000).toFixed(2)}s`);
+    const relation=rel.length?` Related lab timings: ${rel.join(', ')}.`:'';
+    const healthyLcp=Number.isFinite(Number(lcp))&&Number(lcp)<=2500;
+    const ttfbText=Number.isFinite(Number(ms))?`${Math.round(Number(ms))}ms`:'elevated';
+    return{
+      interpretation:`Server response (TTFB) was ${ttfbText} in this browser run.${relation}${healthyLcp?' Initial server response was slow, but the page still reached its largest visible content within the good range.':' That indicates a slow initial response, but one lab measurement does not identify the cause.'}`,
+      impact:'A slow first byte can delay later rendering, but LCP/FCP/CLS still decide whether users saw a slow page in this run.',
+      recommendation:'Compare another navigation and, if possible, production.',
+      remediation:'If it remains slow, check redirects, cache behavior, CDN/origin response, and server processing.',
+      verify:'Recheck the page and compare Server response (TTFB) along with FCP/LCP and page load.'
+    };
+  }
   if(id==='performance.browser.lcp')return{interpretation:`This browser observed LCP at ${f.performanceObservation?.largestContentfulPaintMs!=null?(f.performanceObservation.largestContentfulPaintMs/1000).toFixed(1)+'s':'a slow point'}. The browser identified the element responsible for that paint in the evidence record. This is a current lab observation, not a field score.`,impact:'A slow largest contentful paint can make the page feel visually incomplete for users.',recommendation:'Investigate the observed LCP element and the work required before it can render.',remediation:'Use the observed LCP element in Technical evidence as the starting point. If it is an image, inspect request priority, dimensions, compression, format, preload behavior, and delayed discovery. If it is text, inspect blocking fonts, CSS, server response, and render-blocking work. Avoid unrelated performance changes that are not connected to the observed element.',verify:'Repeat the navigation under comparable conditions, confirm LCP improves, and compare with monitored field/history data when available.'};
   if(id==='performance.browser.lcp-heavy-image'||id==='performance.browser.lcp-image-oversized'){
     const p=f.performanceObservation||{};
@@ -272,28 +404,42 @@ function rawGuidanceFor(f,environment={type:'unknown'}){
     return{interpretation:`Largest contentful paint was slow in this lab observation${p.largestContentfulPaintMs!=null?` (${(p.largestContentfulPaintMs/1000).toFixed(1)}s)`:''}, and the LCP resource evidence points to an image/asset that is heavy or oversized for its rendered box.`,impact:'Oversized LCP images delay the primary visual paint and waste transfer on mobile networks.',recommendation:'Resize/compress/serve an appropriately sized modern asset for the LCP image before tuning secondary details.',remediation:`Compress and resize the LCP image and serve an appropriately sized asset (modern format, matching rendered dimensions, sensible quality).${el.selector?` Start with ${el.selector}.`:''}${el.url?` Resource: ${el.url}.`:''}`,verify:'Repeat the navigation under comparable conditions and confirm LCP improves without layout regression. This remains a lab observation, not field Core Web Vitals unless field data is present.'};
   }
   if(id==='performance.browser.image-oversized'){
-    const m=f.imageMetrics||{};
-    if(m.intrinsicWidth&&m.renderedWidth&&m.requiredPhysicalWidth){
+    const m=f.imageMetrics||f.reviewContext?.selectedInstance||{};
+    const groupCount=Number(f.reviewContext?.groupCount||f.reviewContext?.instances?.length||f.count||1);
+    const selected=f.reviewContext?.selectedInstance;
+    const intrinsicW=m.intrinsicWidth||m.naturalWidth,intrinsicH=m.intrinsicHeight||m.naturalHeight;
+    const renderedW=m.renderedWidth,renderedH=m.renderedHeight;
+    const needW=m.requiredPhysicalWidth,needH=m.requiredPhysicalHeight;
+    const dpr=m.devicePixelRatio||m.dpr||1;
+    if(intrinsicW&&renderedW&&needW){
       const mild=m.magnitude==='mild';
       const transfer=Number.isFinite(m.transferBytes)?` Measured transfer for the selected source was about ${(m.transferBytes/1024).toFixed(0)} KB.`:'';
-      const responsive=m.responsiveSourcePresent
+      const srcsetPresent=m.srcsetPresent??m.responsiveSourcePresent;
+      const responsive=srcsetPresent
         ?' Responsive markup is present; focus on the selected candidate and sizes, not “add srcset” generically.'
-        :' Consider responsive srcset/sizes so the browser can download a DPR-fit candidate.';
+        :' srcset/sizes were not observed on this image, so the browser loaded the full source.';
       const wp=f.remediationContext?.platform==='wordpress'
         ?' After fixing delivery, a WordPress image optimization plugin can automate variants — do not install a plugin as the first step.'
         :'';
-      const excess=mild
-        ?'so the selected source is mildly larger than the DPR-adjusted need'
-        :'so the selected source still contains substantially more image data than needed';
+      const groupNote=groupCount>1?` This finding covers ${groupCount} distinct oversized images; the measurements below are for instance ${selected?.instanceNumber||1}.`:'';
+      const stillOversizedAt2x=dpr<2&&intrinsicW>renderedW*2&&intrinsicH>renderedH*2;
+      const dprNote=dpr>=2
+        ?` At this display’s ${dpr}× pixel density, roughly ${needW}×${needH} would be sufficient.`
+        :stillOversizedAt2x
+          ?` Even allowing for a 2× display, roughly ${Math.round(renderedW*2)}×${Math.round(renderedH*2)} would satisfy this rendered use. At the observed ${dpr}× density, ${needW}×${needH} is enough.`
+          :` At the observed ${dpr}× density, roughly ${needW}×${needH} would be sufficient.`;
+      const sizeVerdict=mild
+        ?' The source is therefore mildly larger than this rendered use.'
+        :' The current source is therefore far larger than needed.';
       return{
-        interpretation:`This is the image WebQA flagged. The source currently selected is ${m.intrinsicWidth}×${m.intrinsicHeight}, while the image is rendered around ${m.renderedWidth}×${m.renderedHeight}. At this display’s ${m.devicePixelRatio}× pixel density, roughly ${m.requiredPhysicalWidth}×${m.requiredPhysicalHeight} would be sufficient, ${excess}.${transfer}`,
+        interpretation:`This image loads at ${intrinsicW}×${intrinsicH} but renders at about ${renderedW}×${renderedH} on this viewport.${dprNote}${sizeVerdict}${transfer}${groupNote}`,
         impact:mild
           ?'Mild excess rarely justifies urgent remediation; keep it as optional optimization unless this asset is also LCP or heavily transferred.'
           :'Oversized delivery increases transfer and decode work without improving sharpness at the displayed size. Impact is inferred from measured dimensions unless transfer or LCP evidence is attached.',
-        recommendation:mild?'Optionally tighten the responsive candidate if other priorities are clear.':'Serve a more appropriate responsive source and verify srcset/sizes.',
+        recommendation:mild?'Optionally tighten the responsive candidate if other priorities are clear.':'Generate an appropriately sized derivative and serve it through srcset/sizes rather than loading the full source here.',
         remediation:`Provide a source near the DPR-adjusted need (and modern compression where relevant).${responsive}${wp}`,
         verify:'Confirm the selected candidate dimensions approach the DPR-adjusted requirement while the image still looks sharp, then rescan.',
-        limitations:'Observation confidence is confirmed for the measured dimension mismatch. Do not treat this as proof the page is “slow” in the field without timing evidence.'
+        limitations:'Observation confidence is confirmed for the measured dimension mismatch. Do not treat this as proof the page is “slow” in the field without timing evidence. Do not invent byte savings when transfer size is unknown.'
       };
     }
     return{interpretation:'An image’s intrinsic dimensions are substantially larger than its rendered box on this page.',impact:'Oversized images increase transfer and decode cost without improving visual quality at the displayed size.',recommendation:'Serve an image sized for its rendered dimensions (and density needs).',remediation:'Resize/compress the source asset or use responsive images (srcset/sizes) so the browser downloads an appropriately sized candidate.',verify:'Confirm the rendered image still looks sharp at target viewports while transfer size drops, then rescan.'};
@@ -413,11 +559,17 @@ function platformRemediationNote(f){
   const platform=f.remediationContext?.platform||'';
   const confidence=f.remediationContext?.platformConfidence||'';
   if(platform!=='wordpress'||confidence!=='high')return'';
-  if(/lcp|image-oversized|weight|image-broken/i.test(String(f.ruleId||''))){
+  const id=String(f.ruleId||'');
+  // Network/runtime/performance diagnostics are not markup-emission problems.
+  if(/ttfb|cls$|weight|uncaught-error|script-failed|visible-error|resource-failed|inert-link/i.test(id))return'';
+  if(/lcp|image-oversized|image-broken/i.test(id)){
     return' WordPress implementation context: use the site’s existing image optimization pipeline when one is already present; otherwise evaluate established media tools such as Smush, ShortPixel, or Imagify only as implementation options—not as the underlying fix.';
   }
-  if(/uncaught-error|script-failed|inert-link|performance\.browser\.cls/.test(String(f.ruleId||'')))return'';
-  return' WordPress implementation context: apply the change in the theme/template, block, or SEO plugin layer that emits this markup rather than patching a single rendered page.';
+  // Markup/document metadata rules only.
+  if(/noindex|robots|canonical|title|description|hreflang|charset|meta-refresh|og-|lang-|h1-|heading|viewport|schema|jsonld/i.test(id)){
+    return' WordPress implementation context: apply the change in the theme/template, block, or SEO plugin layer that emits this markup rather than patching a single rendered page.';
+  }
+  return'';
 }
 
 export function guidanceFor(f,environment={type:'unknown'}){
@@ -425,6 +577,12 @@ export function guidanceFor(f,environment={type:'unknown'}){
   const note=platformRemediationNote(f);
   if(note){
     normalized.remediation=`${normalized.remediation||''}${note}`.trim();
+  }
+  const pub=publishedLimitation(f,environment);
+  const unavailable=publishedUnavailable(f,environment);
+  if(pub&&/noindex|robots|canonical/.test(String(f.ruleId||''))){
+    normalized.interpretation=`${normalized.interpretation||''}${pub}`.trim();
+    normalized.verify=constrainVerifyToCheckedSources(normalized.verify,unavailable);
   }
   return normalized;
 }

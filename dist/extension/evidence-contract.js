@@ -133,7 +133,8 @@ export function safePerformance(value = {}) {
     available: Boolean(value.available), measurement: sanitizeText(value.measurement, 40), note: sanitizeText(value.note, 320),
     ttfbMs: Number.isFinite(Number(value.ttfbMs)) ? Number(value.ttfbMs) : null,
     domContentLoadedMs: Number.isFinite(Number(value.domContentLoadedMs)) ? Number(value.domContentLoadedMs) : null,
-    loadMs: Number.isFinite(Number(value.loadMs)) ? Number(value.loadMs) : null,
+    pageLoadMs: Number.isFinite(Number(value.pageLoadMs)) ? Number(value.pageLoadMs) : null,
+    loadMs: Number.isFinite(Number(value.pageLoadMs ?? value.loadMs)) ? Number(value.pageLoadMs ?? value.loadMs) : null,
     firstContentfulPaintMs: Number.isFinite(Number(value.firstContentfulPaintMs)) ? Number(value.firstContentfulPaintMs) : null,
     largestContentfulPaintMs: Number.isFinite(Number(value.largestContentfulPaintMs)) ? Number(value.largestContentfulPaintMs) : null,
     transferBytes: Number(value.transferBytes || 0), resourceCount: Number(value.resourceCount || 0), measuredTransferCount: Number(value.measuredTransferCount || 0),
@@ -261,6 +262,20 @@ export function reviewFinding(f = {}) {
     axe: f.axe ? safeAxe(f.axe) : undefined,
     semantics: f.semantics ? safeSemantics(f.semantics) : undefined,
     performanceObservation: f.performanceObservation ? safePerformance(f.performanceObservation) : undefined,
+    imageMetrics: f.imageMetrics && typeof f.imageMetrics === 'object' ? {
+      intrinsicWidth: Number(f.imageMetrics.intrinsicWidth || 0) || undefined,
+      intrinsicHeight: Number(f.imageMetrics.intrinsicHeight || 0) || undefined,
+      renderedWidth: Number(f.imageMetrics.renderedWidth || 0) || undefined,
+      renderedHeight: Number(f.imageMetrics.renderedHeight || 0) || undefined,
+      devicePixelRatio: Number(f.imageMetrics.devicePixelRatio || 0) || undefined,
+      requiredPhysicalWidth: Number(f.imageMetrics.requiredPhysicalWidth || 0) || undefined,
+      requiredPhysicalHeight: Number(f.imageMetrics.requiredPhysicalHeight || 0) || undefined,
+      magnitude: sanitizeText(f.imageMetrics.magnitude, 20),
+      srcsetPresent: f.imageMetrics.srcsetPresent === true,
+      sizesPresent: f.imageMetrics.sizesPresent === true,
+      pictureElement: f.imageMetrics.pictureElement === true || f.imageMetrics.inPicture === true,
+      transferBytes: Number.isFinite(Number(f.imageMetrics.transferBytes)) ? Number(f.imageMetrics.transferBytes) : undefined
+    } : undefined,
     wcagExplanation: sanitizeText(f.wcagExplanation, 700)
   };
 }
@@ -323,6 +338,7 @@ export function gatewayContextEnvelope(report = {}) {
 // can still be validated against the richer local graph, while values are sanitized first.
 export function gatewayFrankGraph(graph = {}) {
   const envelope = aiEvidenceEnvelope(graph);
+  const review = graph.reviewContext || null;
   return {
     version: graph.version,
     findingId: graph.findingId,
@@ -332,6 +348,31 @@ export function gatewayFrankGraph(graph = {}) {
     coverage: envelope.coverage,
     sources: envelope.sources,
     evidence: envelope.evidence,
-    targets: envelope.targets
+    targets: envelope.targets,
+    reviewContext: review ? sanitizeStructured({
+      adapter: review.adapter,
+      ruleFamily: review.ruleFamily,
+      ruleId: review.ruleId,
+      groupCount: review.groupCount,
+      instanceCount: review.instanceCount,
+      selectedInstanceId: review.selectedInstanceId,
+      selectedInstance: review.selectedInstance,
+      instances: Array.isArray(review.instances) ? review.instances.slice(0, 8) : undefined,
+      environment: review.environment,
+      claims: review.claims,
+      observedTtfbMs: review.observedTtfbMs,
+      lcpMs: review.lcpMs,
+      fcpMs: review.fcpMs,
+      cls: review.cls,
+      imageDelivery: review.imageDelivery,
+      performanceAssessment: review.performanceAssessment,
+      visibleError: review.visibleError,
+      outcome: review.outcome,
+      broken: review.broken,
+      url: review.url,
+      relationship: review.relationship,
+      httpStatus: review.httpStatus
+    }) : undefined,
+    performanceAssessment: graph.performanceAssessment || review?.performanceAssessment || undefined
   };
 }

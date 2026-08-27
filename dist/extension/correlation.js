@@ -143,6 +143,9 @@ export function rootCauseKeyFor(finding = {}) {
   if (finding.resourceUrl) return `resource:${rule}|${hash(finding.resourceUrl)}`;
   if (/web\.duplicate-id/.test(rule) && finding.evidence) return `dup-id:${hash(finding.evidence)}`;
   if (/viewport|charset|canonical-missing|title-missing|lang-missing|noindex$|viewport-overflow|horizontal-overflow/i.test(rule)) return `doc:${/viewport|overflow/i.test(rule)?'viewport-layout':rule}`;
+  if (/blank-opener/.test(rule)) return 'security.blank-opener';
+  if (/color-contrast/.test(rule)) return 'axe.color-contrast';
+  if (/link-in-text-block/.test(rule)) return 'axe.link-in-text-block';
   return `rule:${rule}|${finding.selector || finding.id || finding.fingerprint || hash(finding.evidence || finding.title || '')}`;
 }
 

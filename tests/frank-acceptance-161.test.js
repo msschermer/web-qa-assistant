@@ -82,7 +82,7 @@ test('center Frank card receives the actual reasoning mode',()=>{
   const content=fs.readFileSync('apps/extension/content.js','utf8');
   assert.match(panel,/FRANK_START_PLAN', plan, graph: prepared\.graph, reasoning/);
   assert.match(background,/FRANK_START',plan:coachPlan,targets:graph\.targets,reasoning/);
-  assert.match(content,/On-device reasoning/); assert.match(content,/Cloud reasoning · metered/); assert.match(content,/Verified guidance/);
+  assert.match(content,/Frank · AI review/); assert.match(content,/Verified scan guidance/); assert.match(content,/Page-level performance observation/);
   assert.doesNotMatch(content,/Evidence-grounded guidance/);
 });
 

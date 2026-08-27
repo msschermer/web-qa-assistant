@@ -61,6 +61,12 @@ test('extension ships immersive Frank runtime without debugger permission',()=>{
   assert.match(build,/local-ai\.js/);
   assert.match(panel,/Temporary preview applied/);
   assert.match(build,/frank-evidence\.js/);
+  assert.match(build,/review-context\.js/);
+  assert.match(build,/review-state\.js/);
+  assert.match(build,/published-coverage\.js/);
+  assert.match(build,/guidance-composition\.js/);
+  assert.match(build,/link-probe-control\.js/);
+  assert.match(build,/link-status-cache\.js/);
   assert.match(build,/frank-plan\.js/);
   assert.match(build,/environment\.js/);
   assert.match(build,/policy\.js/);

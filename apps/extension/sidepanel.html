@@ -29,6 +29,7 @@
       <option value="production">Production</option>
       <option value="staging">Staging</option>
       <option value="preview">Preview</option>
+      <option value="development">Development</option>
       <option value="local">Local</option>
     </select>
   </label>
@@ -45,6 +46,22 @@
 
   <div id="scanner-view">
     <section id="summary" hidden class="workspace">
+      <aside id="environment-notice" class="environment-notice" hidden></aside>
+      <section id="performance-card" class="workspace-section performance-section" hidden aria-labelledby="performance-heading">
+        <div class="workspace-section-head">
+          <div><h2 id="performance-heading">Performance</h2></div>
+        </div>
+        <article id="performance-summary" class="performance-card">
+          <p id="performance-status" class="performance-status"></p>
+          <dl id="performance-metrics" class="performance-metrics"></dl>
+          <div id="performance-diagnostics" class="performance-diagnostics" hidden>
+            <p class="performance-diagnostics-label">Diagnostics</p>
+            <dl id="performance-diagnostic-metrics" class="performance-metrics performance-metrics-diagnostic"></dl>
+          </div>
+          <p id="performance-images" class="performance-images"></p>
+          <p id="performance-blurb" class="performance-blurb"></p>
+        </article>
+      </section>
       <section class="workspace-section assessment-section" aria-labelledby="assessment-heading">
         <div class="workspace-section-head">
           <div><h2 id="assessment-heading">Page assessment</h2></div>
@@ -190,6 +207,11 @@
     <div class="finding-actions">
       <button class="ask-frank btn btn-brand" title="Frank explains this verified finding using the evidence collected for it.">Ask Frank</button>
       <button class="highlight btn btn-quiet">Highlight</button>
+      <span class="highlight-nav" hidden>
+        <span class="highlight-index"></span>
+        <button type="button" class="highlight-prev btn btn-quiet" aria-label="Previous affected element">Prev</button>
+        <button type="button" class="highlight-next btn btn-quiet" aria-label="Next affected element">Next</button>
+      </span>
       <button class="recheck btn btn-quiet" title="Recheck only this finding. This does not run a full page scan.">Recheck</button>
       <button class="copy btn btn-quiet">Copy issue</button>
     </div>

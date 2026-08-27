@@ -1,4 +1,5 @@
 import { compactFrankPageLedger } from '../../packages/findings/evidence-ledger.js';
+import { collapseAdjacentDuplicateSentences } from '../../packages/findings/guidance-composition.js';
 
 const LOCAL_AI_OPTIONS = {
   expectedInputs: [{ type: 'text', languages: ['en'] }],
@@ -55,6 +56,7 @@ function compactGraph(graph = {}, deterministicPlan = null) {
   const core = Object.fromEntries((deterministicPlan?.steps || [])
     .filter(step => ['interpretation', 'impact', 'remediation', 'verification'].includes(step.type))
     .map(step => [step.type, clip(step.body, 650)]));
+  const review = graph.reviewContext || null;
   return {
     finding: {
       ruleId: clip(finding.ruleId, 160),
@@ -69,7 +71,26 @@ function compactGraph(graph = {}, deterministicPlan = null) {
     environment: graph.environment || {},
     evidence: safeEvidence(graph),
     deterministicGuidance: core,
-    pageLedger: graph.evidenceLedger ? compactFrankPageLedger(graph.evidenceLedger) : undefined
+    pageLedger: graph.evidenceLedger ? compactFrankPageLedger(graph.evidenceLedger) : undefined,
+    reviewContext: review ? {
+      adapter: clip(review.adapter, 80),
+      ruleFamily: clip(review.ruleFamily, 80),
+      ruleId: clip(review.ruleId, 160),
+      groupCount: Number(review.groupCount || 0) || undefined,
+      instanceCount: Number(review.instanceCount || 0) || undefined,
+      selectedInstance: review.selectedInstance || undefined,
+      instances: Array.isArray(review.instances) ? review.instances.slice(0, 8) : undefined,
+      environment: review.environment || undefined,
+      performanceAssessment: review.performanceAssessment || undefined,
+      claims: review.claims || undefined,
+      observedTtfbMs: review.observedTtfbMs,
+      lcpMs: review.lcpMs,
+      fcpMs: review.fcpMs,
+      cls: review.cls,
+      imageDelivery: review.imageDelivery || undefined,
+      visibleError: review.visibleError || undefined
+    } : undefined,
+    performanceAssessment: graph.performanceAssessment || review?.performanceAssessment || undefined
   };
 }
 
@@ -400,14 +421,15 @@ export function validateLocalFrankOutput(candidate, graph = {}, deterministicPla
 
 export function mergeLocalFrankGuidance(deterministicPlan, candidate) {
   const bodies = {
-    interpretation: clip(candidate.interpretation, 620),
-    impact: clip(candidate.impact, 620),
-    remediation: clip(candidate.remediation, 620),
-    verification: clip(candidate.verification, 620)
+    interpretation: collapseAdjacentDuplicateSentences(clip(candidate.interpretation, 620)),
+    impact: collapseAdjacentDuplicateSentences(clip(candidate.impact, 620)),
+    remediation: collapseAdjacentDuplicateSentences(clip(candidate.remediation, 620)),
+    verification: collapseAdjacentDuplicateSentences(clip(candidate.verification, 620))
   };
   return {
     ...deterministicPlan,
     mode: 'ai',
+    guidanceSource: 'frank-model',
     summary: clip(candidate.summary, 360),
     steps: (deterministicPlan.steps || []).map(step => bodies[step.type] ? { ...step, body: bodies[step.type] } : step)
   };

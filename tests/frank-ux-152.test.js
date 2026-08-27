@@ -12,9 +12,9 @@ test('scan overview does not imply that AI ran before Ask Frank',()=>{
 });
 
 test('Frank states distinguish on-device, optional cloud, and deterministic guidance',()=>{
-  assert.match(panel,/On-device reasoning/);
-  assert.match(panel,/Cloud reasoning/);
-  assert.match(panel,/Verified guidance/);
+  assert.match(panel,/Frank · AI review/);
+  assert.match(panel,/Verified scan guidance/);
+  assert.match(panel,/guidanceSource/);
   assert.doesNotMatch(html,/Standard guidance/);
 });
 

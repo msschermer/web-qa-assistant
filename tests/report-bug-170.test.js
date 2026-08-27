@@ -71,3 +71,26 @@ test('Report bug is consumer-facing and local-only in the side panel',()=>{
   const handler=js.slice(js.indexOf("$('#report-bug').onclick"),js.indexOf("$('#scan').onclick"));
   assert.doesNotMatch(handler,/fetch\(|gatewayPost|send\(\{\s*type:\s*['\"]REPORT/);
 });
+
+test('default Report Bug omits visible-error page text and redacts it when opted in',()=>{
+  const finding={
+    ruleId:'browser.visible-error',
+    visibleError:{
+      messageExcerpt:'Reset https://example.com/reset?token=secret for qa@example.com',
+      visibility:'visible',
+      role:'alert',
+      originClass:'page',
+      firstObservedPhase:'initial-scan'
+    },
+    detail:'Reset https://example.com/reset?token=secret for qa@example.com',
+    target:{status:'visible'}
+  };
+  const def=buildBugReport({version:'1.7.5',trace:[],readiness:{status:'ready'},report:{findings:[finding]},includeContext:false});
+  assert.equal(def.visibleErrors.total,1);
+  assert.equal(def.visibleErrors.items[0].messageExcerpt,undefined);
+  assert.doesNotMatch(JSON.stringify(def),/token=secret|qa@example\.com/);
+  const optIn=buildBugReport({version:'1.7.5',trace:[],readiness:{status:'ready'},report:{findings:[finding]},includeContext:true});
+  assert.ok(optIn.visibleErrors.items[0].messageExcerpt);
+  assert.match(optIn.visibleErrors.items[0].messageExcerpt,/\[email\]|\[url\]/);
+  assert.doesNotMatch(JSON.stringify(optIn),/token=secret/);
+});

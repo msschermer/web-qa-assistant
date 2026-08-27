@@ -55,6 +55,7 @@ function bootPage() {
   vm.createContext(context);
   vm.runInContext(imagePurpose, context);
   vm.runInContext(rules, context);
+  window.WebQARules = context.WebQARules;
   vm.runInContext(content, context);
 
   return {
@@ -133,7 +134,7 @@ test('an unresolvable target still explains itself instead of showing a bare car
 
   const anchor = shadow.querySelector('.anchor');
   assert.equal(anchor.dataset.tone, 'missing');
-  assert.match(anchor.querySelector('.anchor-note').textContent, /re-rendered|not there now|could not be located/i);
+  assert.match(anchor.querySelector('.anchor-note').textContent, /changed after the scan|re-rendered|not there now|could not be located/i);
   assert.match(anchor.querySelector('.anchor-note').textContent, /evidence below still stands/i);
   assert.ok([...anchor.querySelectorAll('.anchor-actions button')].some(b => b.textContent === 'Look again'));
   // The evidence has to keep rendering: it is the whole value of the step.

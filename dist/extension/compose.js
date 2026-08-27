@@ -8,6 +8,15 @@ import { IMPACT_CLASSES, IMPACT_CLASS_IDS, impactClassFor, materialityScore } fr
 //   2. The same rule failing on six controls reads as six problems when it is
 //      one problem with six instances.
 
+export function formatInstanceCountLabel(count) {
+  const n = Math.max(1, Number(count) || 1);
+  return `${n} ${n === 1 ? 'instance' : 'instances'}`;
+}
+
+export function shouldShowHighlightNav(highlightableCount) {
+  return Number(highlightableCount || 0) >= 2;
+}
+
 function groupKey(finding) {
   // Prefer an explicit root-cause key when correlation metadata is present so
   // five anchors to one dead URL (or LCP + heavy LCP image) collapse to one issue.
@@ -29,8 +38,17 @@ function groupTitle(lead, size) {
   if (rule === 'performance.browser.image-oversized' || lead.rootCauseKey === 'images-oversized') {
     return `${size} images are substantially oversized for their display size`;
   }
+  if (/blank-opener/.test(rule) || lead.rootCauseKey === 'security.blank-opener') {
+    return `${size} links open new tabs without opener protection`;
+  }
+  if (/color-contrast/.test(rule) || lead.rootCauseKey === 'axe.color-contrast') {
+    return `${size} text elements fail color contrast`;
+  }
+  if (/link-in-text-block/.test(rule) || lead.rootCauseKey === 'axe.link-in-text-block') {
+    return `${size} links are not distinguishable from surrounding text`;
+  }
   const base = String(lead.title || '').replace(/\s*\(\d+\s+instances?\)\s*$/i, '');
-  return `${base} (${size} instances)`;
+  return `${base} (${formatInstanceCountLabel(size)})`;
 }
 
 export function groupFindings(findings = []) {

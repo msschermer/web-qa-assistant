@@ -45,6 +45,7 @@ function makeAnchors(n, { host = 'example.com', prefix = 'page' } = {}) {
 
 function delayedFetch({ sequences, delays = {}, statusFor, track }) {
   const queues = new Map(Object.entries(sequences || {}).map(([url, rows]) => [url, [...rows]]));
+  const lastByUrl = new Map();
   return async (url, opts) => {
     const host = (() => { try { return new URL(String(url)).host; } catch { return ''; } })();
     const delay = Number(delays[String(url)] ?? delays[host] ?? 0);
@@ -66,7 +67,8 @@ function delayedFetch({ sequences, delays = {}, statusFor, track }) {
         return { status: row.status, url: row.url || String(url), redirected: Boolean(row.redirected) };
       }
       const queue = queues.get(String(url)) || [];
-      const next = queue.length ? queue.shift() : { status: 200 };
+      const next = queue.length ? queue.shift() : (lastByUrl.get(String(url)) || { status: 200 });
+      lastByUrl.set(String(url), next);
       if (next instanceof Error) throw next;
       if (next?.throw) throw next.throw;
       return { status: next.status ?? 200, url: next.url || String(url), redirected: Boolean(next.redirected) };
@@ -128,6 +130,7 @@ function assertPrimaryIdentity(result) {
   const byCause = result.inconclusiveByCause || {};
   const causeSum = Number(byCause.scannerBudgetAborted || 0)
     + Number(byCause.scannerTimeout || 0)
+    + Number(byCause.scannerCancelled || 0)
     + Number(byCause.remoteBlocked || 0)
     + Number(byCause.rateLimited || 0)
     + Number(byCause.corsOrOpaque || 0)
@@ -420,4 +423,166 @@ test('synthetic queue timings stay bounded for crawler-scale current-page invent
     assert.ok(durationMs < 12000, `${n} took ${durationMs}ms`);
   }
   assert.ok(samples[36].durationMs <= samples[300].durationMs + 50);
+});
+
+test('86 same-origin slow links drain with target-origin concurrency instead of stalling unprobed', async () => {
+  const conservativeSet = makeAnchors(86, { host: 'example.com', prefix: 'page' });
+  const adaptedSet = makeAnchors(86, { host: 'example.com', prefix: 'page' });
+  const delays = {};
+  for (const a of adaptedSet.anchors) delays[a.href] = 18;
+  const conservativeDelays = {};
+  for (const a of conservativeSet.anchors) conservativeDelays[a.href] = 18;
+  const track = concurrencyTrack();
+  const conservative = await harness(conservativeSet.anchors, { sequences: conservativeSet.sequences, delays: conservativeDelays }).auditLinks({
+    concurrency: 12,
+    targetOriginConcurrency: 2,
+    externalPerHostConcurrency: 2,
+    timeoutMs: 400,
+    retryTimeoutMs: 400,
+    emergencyMs: 8000
+  });
+  const result = await harness(adaptedSet.anchors, { sequences: adaptedSet.sequences, delays, track }).auditLinks({
+    concurrency: 12,
+    targetOriginConcurrency: 6,
+    externalPerHostConcurrency: 2,
+    timeoutMs: 400,
+    retryTimeoutMs: 400,
+    emergencyMs: 8000
+  });
+  const snap = track.snapshot();
+  assert.equal(result.eligible, 86);
+  assert.equal(result.attempted, 86);
+  assert.equal(result.unprobed, 0);
+  assert.equal(result.status, 'complete');
+  assert.equal(result.queueMetrics?.terminationReason, 'queue-drained');
+  assert.equal(result.linksByOriginClass.targetOrigin.eligible, 86);
+  assert.equal(result.linksByOriginClass.targetOrigin.attempted, 86);
+  assert.equal(result.linksByOriginClass.targetOrigin.unprobed, 0);
+  assert.ok((result.queueMetrics?.maxTargetOriginInFlight || 0) >= 4);
+  assert.ok((result.queueMetrics?.maxTargetOriginInFlight || 0) <= 16);
+  assert.ok((result.queueMetrics?.targetOriginConcurrencyEnd || 0) >= (result.queueMetrics?.targetOriginConcurrencyStart || 0));
+  assert.ok(snap.maxByHost['example.com'] >= 4);
+  assert.ok(conservative.primaryLinkMs >= result.primaryLinkMs - 5);
+  assertPrimaryIdentity(result);
+});
+
+test('target-origin workers stay busier than conservative external per-host limits', async () => {
+  const anchors = [];
+  const sequences = {};
+  const delays = {};
+  for (let i = 0; i < 70; i++) {
+    const url = `https://example.com/t-${i}/`;
+    anchors.push(anchor(url));
+    sequences[url] = [{ status: 200 }];
+    delays[url] = 20;
+  }
+  for (let h = 0; h < 8; h++) {
+    for (let i = 0; i < 2; i++) {
+      const url = `https://third-${h}.cdn.test/e-${i}/`;
+      anchors.push(anchor(url));
+      sequences[url] = [{ status: 200 }];
+      delays[url] = h === 0 ? 120 : 20;
+    }
+  }
+  const track = concurrencyTrack();
+  const result = await harness(anchors, { sequences, delays, track }).auditLinks({
+    concurrency: 12,
+    targetOriginConcurrency: 6,
+    externalPerHostConcurrency: 2,
+    timeoutMs: 400,
+    retryTimeoutMs: 400,
+    emergencyMs: 8000
+  });
+  const snap = track.snapshot();
+  assert.equal(result.eligible, 86);
+  assert.equal(result.attempted, 86);
+  assert.equal(result.unprobed, 0);
+  assert.ok(result.queueMetrics.maxTargetOriginInFlight >= 4);
+  assert.ok(result.queueMetrics.maxTargetOriginInFlight > (result.queueMetrics.maxExternalPerHostInFlight || 0));
+  assert.ok(snap.maxByHost['third-0.cdn.test'] <= 2);
+  assert.ok(snap.maxByHost['example.com'] >= 4);
+  assert.equal(result.linksByOriginClass.targetOrigin.eligible, 70);
+  assert.equal(result.linksByOriginClass.external.eligible, 16);
+  assertPrimaryIdentity(result);
+});
+
+test('emergency deadline still leaves genuine pathological work as limited coverage', async () => {
+  const { anchors, sequences } = makeAnchors(40, { prefix: 'hang' });
+  const delays = {};
+  for (const a of anchors) delays[a.href] = 400;
+  const result = await harness(anchors, { sequences, delays }).auditLinks({
+    concurrency: 8,
+    targetOriginConcurrency: 6,
+    externalPerHostConcurrency: 2,
+    timeoutMs: 80,
+    retryTimeoutMs: 80,
+    emergencyMs: 60
+  });
+  assert.equal(result.discovered, 40);
+  assert.ok(result.unprobed > 0 || result.scannerAborted > 0);
+  assert.equal(result.status, 'partial');
+  assert.equal(result.queueMetrics?.terminationReason, 'emergency-deadline');
+  assert.equal(result.eligible, result.attempted + result.unprobed);
+  assertPrimaryIdentity(result);
+});
+
+test('AbortError from the probe timer is scanner-timeout, not network-failure', async () => {
+  const url = 'https://example.com/aborted/';
+  const result = await harness([anchor(url)], {
+    sequences: { [url]: [abortError(), abortError()] }
+  }).auditLinks({
+    concurrency: 1,
+    timeoutMs: 40,
+    retryTimeoutMs: 40,
+    emergencyMs: 2000
+  });
+  assert.equal(result.attempted, 1);
+  assert.equal(result.unprobed, 0);
+  assert.equal(result.inconclusiveByCause.networkFailure || 0, 0);
+  assert.ok((result.inconclusiveByCause.scannerTimeout || 0) >= 1);
+});
+
+test('target-origin jobs are claimed before related and external URLs, and all still complete', async () => {
+  const anchors = [];
+  const sequences = {};
+  const delays = {};
+  for (let i = 0; i < 70; i++) {
+    const url = `https://example.com/t-${i}/`;
+    anchors.push(anchor(url));
+    sequences[url] = [{ status: 200 }];
+    delays[url] = 8;
+  }
+  for (let i = 0; i < 10; i++) {
+    const url = `https://blog.example.com/r-${i}/`;
+    anchors.push(anchor(url));
+    sequences[url] = [{ status: 200 }];
+    delays[url] = 8;
+  }
+  for (let i = 0; i < 20; i++) {
+    const url = `https://cdn-${i}.example.net/e/`;
+    anchors.push(anchor(url));
+    sequences[url] = [{ status: 200 }];
+    delays[url] = i === 0 ? 80 : 8;
+  }
+  const result = await harness(anchors, { sequences, delays }).auditLinks({
+    concurrency: 12,
+    targetOriginConcurrency: 6,
+    externalPerHostConcurrency: 2,
+    timeoutMs: 400,
+    retryTimeoutMs: 400,
+    emergencyMs: 8000
+  });
+  assert.equal(result.eligible, 100);
+  assert.equal(result.attempted, 100);
+  assert.equal(result.unprobed, 0);
+  assert.equal(result.status, 'complete');
+  assert.equal(result.linksByOriginClass.targetOrigin.eligible, 70);
+  assert.equal(result.linksByOriginClass.related.eligible, 10);
+  assert.equal(result.linksByOriginClass.external.eligible, 20);
+  const claimed = result.queueMetrics?.claimOrder || [];
+  const firstTarget = claimed.indexOf('target');
+  const firstExternal = claimed.indexOf('external');
+  assert.ok(firstTarget !== -1);
+  assert.ok(firstExternal === -1 || firstTarget < firstExternal);
+  assertPrimaryIdentity(result);
 });

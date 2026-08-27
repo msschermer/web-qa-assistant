@@ -24,7 +24,7 @@ test('consumer presentation translates findings across QA disciplines',()=>{
   const cls=presentFinding(base({ruleId:'performance.browser.cls',impactClass:'performance',performanceObservation:{cumulativeLayoutShift:0.31}}));
   const target=presentFinding(base({ruleId:'axe.target-size',impactClass:'accessibility'}));
   assert.equal(broken.title,'Broken internal link'); assert.match(broken.summary,/Pricing|missing/i);
-  assert.equal(noindex.title,'Page is blocked from search indexing'); assert.match(noindex.nextAction,/noindex|discoverable|index/i);
+  assert.equal(noindex.title,'A noindex directive was detected'); assert.match(noindex.nextAction,/noindex|discoverable|index/i);
   assert.match(lcp.title,/Largest contentful paint/i); assert.match(lcp.summary,/4\.1s/);
   assert.match(cls.title,/Layout shift is high/i); assert.match(cls.summary,/0\.31/); assert.match(cls.summary,/lab observation/i);
   assert.match(security.title,/opener access/i); assert.match(security.nextAction,/noopener|noreferrer/i);

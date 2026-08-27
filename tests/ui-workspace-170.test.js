@@ -24,7 +24,11 @@ test('side panel is organized as a SaaS QA workspace rather than a scanner stack
   assert.match(js,/Page could not be reached/);
   assert.match(js,/Scan in progress/);
   // Recommended order must appear before QA area filters in the markup.
-  assert.ok(html.indexOf('Recommended order') < html.indexOf('Filter by QA area'));
+  assert.ok(html.indexOf('environment-notice') < html.indexOf('assessment-heading'));
+  assert.match(html,/option value="development"/);
+  assert.match(html,/highlight-nav/);
+  assert.match(js,/spotlightFinding/);
+  assert.match(js,/of \$\{highlightables\.length\}/);
 });
 
 test('finding cards lead with translated guidance and demote scanner language to technical evidence',()=>{

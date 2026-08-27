@@ -61,12 +61,15 @@ export function scanProgressCopy(phase = SCAN_PHASE.IDLE, metrics = {}) {
     case SCAN_PHASE.INSPECTING_FRAMES:
       return 'Inspecting embedded content…';
     case SCAN_PHASE.VERIFYING_LINKS:
-      if (queued > 0) return `Checking ${Math.min(completed, queued)} of ${queued} links…`;
+      if (queued > 0) {
+        const shown = Math.max(completed, Number(metrics.attempted || 0));
+        return `Checking ${Math.min(shown, queued)} of ${queued} links…`;
+      }
       return 'Verifying links…';
     case SCAN_PHASE.CORRELATING:
       return 'Correlating findings…';
     case SCAN_PHASE.FRANK_ANALYZING:
-      return 'Frank is reviewing the scan…';
+      return 'Composing scan guidance…';
     case SCAN_PHASE.READY:
       return 'Scan complete.';
     case SCAN_PHASE.FAILED:

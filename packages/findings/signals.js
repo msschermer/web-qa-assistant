@@ -11,8 +11,9 @@ export const SIGNALS={
 export function signalForFinding(f={}){
   const id=String(f.ruleId||'').toLowerCase(), title=String(f.title||'').toLowerCase(), detail=String(f.detail||'').toLowerCase();
   const text=`${id} ${title} ${detail}`;
-  if(/hreflang/.test(id))return SIGNALS.HREFLANG;
-  if(/googlebot-conflict/.test(id))return SIGNALS.ROBOTS;
+  if (/hreflang/.test(id))return SIGNALS.HREFLANG;
+  if (/googlebot-conflict/.test(id))return SIGNALS.ROBOTS;
+  if (/launch\.host/.test(id))return SIGNALS.CANONICAL;
   if(/noindex/.test(text))return SIGNALS.NOINDEX;
   if(/robots/.test(text))return SIGNALS.ROBOTS;
   if(/canonical/.test(text))return SIGNALS.CANONICAL;
@@ -31,7 +32,7 @@ export function signalForFinding(f={}){
   if(/nested-form|form-no-submit|hidden-required|input-type-mismatch/.test(id))return SIGNALS.FORM_STRUCTURE;
   if(/mixed-content/.test(id))return SIGNALS.MIXED_CONTENT;
   if(/inert-link|disclosure-toggle|menu-toggle|iframe-missing-title|iframe-title-missing|placeholder-only|skip-link-target|controls-target|disclosure-target/.test(id))return SIGNALS.UX_REVIEW;
-  if(/uncaught-error|script-failed|unhandled-rejection|font-failed|resource-failed|embed-resource-failed/.test(id))return SIGNALS.RUNTIME;
+  if(/uncaught-error|script-failed|unhandled-rejection|font-failed|resource-failed|embed-resource-failed|visible-error/.test(id))return SIGNALS.RUNTIME;
   if(/horizontal-overflow|viewport-overflow/.test(id))return SIGNALS.OVERFLOW;
   if(/security/.test(id))return SIGNALS.SECURITY;
   if(/h1|heading|duplicate-id|viewport|charset|meta-refresh|stylesheet-failed/.test(id))return SIGNALS.PAGE_STRUCTURE;

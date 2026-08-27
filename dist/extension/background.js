@@ -1,13 +1,17 @@
 import { deterministicBrief, finalizeCorrelatedFindings, composeReportAttention } from './correlate.js';
 import { buildEvidenceGraph } from './frank-evidence.js';
 import { deterministicFrankPlan, validateFrankPlan } from './frank-plan.js';
-import { classifyEnvironment } from './environment.js';
-import { applyFindingPolicy } from './policy.js';
+import { attachEnvironmentContext, launchIntegrityFindings, publishedIndexSignalsFromContext, publishedIndexSignalsFromFindings, mergePublishedIndexSignals, reconcileIndexControlWithFindings, buildIndexControl, environmentNotice } from './environment.js';
+import { applyFindingPolicy, presentationPolicySummary } from './policy.js';
 import { attachTargetIntegrity, finalizeBlockedTargetReport } from './apply-report.js';
 import { IMPACT_CLASSES } from './impact.js';
 import { gatewayContextEnvelope, gatewayFrankGraph } from './evidence-contract.js';
 import { explainCoverageReasons, resolvePerformanceCoverage, reconcilePerformanceCoverage, finalizeLinkAudit, mergeGatewayLinkAudit, preserveScannerAborted, normalizePrivilegedFallback, applyPrivilegedProbeAccounting } from './coverage.js';
 import { buildEvidenceLedger } from './evidence-ledger.js';
+import { buildPerformanceAssessment } from './performance-assessment.js';
+import { createLinkStatusCache } from './link-status-cache.js';
+import { buildPublishedCoverage } from './published-coverage.js';
+import { emptyFrankReview, scanGuidanceSource } from './review-state.js';
 
 const LIVE_API = 'https://assistant.msschermer.us';
 const LOCAL_APIS = ['http://localhost:3000', 'http://localhost:8787'];
@@ -15,8 +19,10 @@ const GATEWAY_TIMEOUT_MS = 10000;
 const FRANK_TIMEOUT_MS = 16000;
 const dirtyTimers = new Map();
 const workspaceHot = new Map();
-const RELEASE_VERSION = '1.7.4';
+const RELEASE_VERSION = '1.7.5';
 const WORKSPACE_SESSION_KEY = 'qaWorkspaceByTab';
+const LINK_CACHE_SESSION_KEY = 'qaLinkStatusCache';
+const linkStatusCache = createLinkStatusCache();
 
 async function readWorkspaceStore() {
   try {
@@ -34,6 +40,20 @@ async function writeWorkspaceStore(store) {
     return { ok: false, error: String(error?.message || error || 'Could not save workspace snapshot.') };
   }
 }
+async function persistLinkCache() {
+  try {
+    if (!chrome.storage?.session) return;
+    await chrome.storage.session.set({ [LINK_CACHE_SESSION_KEY]: linkStatusCache.exportEntries() });
+  } catch {}
+}
+async function restoreLinkCache() {
+  try {
+    if (!chrome.storage?.session) return;
+    const data = await chrome.storage.session.get({ [LINK_CACHE_SESSION_KEY]: [] });
+    linkStatusCache.hydrate(data[LINK_CACHE_SESSION_KEY] || []);
+  } catch {}
+}
+restoreLinkCache();
 function workspaceKey(tabId) { return String(tabId || ''); }
 async function saveWorkspaceSnapshot(workspace) {
   const tabId = workspaceKey(workspace?.tabId);
@@ -184,6 +204,21 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
     }
     return{report:enriched}
   }
+  if(msg.type==='LINK_CACHE_SNAPSHOT'){
+    const pageUrl=String(msg.pageUrl||sender.tab?.url||'');
+    return{entries:linkStatusCache.exportEntries({pageUrl})};
+  }
+  if(msg.type==='LINK_CACHE_MERGE'){
+    const entries=Array.isArray(msg.entries)?msg.entries.slice(0,400):[];
+    linkStatusCache.hydrate(entries);
+    persistLinkCache().catch(()=>{});
+    return{ok:true,size:linkStatusCache.size};
+  }
+  if(msg.type==='LINK_CACHE_INVALIDATE'){
+    if(msg.url)linkStatusCache.invalidate(msg.url);
+    persistLinkCache().catch(()=>{});
+    return{ok:true};
+  }
   if(msg.type==='PREPARE_FRANK')return prepareFrank(msg);
   if(msg.type==='CLOUD_FRANK_PLAN')return cloudFrankPlan(msg);
   if(msg.type==='FRANK_START_PLAN')return startFrankPlan(msg);
@@ -193,7 +228,7 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
   if(msg.type==='FRANK_END')return frankMessage(msg.tabId,{type:'FRANK_END'});
   if(msg.type==='FRANK_PREVIEW')return frankMessage(msg.tabId,{type:'FRANK_PREVIEW',targetId:msg.targetId,preview:msg.preview});
   if(msg.type==='FRANK_RESET_PREVIEW')return frankMessage(msg.tabId,{type:'FRANK_RESET_PREVIEW'});
-  if(msg.type==='HIGHLIGHT'){const tabId=msg.tabId||(await activeTab())?.id;if(!tabId)throw new Error('No inspected browser tab was found.');try{await chrome.tabs.sendMessage(tabId,{type:'PING'})}catch{try{await ensureInjected(tabId)}catch{throw new Error('Page access expired. Click the toolbar icon on this page and try Highlight again.')}}return chrome.tabs.sendMessage(tabId,{type:'HIGHLIGHT',targetId:msg.targetId,selector:msg.selector})}
+  if(msg.type==='HIGHLIGHT'){const tabId=msg.tabId||(await activeTab())?.id;if(!tabId)throw new Error('No inspected browser tab was found.');try{await chrome.tabs.sendMessage(tabId,{type:'PING'})}catch{try{await ensureInjected(tabId)}catch{throw new Error('Page access expired. Click the toolbar icon on this page and try Highlight again.')}}return chrome.tabs.sendMessage(tabId,{type:'HIGHLIGHT',targetId:msg.targetId,selector:msg.selector,ruleId:msg.ruleId})}
   if(msg.type==='GET_ACTIVE'){const s=await settings();return{tab:await activeTab(),settings:{apiBase:s.apiBase,apiKey:s.apiKey,cloudAiFallback:Boolean(s.cloudAiFallback),managedAccess:Boolean(s.installToken),managedAccessExpiresAt:Number(s.installTokenExpiresAt||0)}}}
   if(msg.type==='SAVE_WORKSPACE_SNAPSHOT')return saveWorkspaceSnapshot(msg.workspace||msg);
   if(msg.type==='GET_WORKSPACE_SNAPSHOT')return getWorkspaceSnapshot(msg.tabId);
@@ -211,7 +246,7 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
   if(msg.type==='SAVE_GATEWAY_SETTINGS'){const apiBase=String(msg.apiBase||'').trim().replace(/\/$/,''),apiKey=String(msg.apiKey||'').trim(),cloudAiFallback=Boolean(msg.cloudAiFallback);if(apiBase&&!/^https?:\/\//i.test(apiBase))throw new Error('Gateway URL must use HTTP or HTTPS.');await chrome.storage.local.set({apiBase,apiKey,cloudAiFallback});return{saved:true}}
   if(msg.type==='TEST_GATEWAY')return testGateway({apiBase:msg.apiBase,apiKey:msg.apiKey,cloudAiFallback:Boolean(msg.cloudAiFallback)});
   if(msg.type==='IGNORE_RULE'){const current=await activeTab(),s=await settings(),url=msg.pageUrl||current?.url;if(!url)throw new Error('Page context is unavailable.');const origin=new URL(url).origin,list=s.ignoredRulesByOrigin[origin]||[];s.ignoredRulesByOrigin[origin]=[...new Set([...list,msg.ruleId])];await chrome.storage.local.set({ignoredRulesByOrigin:s.ignoredRulesByOrigin});return{ignored:true}}
-  if(msg.type==='SET_ENVIRONMENT'){const url=msg.pageUrl||(await activeTab())?.url;if(!url)throw new Error('Page context is unavailable.');const origin=new URL(url).origin,allowed=new Set(['production','staging','preview','local','auto']);if(!allowed.has(msg.environment))throw new Error('Unsupported environment value.');const s=await settings();if(msg.environment==='auto')delete s.environmentOverridesByOrigin[origin];else s.environmentOverridesByOrigin[origin]=msg.environment;await chrome.storage.local.set({environmentOverridesByOrigin:s.environmentOverridesByOrigin});return{saved:true}}
+  if(msg.type==='SET_ENVIRONMENT'){const url=msg.pageUrl||(await activeTab())?.url;if(!url)throw new Error('Page context is unavailable.');const origin=new URL(url).origin,allowed=new Set(['production','staging','preview','local','development','auto']);if(!allowed.has(msg.environment))throw new Error('Unsupported environment value.');const s=await settings();if(msg.environment==='auto')delete s.environmentOverridesByOrigin[origin];else s.environmentOverridesByOrigin[origin]=msg.environment;await chrome.storage.local.set({environmentOverridesByOrigin:s.environmentOverridesByOrigin});return{saved:true}}
   if(msg.type==='WATCH_DIRTY'&&sender.tab){const s=await settings(),origin=new URL(sender.tab.url).origin;if(s.watchedOrigins.includes(origin))scheduleWatched(sender.tab);return{scheduled:true}}
   if(msg.type==='OPEN_REPORT_BUG_FROM_FRANK'){
     const windowId=msg.windowId||sender.tab?.windowId;
@@ -262,11 +297,59 @@ function sanitizeExternalProbeUrl(raw){
   }catch{return null}
 }
 async function contextualize(report,context=null){
-  if(!report?.page?.url)return report;const s=await settings(),origin=new URL(report.page.url).origin,override=s.environmentOverridesByOrigin?.[origin]||'',monitored=context?.performance?.data?.monitored===true||context?.performance?.monitored===true;
-  const environment=classifyEnvironment(report.page,{override,canonical:report.page.canonical,monitored});environment.pathname=new URL(report.page.url).pathname;
+  if(!report?.page?.url)return report;const s=await settings(),origin=new URL(report.page.url).origin,override=s.environmentOverridesByOrigin?.[origin]||'',monitored=context?.performance?.data?.monitored===true||context?.performance?.monitored===true||context?.services?.performance?.data?.monitored===true||report?.context?.performance?.monitored===true;
+  const published=mergePublishedIndexSignals(
+    publishedIndexSignalsFromContext(context,report),
+    publishedIndexSignalsFromFindings(report.findings||[])
+  );
+  const environment=attachEnvironmentContext(report.page,{
+    override,
+    canonical:report.page.canonical,
+    monitored,
+    destinations:report.linkAudit?.destinations||[],
+    findings:report.findings||[],
+    ...published
+  });
   const attached=attachTargetIntegrity(report);
-  const correlated=finalizeCorrelatedFindings(attached.findings||[],attached);
+  const leakage=launchIntegrityFindings({page:report.page,environment,canonical:environment.canonicalContext,destinations:report.linkAudit?.destinations||[]});
+  const correlated=finalizeCorrelatedFindings([...(attached.findings||[]),...leakage],attached);
+  // Rebuild authoritative index control after correlation/leakage findings exist.
+  const publishedFinal=mergePublishedIndexSignals(published,publishedIndexSignalsFromFindings(correlated));
+  environment.indexControl=reconcileIndexControlWithFindings(
+    buildIndexControl({page:report.page,...publishedFinal}),
+    correlated
+  );
+  if(environment.indexability){
+    environment.indexability.blocked=environment.indexControl.noindexDetected===true;
+    environment.indexability.publishedBlocked=environment.indexControl.publishedMetaRobots?.noindex===true||environment.indexControl.xRobotsTag?.noindex===true;
+    environment.indexability.renderedBlocked=environment.indexControl.metaRobots?.noindex===true;
+    environment.indexability.mismatch=environment.indexControl.conflictingSignals===true;
+    environment.indexability.assessment=environment.indexControl.assessment;
+    environment.indexability.publishedKnown=environment.indexControl.publishedMetaRobots?.checked===true;
+  }
+  environment.notice=environmentNotice(environment,environment.indexControl);
+  environment.publishedCoverage=buildPublishedCoverage({
+    context:report.context||context||{},
+    report,
+    coverage:report.coverage||{},
+    connectedMode:report.connectedMode||'',
+    enrichmentError:report.connectedError||'',
+    latencyMs:report.publishedCoverage?.latencyMs
+  });
+  if(!report.frankReview){
+    report.frankReview=emptyFrankReview({
+      modelReadiness:report.environment?.modelReadiness||'unavailable',
+      reason:'not-requested'
+    });
+  }
+  const performanceAssessment=buildPerformanceAssessment({
+    browserPerformance:attached.browserPerformance||report.browserPerformance,
+    findings:correlated,
+    environment
+  });
+  environment.performanceAssessment=performanceAssessment;
   const policyFindings=applyFindingPolicy(correlated,environment);
+  environment.presentationPolicy=presentationPolicySummary(policyFindings);
   const finalized=finalizeBlockedTargetReport({...attached,page:{...attached.page,platform:attached.page?.platform||null}},policyFindings);
   const findings=finalized.findings;
   // Attention is composed once here so every surface (panel, brief, markdown
@@ -275,7 +358,7 @@ async function contextualize(report,context=null){
   const announce=String(report.coverage?.links||'')!=='pending';
   if(announce)emitScanProgress('CORRELATING');
   const attention=composeReportAttention(findings,{limit:8});
-  const next={...finalized,environment,page:{...finalized.page,environment},findings,attention:{groups:attention.groups.map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead.id,selectors:g.selectors,instanceIds:g.instances.map(x=>x.id),rootCauseKey:g.lead.rootCauseKey||g.key,targetability:g.lead.targetability||'',lenses:g.lead.lenses||[]})),allGroups:(attention.allGroups||[]).map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead?.id,targetability:g.lead?.targetability||'',confidence:g.lead?.confidence||'',ruleId:g.lead?.ruleId||''})),worthChecking:(attention.worthChecking||[]).map(w=>({key:w.key,title:w.title,scope:w.scope,lens:w.lens,fixOwner:w.fixOwner,size:w.size,instanceCount:w.instanceCount,findingIds:w.findings.map(f=>f.id)})),classCounts:attention.classCounts,materialGroupCount:attention.materialGroupCount,materialFindingCount:attention.materialFindingCount,representedClasses:attention.representedClasses,classLabels:Object.fromEntries(Object.entries(IMPACT_CLASSES).map(([k,v])=>[k,v.label]))},priorityBrief:finalized.priorityBrief||report.priorityBrief||null,targetIntegrityBlocked:finalized.targetIntegrityBlocked||false};
+  const next={...finalized,environment,page:{...finalized.page,environment},findings,performanceAssessment,attention:{groups:attention.groups.map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead.id,selectors:g.selectors,instanceIds:g.instances.map(x=>x.id),rootCauseKey:g.lead.rootCauseKey||g.key,targetability:g.lead.targetability||'',lenses:g.lead.lenses||[]})),allGroups:(attention.allGroups||[]).map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead?.id,targetability:g.lead?.targetability||'',confidence:g.lead?.confidence||'',ruleId:g.lead?.ruleId||''})),worthChecking:(attention.worthChecking||[]).map(w=>({key:w.key,title:w.title,scope:w.scope,lens:w.lens,fixOwner:w.fixOwner,size:w.size,instanceCount:w.instanceCount,findingIds:w.findings.map(f=>f.id)})),classCounts:attention.classCounts,materialGroupCount:attention.materialGroupCount,materialFindingCount:attention.materialFindingCount,representedClasses:attention.representedClasses,classLabels:Object.fromEntries(Object.entries(IMPACT_CLASSES).map(([k,v])=>[k,v.label]))},priorityBrief:finalized.priorityBrief||report.priorityBrief||null,targetIntegrityBlocked:finalized.targetIntegrityBlocked||false};
   next.coverageReasons=explainCoverageReasons(next);
   const reconciled=reconcilePerformanceCoverage(next);
   const tFrank=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
@@ -415,8 +498,12 @@ async function addLinkAudit(report,tabId,{privilegedExternal=true}={}){
         probeBudgetReached:Boolean(result?.probeBudgetReached),
         probeBudgetPreventedCoverage:Boolean(result?.probeBudgetPreventedCoverage),
         queueMetrics:result?.queueMetrics||undefined,
+        linksByOriginClass:result?.linksByOriginClass||undefined,
+        hostDiagnostics:result?.hostDiagnostics||result?.queueMetrics?.hostDiagnostics||undefined,
+        queueTerminationReason:result?.queueTerminationReason||result?.queueMetrics?.terminationReason||undefined,
         privilegedFallback,
-        refinement:result?.refinement
+        refinement:result?.refinement,
+        linkExecution:result?.linkExecution||undefined
       }
     };
     if(privilegedExternal&&externalCandidates.length){
@@ -431,15 +518,17 @@ async function addLinkAudit(report,tabId,{privilegedExternal=true}={}){
       const finalized=finalizeLinkAudit(next.linkAudit,{unavailable:result?.status==='unavailable',privilegedFallback});
       next={...next,linkAudit:finalized.linkAudit,coverage:{...report.coverage,links:finalized.coverageStatus}};
     }
-    const primaryLinkMs=Number(result?.primaryLinkMs||result?.linkProbeMs||0);
+    const primaryLinkMs=Number(result?.primaryLinkMs||0);
+    const inPageRefinementMs=Number(result?.refinementLinkMs||result?.linkExecution?.refinementMs||0);
+    const inPageLinkMs=Number(result?.linkProbeMs||0)|| (primaryLinkMs+inPageRefinementMs);
     return{
       ...next,
       scanTimings:{
         ...(report.scanTimings||{}),
-        linkProbeMs:primaryLinkMs+refinementLinkMs,
-        primaryLinkMs,
-        refinementLinkMs,
-        totalMs:Number(report.scanTimings?.totalMs||0)+primaryLinkMs+refinementLinkMs
+        linkProbeMs:inPageLinkMs+refinementLinkMs,
+        primaryLinkMs:primaryLinkMs||inPageLinkMs,
+        refinementLinkMs:inPageRefinementMs+refinementLinkMs,
+        totalMs:Number(report.scanTimings?.totalMs||0)+inPageLinkMs+refinementLinkMs
       }
     };
   }catch{return{...report,linkAudit:{discovered:0,eligible:0,attempted:0,checked:0,verifiedHealthy:0,confirmedIssues:0,inconclusive:0,unprobed:0,explicitlySkipped:0,scannerAborted:0,incompleteChecks:[],unprobedChecks:[],probeBudgetReached:false,probeBudgetPreventedCoverage:false},coverage:{...report.coverage,links:'unavailable'}}}
@@ -524,30 +613,50 @@ async function enrich(report,tabId=null){
   const privatePage=isPrivateHost(report.page?.hostname||'');
   // Connected public pages: content-script audit only; gateway performs privileged external probes.
   report=await addLinkAudit(report,tabId,{privilegedExternal:privatePage});report=await contextualize(report);
-  if(privatePage){const coverage=localOnlyCoverage(report);const next={...report,coverage,priorityBrief:'Local inspection complete. Frank is using browser and accessibility evidence only; connected services are intentionally disabled for this private environment.',priorityMode:'deterministic',connectedMode:'local-only',context:{performance:null,services:{}}};next.coverageReasons=explainCoverageReasons(next);return next}
+  if(privatePage){const coverage=localOnlyCoverage(report);const next={...report,coverage,priorityBrief:'Local inspection complete. Frank is using browser and accessibility evidence only; connected services are intentionally disabled for this private environment.',priorityMode:'deterministic',connectedMode:'local-only',context:{performance:null,services:{}}};next.publishedCoverage=buildPublishedCoverage({report:next,coverage,connectedMode:'local-only',attempted:false});next.frankReview=emptyFrankReview({reason:'not-requested'});next.guidanceSource=scanGuidanceSource({hasVisibleGuidance:true,priorityMode:'deterministic',coverageAi:coverage.ai,frankReview:next.frankReview});next.coverageReasons=explainCoverageReasons(next,{publishedReason:next.publishedCoverage.reason});return next}
+  const publishedStarted=Date.now();
   try{
     const result=await gatewayPost('/api/context',gatewayContextEnvelope(report),22000,'CONTEXT');
-    if(result?.report){const merged=mergeGatewayReport(report,result.report),contextual=await contextualize(merged,result.report.context?.services?.performance);return{...contextual,aiGateway:result.gateway,requestId:result.requestId,connectedMode:'gateway'}}
+    const latencyMs=Date.now()-publishedStarted;
+    if(result?.report){
+      const merged=mergeGatewayReport(report,result.report);
+      const contextual=await contextualize(merged,result.report.context||result.report.context?.services||null);
+      const next={...contextual,aiGateway:result.gateway,requestId:result.requestId,connectedMode:'gateway'};
+      next.publishedCoverage=buildPublishedCoverage({
+        context:next.context||result.report.context||{},
+        report:next,
+        coverage:next.coverage||{},
+        connectedMode:'gateway',
+        latencyMs,
+        attempted:true
+      });
+      next.frankReview=emptyFrankReview({reason:'not-requested'});
+      next.guidanceSource=scanGuidanceSource({hasVisibleGuidance:true,priorityMode:next.priorityMode||'deterministic',coverageAi:next.coverage?.ai,frankReview:next.frankReview});
+      next.coverageReasons=explainCoverageReasons(next,{publishedReason:next.publishedCoverage.reason});
+      return next;
+    }
   }catch(error){
     const s=await settings(),status=Number(error?.status||0),connectedMode=status===401?((s.apiKey||s.installToken)?'auth-rejected':'auth-required'):status===403?'auth-rejected':'unavailable';
     const labPerf=resolvePerformanceCoverage(report.coverage||{},report.browserPerformance,null);
     const coverage={
       ...report.coverage,
       published:'unavailable',
-      // Keep lab coverage when present; connector failure is a separate honesty signal.
       performance:labPerf==='current-page'||labPerf==='partial'?labPerf:'unavailable',
       wcag:'unavailable',
       ai:'deterministic'
     };
     const connectedError=connectedMode==='auth-required'?'The assistant gateway requires an access key.':connectedMode==='auth-rejected'?'The saved assistant access key was rejected.':String(error?.message||error);
     const next={...report,coverage,priorityBrief:deterministicBrief(report.findings,{coverage,linkAudit:report.linkAudit,targetIntegrity:report.page?.targetIntegrity}),priorityMode:'deterministic',connectedMode,connectedError,context:{performance:null,services:{}}};
-    next.coverageReasons=explainCoverageReasons(next,{enrichmentFailed:true,rendererTimeout:/timed out|timeout/i.test(String(error?.message||''))});
+    next.publishedCoverage=buildPublishedCoverage({report:next,coverage,connectedMode,enrichmentError:connectedError,latencyMs:Date.now()-publishedStarted,attempted:true});
+    next.frankReview=emptyFrankReview({reason:'not-requested'});
+    next.guidanceSource=scanGuidanceSource({hasVisibleGuidance:true,priorityMode:'deterministic',coverageAi:'deterministic',frankReview:next.frankReview});
+    next.coverageReasons=explainCoverageReasons(next,{enrichmentFailed:true,rendererTimeout:/timed out|timeout/i.test(String(error?.message||'')),publishedReason:next.publishedCoverage.reason});
     return next;
   }
   return report;
 }
 async function targetContext(tabId,targetId,selector,ruleId=''){if(!tabId||(!targetId&&!selector))return null;try{const result=await chrome.tabs.sendMessage(tabId,{type:'TARGET_CONTEXT',targetId,selector,ruleId});return result?.found?result:null}catch{return null}}
-async function prepareFrank({finding,report,tabId}){
+async function prepareFrank({finding,report,tabId,instances=[],selectedInstanceId='',groupTitle=''}){
   if(!finding||!report?.page)throw new Error('Frank needs a current finding and scan report.');
   const inspectedTabId=tabId||(await activeTab())?.id;if(!inspectedTabId)throw new Error('The inspected browser tab is no longer available.');
   try{await chrome.tabs.sendMessage(inspectedTabId,{type:'PING'})}catch{await ensureInjected(inspectedTabId)}
@@ -555,7 +664,24 @@ async function prepareFrank({finding,report,tabId}){
   if(!isPrivateHost(report.page.hostname||'')&&(!report.context?.services||Object.keys(report.context.services).length===0)){try{sourceReport=await enrich(report,inspectedTabId)}catch{}}
   const target=finding.targetType==='visual'?await targetContext(inspectedTabId,finding.targetId,finding.selector,finding.ruleId):null;
   const latestFinding=sourceReport.findings?.find(x=>x.id===finding.id)||finding;
-  const graph=buildEvidenceGraph({finding:latestFinding,page:sourceReport.page,coverage:sourceReport.coverage,context:sourceReport.context||{},targetContext:target,environment:sourceReport.environment||sourceReport.page?.environment,evidenceLedger:sourceReport.evidenceLedger||null,linkAudit:sourceReport.linkAudit||null});
+  const groupInstances=instances.length
+    ? instances
+    : (sourceReport.findings||[]).filter(x=>x.rootCauseKey&&latestFinding.rootCauseKey&&x.rootCauseKey===latestFinding.rootCauseKey);
+  const graph=buildEvidenceGraph({
+    finding:latestFinding,
+    page:sourceReport.page,
+    coverage:sourceReport.coverage,
+    context:sourceReport.context||{},
+    targetContext:target,
+    environment:sourceReport.environment||sourceReport.page?.environment,
+    evidenceLedger:sourceReport.evidenceLedger||null,
+    linkAudit:sourceReport.linkAudit||null,
+    instances:groupInstances,
+    selectedInstanceId:selectedInstanceId||finding.id,
+    groupCount:groupInstances.length||Number(latestFinding.count||1),
+    groupTitle:groupTitle||finding.title,
+    performanceAssessment:sourceReport.performanceAssessment||sourceReport.environment?.performanceAssessment||null
+  });
   const plan=deterministicFrankPlan(graph);
   return{plan,graph,tabId:inspectedTabId,reasoning:{status:'ready',mode:'deterministic',provider:'deterministic',message:'Verified deterministic guidance is ready for optional on-device improvement.'}};
 }

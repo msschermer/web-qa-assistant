@@ -8,8 +8,11 @@ import { correlate, deterministicBrief, finalizeCorrelatedFindings, composeRepor
 import { priorityBrief, frankWalkthrough, probeAiHealth, aiFailureInfo } from '../../packages/ai/ai.js';
 import { buildEvidenceGraph, evidenceHash } from '../../packages/frank/evidence.js';
 import { deterministicFrankPlan, validateFrankPlan } from '../../packages/frank/plan.js';
-import { classifyEnvironment } from '../../packages/environment/classify.js';
-import { applyFindingPolicy } from '../../packages/findings/policy.js';
+import { attachEnvironmentContext, launchIntegrityFindings, publishedIndexSignalsFromContext } from '../../packages/environment/classify.js';
+import { buildPublishedCoverage } from '../../packages/environment/published-coverage.js';
+import { emptyFrankReview, scanGuidanceSource } from '../../packages/frank/review-state.js';
+import { buildPerformanceAssessment } from '../../packages/findings/performance-assessment.js';
+import { applyFindingPolicy, presentationPolicySummary } from '../../packages/findings/policy.js';
 import { resolvePerformanceCoverage, applyPrivilegedProbeAccounting, reconcilePerformanceCoverage } from '../../packages/findings/coverage.js';
 import { buildEvidenceLedger } from '../../packages/findings/evidence-ledger.js';
 import { applyTargetIntegrityReport, attachTargetIntegrity, finalizeBlockedTargetReport } from '../../packages/integrity/apply-report.js';
@@ -22,7 +25,7 @@ const port = Number(process.env.PORT || 3000);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frankCache = new Map();
 const FRANK_CACHE_MS = Number(process.env.FRANK_CACHE_MS || 30 * 60 * 1000);
-const RELEASE_VERSION = '1.7.4';
+const RELEASE_VERSION = '1.7.5';
 function publicAiEnabled(){return /^(1|true|yes)$/i.test(String(process.env.PUBLIC_AI_ENABLED||''))}
 function extensionCloudAiEnabled(){return /^(1|true|yes)$/i.test(String(process.env.EXTENSION_CLOUD_AI_ENABLED||''))}
 function publicExtensionAccessEnabled(){return /^(1|true|yes)$/i.test(String(process.env.PUBLIC_EXTENSION_ACCESS_ENABLED||''))}
@@ -149,8 +152,28 @@ async function enrich(local, requestId = '', { allowAi = true } = {}) {
   });
   const context = await allContext(base, { requestId });
   const correlated = correlate(base, context);
-  const environment = classifyEnvironment(base.page || {}, { canonical: base.page?.canonical, monitored: context.performance?.data?.monitored === true });
-  const policyFindings = applyFindingPolicy(correlated, environment);
+  const published = publishedIndexSignalsFromContext(context, base);
+  const environment = attachEnvironmentContext(base.page || {}, {
+    canonical: base.page?.canonical,
+    monitored: context.performance?.data?.monitored === true,
+    destinations: base.linkAudit?.destinations || [],
+    findings: correlated,
+    ...published
+  });
+  const performanceAssessment = buildPerformanceAssessment({
+    browserPerformance: base.browserPerformance,
+    findings: correlated,
+    environment
+  });
+  environment.performanceAssessment = performanceAssessment;
+  const leakage = launchIntegrityFindings({
+    page: base.page || {},
+    environment,
+    canonical: environment.canonicalContext,
+    destinations: base.linkAudit?.destinations || []
+  });
+  const policyFindings = applyFindingPolicy([...correlated, ...leakage], environment);
+  environment.presentationPolicy = presentationPolicySummary(policyFindings);
   const coverage = {
     ...base.coverage,
     published: coverageStatus(context.meta, 'published'),
@@ -170,14 +193,33 @@ async function enrich(local, requestId = '', { allowAi = true } = {}) {
       ? await priorityBrief(finalized.findings, finalized.coverage, environment, finalized.linkAudit || null)
       : { text: deterministicBrief(finalized.findings, briefContext), mode: 'deterministic' };
   coverage.ai = brief.mode === 'ai' ? 'complete' : 'deterministic';
+  const publishedCoverage = buildPublishedCoverage({
+    context,
+    report: finalized,
+    coverage,
+    connectedMode: 'gateway',
+    attempted: true
+  });
+  environment.publishedCoverage = publishedCoverage;
+  const frankReview = emptyFrankReview({ reason: 'not-requested' });
+  const guidanceSource = scanGuidanceSource({
+    frankReview,
+    hasVisibleGuidance: true,
+    priorityMode: brief.mode,
+    coverageAi: coverage.ai
+  });
   return {
     ok: true,
     requestId,
     report: {
       ...finalized,
       environment,
+      publishedCoverage,
+      frankReview,
+      guidanceSource,
       page: { ...finalized.page, environment },
       findings: finalized.findings,
+      performanceAssessment,
       attention: {
         groups: attention.groups.map(g => ({
           key: g.key, impactClass: g.impactClass, title: g.title, size: g.size, instanceCount: g.instanceCount,

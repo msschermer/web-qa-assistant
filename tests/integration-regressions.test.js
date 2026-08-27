@@ -46,7 +46,7 @@ test('legacy Explain path is removed and gateway JSON handling stays robust', ()
 test('side panel gives useful action feedback and supports copyable diagnostics', () => {
   const panel = read('apps/extension/sidepanel.js');
   const html = read('apps/extension/sidepanel.html');
-  assert.match(panel, /Highlighted on page/);
+  assert.match(panel, /Highlighted the exact affected element/);
   assert.match(panel, /Issue handoff copied/);
   assert.match(panel, /extension action timed out/i);
   assert.match(panel, /showFailure/);
@@ -237,7 +237,7 @@ test('public web scanner and extension cloud AI remain opt-in while the extensio
 
 test('extension manifest pins a stable unpacked identity for settings continuity',()=>{
   const manifest=JSON.parse(read('apps/extension/manifest.json'));
-  assert.equal(manifest.version,'1.7.4');
+  assert.equal(manifest.version,'1.7.5');
   assert.match(manifest.key,/^[A-Za-z0-9+/=]+$/);
   assert.ok(manifest.key.length>300);
 });
