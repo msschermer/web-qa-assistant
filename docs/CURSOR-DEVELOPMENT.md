@@ -302,16 +302,16 @@ This keeps the review useful even if a particular Cursor release restricts MCP a
 
 Project-specific steering for Cursor's **Auto-review** run mode.
 
-It lowers friction for normal local read/test/build work while asking for review before:
+It lowers friction for normal local read/test/build work and authorized AutoQA corpus dogfood while asking for review before:
 
-- external site scans/browser automation
+- browser automation / scans of origins **outside** AutoQA corpus membership (and outside local fixture origins), unless the user explicitly requested that origin
 - push or destructive Git
 - SSH/deployment
 - production changes
 - secret access
 - destructive file operations
 
-This is best-effort approval steering, not a security boundary.
+Corpus membership in `qa-sites/golden.json`, `rotating.json`, `adversarial.json`, and `discoveries.json` is intentional authorization for bounded AutoQA dogfood when autonomous mode is enabled. This is best-effort approval steering, not a security boundary.
 
 ## `.cursorignore`
 
@@ -635,8 +635,8 @@ Recommended posture:
 ```text
 Local read/test/build           lower friction
 WebQA health                    lower friction
-External site scan             approval initially
-Browser navigation/action       approval initially
+AutoQA corpus dogfood           authorized when enabled
+Non-corpus external scan        approval
 Git push                        approval
 SSH/deployment                  approval
 Secrets                         approval

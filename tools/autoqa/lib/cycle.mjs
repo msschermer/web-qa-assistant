@@ -57,6 +57,54 @@ export function shortSha(sha = headSha()) {
   return String(sha || '').slice(0, 12);
 }
 
+/** Control-plane files AutoQA may rewrite without a product candidate. */
+export const CONTROL_PLANE_PATHS = Object.freeze([
+  '.autoqa/state.json',
+  'AUTOQA_STATUS.md',
+  'AUTOQA_LOG.md'
+]);
+
+/**
+ * Discard tracked changes under the given paths (e.g. readiness build stamps).
+ * Safe only when the caller verified a clean tree before introducing those changes.
+ */
+export function restoreTracked(paths = []) {
+  const list = (paths || []).filter(Boolean);
+  if (!list.length) return { ok: true, skipped: true };
+  const r = git(['checkout', '--', ...list]);
+  return {
+    ok: r.status === 0,
+    stderr: r.stderr || r.stdout || '',
+    paths: list
+  };
+}
+
+/**
+ * Stage and commit specific paths. No-op success when nothing staged.
+ */
+export function commitPaths(paths, message) {
+  const list = (paths || []).filter(Boolean);
+  if (!list.length) return { ok: false, error: 'no paths to commit' };
+  const add = git(['add', '--', ...list]);
+  if (add.status !== 0) return { ok: false, error: add.stderr || 'git add failed' };
+  const staged = git(['diff', '--cached', '--name-only']).stdout;
+  if (!staged) return { ok: true, skipped: true, reason: 'nothing staged' };
+  const commit = git(['commit', '-m', String(message || 'chore(autoqa): update control plane')]);
+  if (commit.status !== 0) {
+    return { ok: false, error: commit.stderr || commit.stdout || 'git commit failed' };
+  }
+  return { ok: true, sha: headSha(), staged: staged.split(/\r?\n/).filter(Boolean) };
+}
+
+/** Parse `git status --porcelain` into repo-relative paths. */
+export function porcelainPaths(porcelain = '') {
+  return String(porcelain || '')
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .map((line) => line.slice(3).replace(/\\/g, '/').trim());
+}
+
 export function beginCycle({ goal = null } = {}) {
   const guards = verifyRepoGuards();
   if (!guards.ok) {

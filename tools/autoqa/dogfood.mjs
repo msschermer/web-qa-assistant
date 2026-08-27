@@ -1,12 +1,22 @@
 import { pathToFileURL } from 'node:url';
+import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
+import net from 'node:net';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { REPO_ROOT, EXTENSION_DIR, safeSiteName } from './lib/paths.mjs';
 import { compactRunSummary, sanitizeUrl } from './lib/sanitize.mjs';
 import { evaluateInvariants } from './lib/invariants.mjs';
 import { frankCriticEvaluate } from './lib/frank-critic.mjs';
+import { isAuthorizedDogfoodUrl } from './lib/corpus.mjs';
+import {
+  ensureChromeReady,
+  markChromeLaunchFailed,
+  markChromeLaunchSucceeded,
+  resolveSystemChrome
+} from './lib/chrome.mjs';
 import { buildBugReport } from '../../packages/support/bug-report.js';
 
 function computeExtensionId(publicKeyBase64) {
@@ -20,14 +30,50 @@ function computeExtensionId(publicKeyBase64) {
   return id;
 }
 
-async function waitForServiceWorker(context, timeoutMs = 45000) {
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      server.close((err) => (err ? reject(err) : resolve(port)));
+    });
+    server.on('error', reject);
+  });
+}
+
+function waitForDebugger(port, timeoutMs = 25000) {
   const start = Date.now();
+  return new Promise((resolve, reject) => {
+    const tick = () => {
+      const req = http.get({ host: '127.0.0.1', port, path: '/json/version', timeout: 1000 }, (res) => {
+        let body = '';
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(body));
+          } catch (error) {
+            reject(error);
+          }
+        });
+      });
+      req.on('error', () => {
+        if (Date.now() - start > timeoutMs) reject(new Error(`Chrome remote debugging not ready on port ${port}`));
+        else setTimeout(tick, 250);
+      });
+    };
+    tick();
+  });
+}
+
+async function waitForServiceWorker(context, extensionId, timeoutMs = 45000) {
+  const start = Date.now();
+  const want = `chrome-extension://${extensionId}/`;
   while (Date.now() - start < timeoutMs) {
-    const sw = context.serviceWorkers().find(w => w.url().startsWith('chrome-extension://'));
+    const sw = context.serviceWorkers().find(w => w.url().startsWith(want));
     if (sw) return sw;
     await new Promise(r => setTimeout(r, 250));
   }
-  throw new Error('No extension service worker');
+  throw new Error(`No extension service worker for ${extensionId}`);
 }
 
 async function capture(page, filePath) {
@@ -40,72 +86,201 @@ async function capture(page, filePath) {
 }
 
 /**
- * Dogfood one URL against the unpacked extension.
- * @param {object} opts
- * @param {string} opts.url
- * @param {string} opts.outDir
- * @param {boolean} [opts.sampleFrank]
- * @param {boolean} [opts.sampleHighlight]
- * @param {number} [opts.timeoutMs]
+ * Grant optional http(s) host permissions via a real click gesture in the side panel.
+ * Required for public corpus origins; local 127.0.0.1/localhost fixtures are host_permissions.
+ */
+async function grantOptionalHostPermissions(panel) {
+  const already = await panel.evaluate(async () => {
+    try {
+      const http = await chrome.permissions.contains({ origins: ['http://*/*'] });
+      const https = await chrome.permissions.contains({ origins: ['https://*/*'] });
+      return { http, https, ok: http && https };
+    } catch (error) {
+      return { ok: false, error: String(error?.message || error) };
+    }
+  });
+  if (already.ok) return { ok: true, already: true };
+
+  await panel.evaluate(() => {
+    let btn = document.getElementById('autoqa-grant-hosts');
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'autoqa-grant-hosts';
+      btn.textContent = 'AutoQA grant hosts';
+      btn.style.cssText = 'position:fixed;left:0;top:0;z-index:99999;opacity:0.01;';
+      document.body.appendChild(btn);
+    }
+    btn.onclick = () => {
+      window.__autoqaGrantPromise = chrome.permissions.request({
+        origins: ['http://*/*', 'https://*/*']
+      });
+    };
+  });
+  await panel.click('#autoqa-grant-hosts');
+  const granted = await panel.evaluate(async () => {
+    try {
+      const ok = await window.__autoqaGrantPromise;
+      const http = await chrome.permissions.contains({ origins: ['http://*/*'] });
+      const https = await chrome.permissions.contains({ origins: ['https://*/*'] });
+      return { ok: Boolean(ok) || (http && https), http, https };
+    } catch (error) {
+      return { ok: false, error: String(error?.message || error) };
+    }
+  });
+  return granted;
+}
+
+/**
+ * Launch installed Google Chrome, then load the unpacked extension via CDP.
+ * Branded Chrome 137+ ignores --load-extension; --enable-unsafe-extension-debugging
+ * + Extensions.loadUnpacked is the supported automation path.
+ */
+async function launchChromeWithExtension(userDataDir, extensionAbsPath) {
+  const chrome = ensureChromeReady();
+  if (!chrome.ok) {
+    throw new Error(
+      chrome.lastError ||
+      'Installed Google Chrome is not available for AutoQA. Install Google Chrome or set CHROME_PATH.'
+    );
+  }
+
+  const resolved = resolveSystemChrome();
+  const executablePath = resolved.executablePath || chrome.executablePath;
+  if (!executablePath || !fs.existsSync(executablePath)) {
+    markChromeLaunchFailed('Chrome executable missing');
+    throw new Error(
+      'Installed Google Chrome executable was not found. Install Google Chrome or set CHROME_PATH. Playwright bundled Chromium is not used.'
+    );
+  }
+
+  const port = await getFreePort();
+  const child = spawn(executablePath, [
+    `--remote-debugging-port=${port}`,
+    '--enable-unsafe-extension-debugging',
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--disable-default-apps',
+    `--user-data-dir=${userDataDir}`,
+    'about:blank'
+  ], {
+    stdio: ['ignore', 'ignore', 'pipe'],
+    windowsHide: false
+  });
+
+  let stderr = '';
+  child.stderr?.on('data', (chunk) => { stderr += String(chunk); });
+
+  const cleanupChild = async () => {
+    if (!child.killed) {
+      try { child.kill(); } catch { /* ignore */ }
+    }
+  };
+
+  try {
+    const versionInfo = await waitForDebugger(port);
+    const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+    if (typeof browser.newBrowserCDPSession !== 'function') {
+      throw new Error('Playwright newBrowserCDPSession is required to load extensions into Google Chrome');
+    }
+    const browserSession = await browser.newBrowserCDPSession();
+    const loaded = await browserSession.send('Extensions.loadUnpacked', {
+      path: path.resolve(extensionAbsPath)
+    });
+    const extensionId = loaded?.id;
+    if (!extensionId) {
+      throw new Error(`Extensions.loadUnpacked did not return an id: ${JSON.stringify(loaded)}`);
+    }
+
+    const context = browser.contexts()[0] || await browser.newContext();
+    markChromeLaunchSucceeded({
+      resolutionMethod: 'cdp:Extensions.loadUnpacked',
+      channel: null,
+      executablePath,
+      version: chrome.version || versionInfo?.Browser || null
+    });
+
+    return {
+      browser,
+      context,
+      extensionId,
+      child,
+      port,
+      versionInfo,
+      launch: {
+        method: 'cdp:Extensions.loadUnpacked',
+        executablePath,
+        port,
+        browser: versionInfo?.Browser || 'chrome'
+      },
+      async close() {
+        await browser.close().catch(() => {});
+        await cleanupChild();
+      }
+    };
+  } catch (error) {
+    await cleanupChild();
+    markChromeLaunchFailed(error?.message || error);
+    throw new Error(
+      `AutoQA could not launch installed Google Chrome with unpacked extension (${String(error?.message || error)}). ${stderr ? `stderr: ${stderr.slice(0, 300)}` : ''}`.trim()
+    );
+  }
+}
+
+/**
+ * Dogfood one URL against the unpacked extension in installed Google Chrome.
  */
 export async function dogfoodUrl({
   url,
   outDir,
   sampleFrank = true,
   sampleHighlight = true,
-  timeoutMs = 120000
+  timeoutMs = 120000,
+  requireCorpusAuthorization = true
 } = {}) {
   fs.mkdirSync(outDir, { recursive: true });
   if (!fs.existsSync(path.join(EXTENSION_DIR, 'manifest.json'))) {
     throw new Error(`Missing extension at ${EXTENSION_DIR}; run npm run build:extension`);
   }
 
+  if (requireCorpusAuthorization && !isAuthorizedDogfoodUrl(url)) {
+    throw new Error(
+      `URL is outside authorized AutoQA corpus (golden/rotating/adversarial/discoveries) and local fixture paths: ${url}`
+    );
+  }
+
+  const chrome = ensureChromeReady();
+  if (!chrome.ok) {
+    throw new Error(
+      chrome.lastError ||
+      'Installed Google Chrome is not available for AutoQA. Install Google Chrome or set CHROME_PATH.'
+    );
+  }
+
   const manifest = JSON.parse(fs.readFileSync(path.join(EXTENSION_DIR, 'manifest.json'), 'utf8'));
   const predictedId = computeExtensionId(manifest.key);
-  const userDataDir = path.join(REPO_ROOT, '.autoqa', 'profiles', `dogfood-${process.pid}`);
+  const userDataDir = path.join(REPO_ROOT, '.autoqa', 'profiles', `dogfood-${process.pid}-${Date.now()}`);
   fs.mkdirSync(userDataDir, { recursive: true });
 
-  const chromeCandidates = [
-    process.env.CHROME_PATH,
-    'C:/Program Files/Google/Chrome/Application/chrome.exe',
-    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-    process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}/Google/Chrome/Application/chrome.exe` : ''
-  ].filter(Boolean);
-  const executablePath = process.env.WEBQA_AUTOQA_SYSTEM_CHROME === '1'
-    ? chromeCandidates.find(p => fs.existsSync(p))
-    : undefined;
-
-  const extensionPath = EXTENSION_DIR.replace(/\\/g, '/');
-  const context = await chromium.launchPersistentContext(userDataDir, {
-    headless: false,
-    executablePath,
-    args: [
-      `--disable-extensions-except=${extensionPath}`,
-      `--load-extension=${extensionPath}`,
-      '--enable-extensions',
-      '--no-first-run',
-      '--disable-default-apps'
-    ],
-    viewport: { width: 1280, height: 900 },
-    ignoreDefaultArgs: ['--disable-extensions', '--enable-automation']
-  });
-
+  const session = await launchChromeWithExtension(userDataDir, EXTENSION_DIR);
+  const { context, launch: launchMeta } = session;
   const started = Date.now();
   const site = safeSiteName(url);
   const siteDir = path.join(outDir, site);
   fs.mkdirSync(siteDir, { recursive: true });
 
   try {
+    const extensionId = session.extensionId || predictedId;
     const boot = await context.newPage();
-    await boot.goto(`chrome-extension://${predictedId}/sidepanel.html`, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+    await boot.goto(`chrome-extension://${extensionId}/sidepanel.html`, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
     await boot.waitForTimeout(1000);
-    const sw = await waitForServiceWorker(context, 45000);
-    const extensionId = String(sw.url()).split('/')[2];
+    await waitForServiceWorker(context, extensionId, 45000);
 
     const panel = context.pages().find(p => p.url().includes('sidepanel.html')) || await context.newPage();
     if (!panel.url().includes('sidepanel.html')) {
       await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`, { waitUntil: 'domcontentloaded', timeout: 20000 });
     }
+
+    const permissionGrant = await grantOptionalHostPermissions(panel);
 
     const page = await context.newPage();
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: Math.min(45000, timeoutMs) });
@@ -204,6 +379,15 @@ export async function dogfoodUrl({
 
     const summary = compactRunSummary({
       url: sanitizeUrl(url) || url,
+      browser: {
+        name: 'chrome',
+        launch: launchMeta,
+        capability: {
+          status: 'ready',
+          resolutionMethod: 'cdp:Extensions.loadUnpacked',
+          version: chrome.version || null
+        }
+      },
       scanCompleted: Boolean(report),
       scanDurationMs: Date.now() - started,
       coverage: report.coverage,
@@ -226,7 +410,7 @@ export async function dogfoodUrl({
     });
     fs.writeFileSync(path.join(siteDir, 'run-summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
     fs.writeFileSync(path.join(siteDir, 'evaluation.json'), `${JSON.stringify({ invariants, frankSample, highlightSample }, null, 2)}\n`);
-    fs.writeFileSync(path.join(siteDir, 'notes.md'), `# ${site}\n\nURL: ${sanitizeUrl(url) || url}\nScan duration: ${summary.scanDurationMs}ms\nInvariants: ${invariants.ok ? 'PASS' : 'FAIL'}\n`);
+    fs.writeFileSync(path.join(siteDir, 'notes.md'), `# ${site}\n\nURL: ${sanitizeUrl(url) || url}\nBrowser: chrome (${launchMeta?.method || 'unknown'})\nPermissions: ${permissionGrant?.ok ? 'ok' : 'limited'}\nScan duration: ${summary.scanDurationMs}ms\nInvariants: ${invariants.ok ? 'PASS' : 'FAIL'}\n`);
 
     return {
       ok: invariants.ok,
@@ -235,10 +419,12 @@ export async function dogfoodUrl({
       frankSample,
       highlightSample,
       siteDir,
-      extensionId
+      extensionId,
+      browser: launchMeta,
+      permissionGrant
     };
   } finally {
-    await context.close().catch(() => {});
+    await session.close().catch(() => {});
   }
 }
 
@@ -250,7 +436,7 @@ async function main() {
     process.exit(2);
   }
   const result = await dogfoodUrl({ url, outDir });
-  console.log(JSON.stringify({ ok: result.ok, summary: result.summary, siteDir: result.siteDir }, null, 2));
+  console.log(JSON.stringify({ ok: result.ok, summary: result.summary, siteDir: result.siteDir, browser: result.browser }, null, 2));
   process.exit(result.ok ? 0 : 1);
 }
 

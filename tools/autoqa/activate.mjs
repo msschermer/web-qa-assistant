@@ -1,11 +1,20 @@
 #!/usr/bin/env node
 /**
  * Activate Web QA autonomous improvement.
- * Persists enabled=true in .autoqa/state.json.
+ * Persists enabled=true in .autoqa/state.json and commits control-plane
+ * bookkeeping so beginCycle can start on a clean tree.
  */
 
 import { patchState, readState } from './lib/state.mjs';
-import { verifyRepoGuards, headSha, runTests, runNpm } from './lib/cycle.mjs';
+import {
+  verifyRepoGuards,
+  headSha,
+  runTests,
+  runNpm,
+  restoreTracked,
+  commitPaths,
+  CONTROL_PLANE_PATHS
+} from './lib/cycle.mjs';
 import { writeStatusMarkdown, appendLog } from './lib/status.mjs';
 import { BASELINE_TAG } from './lib/paths.mjs';
 
@@ -41,6 +50,17 @@ async function main() {
     }
   }
 
+  // Readiness build may stamp dist/; discard those so activation does not block beginCycle.
+  const restored = restoreTracked(['dist/extension']);
+  if (!restored.ok) {
+    console.error(JSON.stringify({
+      ok: false,
+      error: 'failed to restore readiness build stamps',
+      stderr: restored.stderr
+    }, null, 2));
+    process.exit(1);
+  }
+
   const state = patchState({
     enabled: true,
     status: 'active',
@@ -56,6 +76,29 @@ async function main() {
   });
   appendLog(`Activated autonomous improvement. Baseline ${BASELINE_TAG} @ ${String(guards.baselineCommit).slice(0, 12)}. HEAD ${headSha().slice(0, 12)}.`);
 
+  const committed = commitPaths(
+    [...CONTROL_PLANE_PATHS],
+    'chore(autoqa): activate autonomous improvement on main'
+  );
+  if (!committed.ok) {
+    console.error(JSON.stringify({
+      ok: false,
+      error: 'failed to commit activation control plane',
+      detail: committed.error
+    }, null, 2));
+    process.exit(1);
+  }
+
+  const after = verifyRepoGuards();
+  if (after.dirty) {
+    console.error(JSON.stringify({
+      ok: false,
+      error: 'activation left a dirty tree; beginCycle would refuse',
+      dirtyText: after.dirtyText
+    }, null, 2));
+    process.exit(1);
+  }
+
   console.log(JSON.stringify({
     ok: true,
     message: 'Web QA autonomous improvement is ACTIVE',
@@ -67,7 +110,8 @@ async function main() {
       head: headSha()
     },
     gates: { check: check.ok, build: build.ok, tests },
-    note: 'Production deployment is NOT modified. Cursor continues cycles only while an agent session is active/resumed.'
+    controlPlaneCommit: committed.skipped ? null : committed.sha,
+    note: 'Production deployment is NOT modified. Control-plane bookkeeping is committed locally; push from the AutoQA session. Cursor continues cycles only while an agent session is active/resumed.'
   }, null, 2));
 }
 

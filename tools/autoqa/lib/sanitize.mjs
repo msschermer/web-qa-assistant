@@ -16,6 +16,7 @@ export function sanitizeText(value, max = 400) {
 
 export function compactRunSummary({
   url,
+  browser,
   scanCompleted,
   scanDurationMs,
   coverage,
@@ -27,6 +28,7 @@ export function compactRunSummary({
 } = {}) {
   return {
     url: sanitizeUrl(url) || String(url || '').slice(0, 200),
+    browser: browser || undefined,
     scanCompleted: Boolean(scanCompleted),
     scanDurationMs: Number(scanDurationMs) || 0,
     coverageAccountingOk: coverage?.accountingOk !== false,

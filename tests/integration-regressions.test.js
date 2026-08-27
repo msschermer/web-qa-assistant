@@ -30,7 +30,9 @@ test('extension uses one assistant gateway rather than direct specialized-servic
   assert.deepEqual(manifest.host_permissions,[
     'https://assistant.msschermer.us/*',
     'http://localhost:3000/*',
-    'http://localhost:8787/*'
+    'http://localhost:8787/*',
+    'http://127.0.0.1:3000/*',
+    'http://127.0.0.1:8787/*'
   ]);
 });
 

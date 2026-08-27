@@ -20,5 +20,6 @@ tools/accept-dogfood/*.json
 .autoqa/runs/**
 !.autoqa/runs/.gitkeep
 .autoqa/profiles/
+.autoqa/browser-capability.json
 tools/autoqa/.chrome-profile*/
 AUTOQA_BOOTSTRAP_PROBE.tmp.md

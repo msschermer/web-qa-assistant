@@ -30,7 +30,21 @@ node tools/autoqa/activate.mjs
 
 Optional full test gate: `node tools/autoqa/activate.mjs --full`
 
-Activation sets `enabled=true`, `status=active`, verifies repo root / `origin` (`msschermer/web-qa-assistant`) / `main` / baseline tag, and refuses a dirty tree.
+Activation sets `enabled=true`, `status=active`, verifies repo root / `origin` (`msschermer/web-qa-assistant`) / `main` / baseline tag, and refuses a dirty tree. After the readiness build it restores `dist/extension` stamps and commits control-plane bookkeeping (`.autoqa/state.json`, `AUTOQA_STATUS.md`, `AUTOQA_LOG.md`) so `beginCycle` can start clean. Push remains a session step.
+
+## Chrome-only AutoQA runtime
+
+Web QA Assistant is **Chrome-only** (Manifest V3). AutoQA dogfood uses:
+
+- Playwright as the automation controller
+- **Installed Google Chrome** (`channel: "chrome"` or a detected Chrome executable)
+- Unpacked `dist/extension`
+
+Do **not** require Playwright's bundled Chromium. Missing bundled Chromium is not a blocker when Google Chrome is installed. On modern branded Chrome (137+), AutoQA spawns installed Chrome with `--enable-unsafe-extension-debugging`, connects over CDP, and loads `dist/extension` via `Extensions.loadUnpacked`. Persist capability in `.autoqa/browser-capability.json` and revalidate only when Chrome is missing or launch/extension load fails.
+
+## Authorized corpus dogfood
+
+URLs already listed in `qa-sites/golden.json`, `rotating.json`, `adversarial.json`, and `discoveries.json` are intentionally authorized for bounded AutoQA dogfood when `enabled=true`. Do **not** ask for per-site approval for those corpus members or local fixture origins. Holdout remains reserved. Still never submit forms, authenticate, purchase, bypass bots, or crawl uncontrollably.
 
 ## Deactivation language (exact)
 
@@ -85,7 +99,10 @@ Do not start cycles, public dogfood, or autonomous commits. Respond to ordinary 
 | Path | Role |
 |------|------|
 | `.autoqa/state.json` | enable/status/cycle |
+| `.autoqa/browser-capability.json` | cached Chrome readiness (local) |
 | `tools/autoqa/` | harness + judges + lifecycle |
+| `tools/autoqa/dogfood.mjs` | Chrome + unpacked extension dogfood |
+| `tools/autoqa/fixture-server.mjs` | local corpus fixture HTTP server |
 | `qa-sites/` | golden/rotating/adversarial/discoveries/holdout |
 | `AUTOQA_STATUS.md` | human status |
 | `AUTOQA_LOG.md` | concise history |

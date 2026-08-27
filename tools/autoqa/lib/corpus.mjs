@@ -2,6 +2,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { QA_SITES_DIR } from './paths.mjs';
 
+/** Corpus tiers intentionally authorized for ordinary AutoQA dogfood (not holdout). */
+export const AUTHORIZED_CORPUS_TIERS = Object.freeze([
+  'golden',
+  'rotating',
+  'adversarial',
+  'discoveries'
+]);
+
 function loadJson(name) {
   const p = path.join(QA_SITES_DIR, name);
   if (!fs.existsSync(p)) return { sites: [] };
@@ -16,6 +24,70 @@ export function loadCorpus() {
     discoveries: loadJson('discoveries.json'),
     holdout: loadJson('holdout.json')
   };
+}
+
+function normalizeUrl(url) {
+  try {
+    const u = new URL(String(url || ''));
+    u.hash = '';
+    return u.href.replace(/\/$/, '') || u.origin;
+  } catch {
+    return String(url || '').replace(/\/$/, '');
+  }
+}
+
+function isLocalFixtureOrigin(url) {
+  try {
+    const u = new URL(String(url || ''));
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+    return u.hostname === '127.0.0.1' || u.hostname === 'localhost';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Corpus membership (golden/rotating/adversarial/discoveries) is intentional
+ * authorization for bounded AutoQA dogfood. Holdout remains reserved.
+ */
+export function findAuthorizedCorpusSite(url, corpus = loadCorpus()) {
+  const want = normalizeUrl(url);
+  for (const tier of AUTHORIZED_CORPUS_TIERS) {
+    for (const site of corpus[tier]?.sites || []) {
+      if (site?.quarantined) continue;
+      if (normalizeUrl(site.url) === want) {
+        return { ...site, tier: site.tier || tier, authorized: true };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * True when the URL is an approved AutoQA corpus member or a local fixture origin
+ * already used by corpus files. Holdout and unknown public origins are false.
+ */
+export function isAuthorizedDogfoodUrl(url, corpus = loadCorpus()) {
+  if (findAuthorizedCorpusSite(url, corpus)) return true;
+  const want = normalizeUrl(url);
+  for (const site of corpus.holdout?.sites || []) {
+    if (normalizeUrl(site.url) === want) return false;
+  }
+  // Local fixture pages matching corpus path conventions are authorized when
+  // AutoQA is exercising the golden/adversarial local suite.
+  if (!isLocalFixtureOrigin(url)) return false;
+  try {
+    const u = new URL(String(url));
+    return (
+      u.pathname.startsWith('/qa-matrix/') ||
+      u.pathname.startsWith('/benchmark-corpus/') ||
+      u.pathname.startsWith('/corpus/') ||
+      u.pathname.startsWith('/interstitial/') ||
+      u.pathname.startsWith('/known-answer/')
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**

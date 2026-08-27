@@ -3,17 +3,18 @@
 Status: ACTIVE
 Enabled: yes
 Baseline: v1.7.5 (`33e378fd18de`)
-Current main: `479e3bbc03f4`
+Current main: _(pending push)_
 Cycle: 1
+Active goal: _
 
 ## Current quality
-_Baseline evaluation recorded under `.autoqa/baseline/`. Scores populate after dogfood cycles._
+Chrome dogfood validated: local fixtures + public corpus smoke (example.com, example.org). Invariants PASS. Release Judge ACCEPT for Chrome/policy correction.
 
 ## Last accepted change
-Commit `e3a1c57c5b68`
+_(pending commit)_ — Chrome-default AutoQA + corpus authorization
 
 ## Current work
-Autonomous mode activated. Continue improvement cycles without routine approvals.
+Harness correction complete. Next: product improvements (link scan speed under real Chrome, warm-cache, Frank correctness).
 
 ## Human action
-None unless a HUMAN ATTENTION REQUIRED update appears.
+None

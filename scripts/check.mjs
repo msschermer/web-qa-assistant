@@ -99,7 +99,13 @@ if (fs.existsSync('apps/extension/connected.js')) {
   bad++;
   console.error('legacy direct connector bundle still exists in apps/extension/connected.js');
 }
-const requiredHosts = ['https://assistant.msschermer.us/*','http://localhost:3000/*','http://localhost:8787/*'];
+const requiredHosts = [
+  'https://assistant.msschermer.us/*',
+  'http://localhost:3000/*',
+  'http://localhost:8787/*',
+  'http://127.0.0.1:3000/*',
+  'http://127.0.0.1:8787/*'
+];
 if (JSON.stringify(manifest.host_permissions) !== JSON.stringify(requiredHosts)) {
   bad++;
   console.error('extension host permissions should be limited to the assistant gateway and localhost development endpoints');
