@@ -1,21 +1,19 @@
 # Web QA Autonomous Improvement
 
-Status: INACTIVE
-Enabled: no
+Status: ACTIVE
+Enabled: yes
 Baseline: v1.7.5 (`33e378fd18de`)
-Current main: `e3a1c57c5b68`
+Current main: `479e3bbc03f4`
 Cycle: 1
 
 ## Current quality
-- Bootstrap lifecycle: REJECT + restore proved
-- Tests at bootstrap: 590/590 passed
-- Baseline tag: v1.7.5
+_Baseline evaluation recorded under `.autoqa/baseline/`. Scores populate after dogfood cycles._
 
 ## Last accepted change
-None from AutoQA yet (bootstrap REJECT only).
+Commit `e3a1c57c5b68`
 
 ## Current work
-Bootstrap complete. Autonomous mode OFF.
+Autonomous mode activated. Continue improvement cycles without routine approvals.
 
 ## Human action
-Say “Activate Web QA autonomous improvement.” when ready.
+None unless a HUMAN ATTENTION REQUIRED update appears.
