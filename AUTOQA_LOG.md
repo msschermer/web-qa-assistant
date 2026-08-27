@@ -30,3 +30,11 @@ Cycle 2 begun @ dd6288dc7923: link scan speed under real Chrome.
 ## 2026-08-27T16:57:49.155Z
 
 Cycle 2 NO_CHANGE_JUSTIFIED. Max primaryLinkMs 633ms on ~187-link page; dogfood wall dominated by harness/artifacts not link subsystem. Warm-cache B/C: 66/75 hits. Persistent `.autoqa/chrome-profile/` + no auto permissions.request.
+
+## 2026-08-27T22:32:00.000Z
+
+Infra: persist optional hosts across Chrome restart. Chrome 151+ deletes CDP `loadUnpacked` installs (`INSTALLED_VIA_CDP`). Durable unpacked profile + skip reload when already durable.
+
+## 2026-08-27T22:44:00.000Z
+
+Cycle 3 NO_CHANGE_JUSTIFIED. 7/7 Chrome dogfood (3 golden + 4 rotating including MDN and W3/TR) on `profile-durable-unpacked`, optional hosts persisted, natural shutdown. Invariants and Frank Critic clean. W3/TR 500/3021 probe budget; MDN highlight stale after SPA churn.
