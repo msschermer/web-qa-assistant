@@ -42,14 +42,35 @@ export function writePermissionState(partial = {}) {
     browser: 'chrome',
     optionalHttp: false,
     optionalHttps: false,
+    persistenceVerified: false,
+    extensionId: null,
+    profileDir: AUTOQA_CHROME_PROFILE_DIR,
     bootstrappedAt: null,
     lastVerifiedAt: null,
     lastError: null,
+    lastShutdown: null,
     ...readPermissionState(),
     ...partial
   };
   fs.writeFileSync(AUTOQA_PERMISSION_STATE_PATH, `${JSON.stringify(next, null, 2)}\n`);
   return next;
+}
+
+/** Chrome permissions.contains is authoritative; JSON is only a cache. */
+export function chromePermissionsWin(chromeSnapshot, cached = readPermissionState()) {
+  const http = Boolean(chromeSnapshot?.http);
+  const https = Boolean(chromeSnapshot?.https);
+  const ok = http && https;
+  if (!ok && cached && (cached.optionalHttp || cached.optionalHttps || cached.persistenceVerified)) {
+    writePermissionState({
+      optionalHttp: http,
+      optionalHttps: https,
+      persistenceVerified: false,
+      lastVerifiedAt: new Date().toISOString(),
+      lastError: 'chrome.permissions.contains false; state JSON overruled'
+    });
+  }
+  return { ok, http, https, chromeWins: true };
 }
 
 export function urlNeedsOptionalHostPermission(url) {

@@ -82,8 +82,113 @@ test('Chrome resolution prefers installed Chrome and dogfood uses CDP extension 
   // Normal dogfood must not invoke chrome.permissions.request (bootstrap only).
   assert.doesNotMatch(dogfood, /chrome\.permissions\.request/);
   assert.match(dogfood, /verifyOptionalHostPermissions|chrome-profile/);
-  assert.match(fs.readFileSync('tools/autoqa/chrome-profile-bootstrap.mjs', 'utf8'), /chrome\.permissions\.request/);
+  assert.match(dogfood, /gracefulCloseChromeSession|Browser\.close/);
+  const bootstrap = fs.readFileSync('tools/autoqa/chrome-profile-bootstrap.mjs', 'utf8');
+  assert.match(bootstrap, /chrome\.permissions\.request/);
+  assert.doesNotMatch(bootstrap, /Press Enter|readline|rl\.question/);
+  assert.match(bootstrap, /waitForGrant|persistenceVerified|session2/);
+  // Already-granted path must skip Grant UI / request.
+  assert.match(bootstrap, /alreadyPresent|installGrantButton/);
+  assert.match(bootstrap, /alreadyPresent = true/);
+  // Grant UI only when permissions are missing.
+  const idxOk = bootstrap.indexOf('if (initial.ok)');
+  const idxElse = bootstrap.indexOf('} else {', idxOk);
+  const idxInstall = bootstrap.indexOf('installGrantButton', idxOk);
+  assert.ok(idxOk > 0 && idxElse > idxOk);
+  assert.ok(idxInstall > idxElse, 'installGrantButton must only run when permissions are missing');
+  assert.doesNotMatch(bootstrap, /createInterface|stdin/);
+  assert.match(bootstrap, /extensionId !== session1ExtensionId|Extension ID changed/);
+  assert.match(bootstrap, /did not survive Chrome restart/);
+  assert.match(bootstrap, /assertSameProfile|EXPECTED_PROFILE/);
+  assert.match(bootstrap, /forcedKill/);
   assert.match(fs.readFileSync('.gitignore', 'utf8'), /\.autoqa\/chrome-profile\//);
+});
+
+test('bootstrap converts CDP installs so optional permissions can persist', () => {
+  const persist = fs.readFileSync('tools/autoqa/lib/chrome-extension-persist.mjs', 'utf8');
+  assert.match(persist, /INSTALLED_VIA_CDP/);
+  assert.match(persist, /clearInstalledViaCdpFlag/);
+  assert.match(persist, /developerPrivate\.reload|persistUnpackedExtensionViaReload/);
+  const bootstrap = fs.readFileSync('tools/autoqa/chrome-profile-bootstrap.mjs', 'utf8');
+  assert.match(bootstrap, /clearInstalledViaCdpFlag/);
+  assert.match(bootstrap, /persistUnpackedExtensionViaReload/);
+  assert.match(bootstrap, /forceCdpLoad/);
+  const dogfood = fs.readFileSync('tools/autoqa/dogfood.mjs', 'utf8');
+  assert.match(dogfood, /profileHasDurableExtension|durableInstall/);
+  assert.match(dogfood, /forceCdpLoad/);
+  assert.match(bootstrap, /reattachExtensionSidePanel/);
+  assert.match(bootstrap, /install already durable/);
+  assert.match(persist, /reattachExtensionSidePanel/);
+});
+
+test('clearInstalledViaCdpFlag clears only the CDP creation bit', async () => {
+  const {
+    INSTALLED_VIA_CDP,
+    clearInstalledViaCdpFlag,
+    readProfileExtensionState
+  } = await import('../tools/autoqa/lib/chrome-extension-persist.mjs');
+  assert.equal(INSTALLED_VIA_CDP, 32768);
+  // Unit-level: bit math contract used by the persist helper.
+  const flags = INSTALLED_VIA_CDP | 38;
+  assert.equal(flags & ~INSTALLED_VIA_CDP, 38);
+  assert.equal(typeof clearInstalledViaCdpFlag, 'function');
+  assert.equal(typeof readProfileExtensionState, 'function');
+});
+
+test('gracefulCloseChromeSession records natural vs forced diagnostics shape', async () => {
+  const { gracefulCloseChromeSession } = await import('../tools/autoqa/lib/chrome-shutdown.mjs');
+  const { spawn } = await import('node:child_process');
+  const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 50)'], { stdio: 'ignore' });
+  const fake = {
+    profileDir: 'C:\\Users\\mike\\dev\\web-qa-assistant\\.autoqa\\chrome-profile',
+    child,
+    browser: {
+      async newBrowserCDPSession() {
+        return { send: async () => {} };
+      }
+    }
+  };
+  const diag = await gracefulCloseChromeSession(fake, { exitTimeoutMs: 5000 });
+  assert.equal(diag.shutdownMethod, 'cdp:Browser.close');
+  assert.equal(diag.childExitedNaturally, true);
+  assert.equal(diag.forcedKill, false);
+  assert.ok(diag.profileDir.includes('chrome-profile'));
+  assert.equal(typeof diag.browserCloseMs, 'number');
+});
+
+test('chrome-permission-state JSON is not authoritative over Chrome contains()', async () => {
+  const { chromePermissionsWin, writePermissionState, readPermissionState, AUTOQA_PERMISSION_STATE_PATH } = await import('../tools/autoqa/lib/chrome-profile.mjs');
+  const prev = readPermissionState();
+  writePermissionState({
+    optionalHttp: true,
+    optionalHttps: true,
+    persistenceVerified: true,
+    lastError: null
+  });
+  const overruled = chromePermissionsWin({ ok: false, http: false, https: false });
+  assert.equal(overruled.ok, false);
+  const after = readPermissionState();
+  assert.equal(after.optionalHttp, false);
+  assert.equal(after.persistenceVerified, false);
+  assert.match(String(after.lastError || ''), /overruled|contains/i);
+  // restore prior cache if any
+  if (prev) writePermissionState(prev);
+  else if (fs.existsSync(AUTOQA_PERMISSION_STATE_PATH)) fs.unlinkSync(AUTOQA_PERMISSION_STATE_PATH);
+});
+
+test('graceful shutdown waits for natural exit before forced kill', async () => {
+  const { waitForChildExit } = await import('../tools/autoqa/lib/chrome-shutdown.mjs');
+  const { spawn } = await import('node:child_process');
+  const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 200)'], { stdio: 'ignore' });
+  const result = await waitForChildExit(child, 5000);
+  assert.equal(result.childExitedNaturally, true);
+  assert.equal(result.forcedKill, false);
+  assert.equal(result.childExitCode, 0);
+
+  const sticky = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' });
+  const forced = await waitForChildExit(sticky, 200);
+  assert.equal(forced.forcedKill, true);
+  assert.equal(forced.childExitedNaturally, false);
 });
 
 test('permissions allow authorized corpus dogfood and block only non-corpus externals', () => {

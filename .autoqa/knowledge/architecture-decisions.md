@@ -30,7 +30,7 @@ Titles should explain the actual problem, not merely repeat scanner rule names.
 Candidates mutate the working tree against last accepted `main`. REJECT restores `preCycleSha`. No forks or permanent experiment branches.
 
 ## AD-010 — Chrome-only AutoQA dogfood
-AutoQA launches installed Google Chrome (detected executable; Playwright is the controller only) with unpacked `dist/extension`. Branded Chrome 137+ loads the extension via CDP `Extensions.loadUnpacked` + `--enable-unsafe-extension-debugging`. Bundled Chromium is neither required nor preferred.
+AutoQA launches installed Google Chrome (detected executable; Playwright is the controller only) with unpacked `dist/extension` in `.autoqa/chrome-profile/`. First install may use CDP `Extensions.loadUnpacked` (`INSTALLED_VIA_CDP`); Chrome 151+ deletes those installs on the next startup. Bootstrap converts to a durable unpacked install and later dogfood reuses it without `permissions.request`. Bundled Chromium is neither required nor preferred.
 
 ## AD-011 — Corpus membership authorizes dogfood
 URLs listed in golden/rotating/adversarial/discoveries are intentionally authorized for bounded AutoQA dogfood when enabled. Do not pause for per-site approval on those members.

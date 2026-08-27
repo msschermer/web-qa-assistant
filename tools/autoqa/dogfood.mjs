@@ -1,6 +1,5 @@
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
@@ -24,21 +23,18 @@ import {
   writePermissionState,
   AUTOQA_CHROME_PROFILE_DIR
 } from './lib/chrome-profile.mjs';
+import { gracefulCloseChromeSession } from './lib/chrome-shutdown.mjs';
+import {
+  readExpectedExtensionId,
+  profileHasDurableExtension,
+  clearInstalledViaCdpFlag,
+  persistUnpackedExtensionViaReload,
+  ensureDeveloperMode
+} from './lib/chrome-extension-persist.mjs';
 import { buildBugReport } from '../../packages/support/bug-report.js';
 
 function now() {
   return Date.now();
-}
-
-function computeExtensionId(publicKeyBase64) {
-  const der = Buffer.from(publicKeyBase64, 'base64');
-  const hash = crypto.createHash('sha256').update(der).digest();
-  let id = '';
-  for (let i = 0; i < 16; i++) {
-    id += String.fromCharCode(97 + (hash[i] >> 4));
-    id += String.fromCharCode(97 + (hash[i] & 0xf));
-  }
-  return id;
 }
 
 function getFreePort() {
@@ -163,8 +159,11 @@ function extractLinkMetrics(report) {
 
 /**
  * Launch installed Google Chrome and load unpacked extension via CDP.
+ * @param {string} userDataDir
+ * @param {string} extensionAbsPath
+ * @param {{ forceCdpLoad?: boolean }} [opts]
  */
-async function launchChromeWithExtension(userDataDir, extensionAbsPath) {
+async function launchChromeWithExtension(userDataDir, extensionAbsPath, opts = {}) {
   const chrome = ensureChromeReady();
   if (!chrome.ok) {
     throw new Error(
@@ -185,13 +184,14 @@ async function launchChromeWithExtension(userDataDir, extensionAbsPath) {
   const wall0 = now();
   const port = await getFreePort();
   const spawnAt = now();
+  const absoluteProfile = path.resolve(userDataDir);
   const child = spawn(executablePath, [
     `--remote-debugging-port=${port}`,
     '--enable-unsafe-extension-debugging',
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-default-apps',
-    `--user-data-dir=${userDataDir}`,
+    `--user-data-dir=${absoluteProfile}`,
     'about:blank'
   ], {
     stdio: ['ignore', 'ignore', 'pipe'],
@@ -201,8 +201,8 @@ async function launchChromeWithExtension(userDataDir, extensionAbsPath) {
   let stderr = '';
   child.stderr?.on('data', (chunk) => { stderr += String(chunk); });
 
-  const cleanupChild = async () => {
-    if (!child.killed) {
+  const forceKillChild = async () => {
+    if (!child.killed && child.exitCode === null) {
       try { child.kill(); } catch { /* ignore */ }
     }
   };
@@ -216,15 +216,35 @@ async function launchChromeWithExtension(userDataDir, extensionAbsPath) {
     if (typeof browser.newBrowserCDPSession !== 'function') {
       throw new Error('Playwright newBrowserCDPSession is required to load extensions into Google Chrome');
     }
+
+    const extensionAbs = path.resolve(extensionAbsPath);
+    const expectedId = readExpectedExtensionId(extensionAbs);
+    const durable = profileHasDurableExtension(absoluteProfile, expectedId, extensionAbs);
+    const forceCdpLoad = Boolean(opts.forceCdpLoad);
+
     const extAt = now();
-    const browserSession = await browser.newBrowserCDPSession();
-    const loaded = await browserSession.send('Extensions.loadUnpacked', {
-      path: path.resolve(extensionAbsPath)
-    });
-    const extensionId = loaded?.id;
-    if (!extensionId) {
-      throw new Error(`Extensions.loadUnpacked did not return an id: ${JSON.stringify(loaded)}`);
+    let extensionId = expectedId;
+    let launchMethod = 'profile-durable-unpacked';
+    let loadedViaCdp = false;
+
+    if (!durable || forceCdpLoad) {
+      // CDP loadUnpacked is session-scoped on Chrome 151+ (INSTALLED_VIA_CDP).
+      // Bootstrap converts it to a durable unpacked install after first grant.
+      const browserSession = await browser.newBrowserCDPSession();
+      const loaded = await browserSession.send('Extensions.loadUnpacked', {
+        path: extensionAbs
+      });
+      extensionId = loaded?.id || expectedId;
+      if (!extensionId) {
+        throw new Error(`Extensions.loadUnpacked did not return an id: ${JSON.stringify(loaded)}`);
+      }
+      loadedViaCdp = true;
+      launchMethod = 'cdp:Extensions.loadUnpacked';
+      const bootPage = await (browser.contexts()[0] || await browser.newContext()).newPage();
+      await ensureDeveloperMode(bootPage).catch(() => ({ ok: false }));
+      await bootPage.close().catch(() => {});
     }
+
     const context = browser.contexts()[0] || await browser.newContext();
     const boot = await context.newPage();
     await boot.goto(`chrome-extension://${extensionId}/sidepanel.html`, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
@@ -233,7 +253,7 @@ async function launchChromeWithExtension(userDataDir, extensionAbsPath) {
     const extensionLoadMs = now() - extAt;
 
     markChromeLaunchSucceeded({
-      resolutionMethod: 'cdp:Extensions.loadUnpacked',
+      resolutionMethod: launchMethod,
       channel: null,
       executablePath,
       version: chrome.version || versionInfo?.Browser || null
@@ -246,7 +266,7 @@ async function launchChromeWithExtension(userDataDir, extensionAbsPath) {
     // Never auto-request permissions here. Bootstrap is a separate one-time human step.
     const permissionSnapshot = await verifyOptionalHostPermissions(panel, { required: false });
 
-    return {
+    const session = {
       browser,
       context,
       panel,
@@ -256,13 +276,17 @@ async function launchChromeWithExtension(userDataDir, extensionAbsPath) {
       versionInfo,
       chromeInfo: chrome,
       permissionSnapshot,
-      profileDir: userDataDir,
+      profileDir: absoluteProfile,
+      loadedViaCdp,
+      durableInstall: durable && !forceCdpLoad,
       launch: {
-        method: 'cdp:Extensions.loadUnpacked',
+        method: launchMethod,
         executablePath,
         port,
         browser: versionInfo?.Browser || 'chrome',
-        profileDir: userDataDir
+        profileDir: absoluteProfile,
+        loadedViaCdp,
+        durableInstall: durable && !forceCdpLoad
       },
       launchTimings: {
         chromeLaunchMs,
@@ -270,15 +294,16 @@ async function launchChromeWithExtension(userDataDir, extensionAbsPath) {
         extensionLoadMs,
         sessionOpenMs: now() - wall0
       },
+      lastShutdown: null,
       async close() {
-        const t = now();
-        await browser.close().catch(() => {});
-        await cleanupChild();
-        return now() - t;
+        const diagnostics = await gracefulCloseChromeSession(session, { exitTimeoutMs: 5000 });
+        session.lastShutdown = diagnostics;
+        return diagnostics.totalShutdownMs;
       }
     };
+    return session;
   } catch (error) {
-    await cleanupChild();
+    await forceKillChild();
     markChromeLaunchFailed(error?.message || error);
     throw new Error(
       `AutoQA could not launch installed Google Chrome with unpacked extension (${String(error?.message || error)}). ${stderr ? `stderr: ${stderr.slice(0, 300)}` : ''}`.trim()
@@ -525,17 +550,18 @@ export async function dogfoodUrlInSession(session, {
 /**
  * Open a reusable Chrome+extension dogfood session on the dedicated AutoQA profile.
  */
-export async function openDogfoodSession(_opts = {}) {
+export async function openDogfoodSession(opts = {}) {
   if (!fs.existsSync(path.join(EXTENSION_DIR, 'manifest.json'))) {
     throw new Error(`Missing extension at ${EXTENSION_DIR}; run npm run build:extension`);
   }
   const userDataDir = ensureAutoqaChromeProfile();
-  return launchChromeWithExtension(userDataDir, EXTENSION_DIR);
+  return launchChromeWithExtension(userDataDir, EXTENSION_DIR, opts);
 }
 
 export async function closeDogfoodSession(session) {
-  if (!session) return 0;
-  return session.close();
+  if (!session) return { totalShutdownMs: 0, skipped: true };
+  const ms = await session.close();
+  return { ...(session.lastShutdown || {}), totalShutdownMs: ms };
 }
 
 /**
@@ -545,9 +571,11 @@ export async function dogfoodUrl(opts = {}) {
   const session = await openDogfoodSession();
   try {
     const result = await dogfoodUrlInSession(session, opts);
-    const cleanupMs = await closeDogfoodSession(session);
+    const shutdown = await closeDogfoodSession(session);
+    const cleanupMs = Number(shutdown?.totalShutdownMs) || 0;
     if (result.timings) {
       result.timings.cleanupMs = cleanupMs;
+      result.timings.shutdown = shutdown;
       result.timings.dogfoodWallMs = (result.timings.dogfoodWallMs || 0) + (session.launchTimings?.sessionOpenMs || 0) + cleanupMs;
       result.timings.profileDir = AUTOQA_CHROME_PROFILE_DIR;
       fs.writeFileSync(path.join(result.siteDir, 'timings.json'), `${JSON.stringify(result.timings, null, 2)}\n`);
