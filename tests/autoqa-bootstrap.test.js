@@ -79,6 +79,11 @@ test('Chrome resolution prefers installed Chrome and dogfood uses CDP extension 
   assert.match(dogfood, /Extensions\.loadUnpacked/);
   assert.match(dogfood, /enable-unsafe-extension-debugging/);
   assert.doesNotMatch(dogfood, /playwright-chromium|channel:\s*['\"]chromium['\"]/);
+  // Normal dogfood must not invoke chrome.permissions.request (bootstrap only).
+  assert.doesNotMatch(dogfood, /chrome\.permissions\.request/);
+  assert.match(dogfood, /verifyOptionalHostPermissions|chrome-profile/);
+  assert.match(fs.readFileSync('tools/autoqa/chrome-profile-bootstrap.mjs', 'utf8'), /chrome\.permissions\.request/);
+  assert.match(fs.readFileSync('.gitignore', 'utf8'), /\.autoqa\/chrome-profile\//);
 });
 
 test('permissions allow authorized corpus dogfood and block only non-corpus externals', () => {
@@ -154,6 +159,21 @@ test('Release Judge accepts explainable green candidate', () => {
     candidate: { intent: 'reuse verified link cache', explainable: true }
   });
   assert.equal(judge.decision, JUDGE_DECISIONS.ACCEPT);
+});
+
+test('Release Judge supports NO_CHANGE_JUSTIFIED', () => {
+  const judge = releaseJudge({
+    invariants: { ok: true, hardFailures: [] },
+    tests: { passed: 10, failed: 0, total: 10 },
+    build: { ok: true },
+    check: { ok: true },
+    candidate: {
+      intent: 'link scan already fast enough under representative pages',
+      noChangeJustified: true,
+      explainable: true
+    }
+  });
+  assert.equal(judge.decision, JUDGE_DECISIONS.NO_CHANGE_JUSTIFIED);
 });
 
 test('skill documents activation and deactivation language', () => {

@@ -6,7 +6,9 @@
 export const JUDGE_DECISIONS = Object.freeze({
   ACCEPT: 'ACCEPT',
   REJECT: 'REJECT',
-  NEEDS_MORE_EVIDENCE: 'NEEDS_MORE_EVIDENCE'
+  NEEDS_MORE_EVIDENCE: 'NEEDS_MORE_EVIDENCE',
+  /** Investigation complete; current product behavior is acceptable — no modification. */
+  NO_CHANGE_JUSTIFIED: 'NO_CHANGE_JUSTIFIED'
 });
 
 /**
@@ -68,6 +70,24 @@ export function releaseJudge(input = {}) {
       role: 'release-judge',
       reasons,
       risks,
+      comparedTo: {
+        baseline: input.baseline?.tag || 'v1.7.5',
+        head: input.baseline?.head || null
+      },
+      evaluatedAt: new Date().toISOString()
+    };
+  }
+
+  if (candidate.noChangeJustified === true || candidate.outcome === 'NO_CHANGE_JUSTIFIED') {
+    return {
+      decision: JUDGE_DECISIONS.NO_CHANGE_JUSTIFIED,
+      role: 'release-judge',
+      reasons: [
+        candidate.intent
+          ? `no product change justified: ${candidate.intent}`
+          : 'investigation complete; current product behavior is acceptable'
+      ],
+      risks: [...risks, ...(candidate.knownRisks || [])],
       comparedTo: {
         baseline: input.baseline?.tag || 'v1.7.5',
         head: input.baseline?.head || null

@@ -17,7 +17,18 @@ import {
   markChromeLaunchSucceeded,
   resolveSystemChrome
 } from './lib/chrome.mjs';
+import {
+  ensureAutoqaChromeProfile,
+  urlNeedsOptionalHostPermission,
+  bootstrapRequiredMessage,
+  writePermissionState,
+  AUTOQA_CHROME_PROFILE_DIR
+} from './lib/chrome-profile.mjs';
 import { buildBugReport } from '../../packages/support/bug-report.js';
+
+function now() {
+  return Date.now();
+}
 
 function computeExtensionId(publicKeyBase64) {
   const der = Buffer.from(publicKeyBase64, 'base64');
@@ -86,54 +97,72 @@ async function capture(page, filePath) {
 }
 
 /**
- * Grant optional http(s) host permissions via a real click gesture in the side panel.
- * Required for public corpus origins; local 127.0.0.1/localhost fixtures are host_permissions.
+ * Verify optional host permissions already granted in the persistent AutoQA profile.
+ * Never prompts for host access here — one-time bootstrap owns that UX.
  */
-async function grantOptionalHostPermissions(panel) {
-  const already = await panel.evaluate(async () => {
+async function verifyOptionalHostPermissions(panel, { required = false } = {}) {
+  const snapshot = await panel.evaluate(async () => {
     try {
+      const all = await chrome.permissions.getAll();
       const http = await chrome.permissions.contains({ origins: ['http://*/*'] });
       const https = await chrome.permissions.contains({ origins: ['https://*/*'] });
-      return { http, https, ok: http && https };
+      return {
+        ok: Boolean(http && https),
+        http,
+        https,
+        origins: all?.origins || []
+      };
     } catch (error) {
       return { ok: false, error: String(error?.message || error) };
     }
   });
-  if (already.ok) return { ok: true, already: true };
 
-  await panel.evaluate(() => {
-    let btn = document.getElementById('autoqa-grant-hosts');
-    if (!btn) {
-      btn = document.createElement('button');
-      btn.id = 'autoqa-grant-hosts';
-      btn.textContent = 'AutoQA grant hosts';
-      btn.style.cssText = 'position:fixed;left:0;top:0;z-index:99999;opacity:0.01;';
-      document.body.appendChild(btn);
-    }
-    btn.onclick = () => {
-      window.__autoqaGrantPromise = chrome.permissions.request({
-        origins: ['http://*/*', 'https://*/*']
-      });
-    };
+  writePermissionState({
+    optionalHttp: Boolean(snapshot.http),
+    optionalHttps: Boolean(snapshot.https),
+    lastVerifiedAt: new Date().toISOString(),
+    lastError: snapshot.ok ? null : (snapshot.error || 'optional host permissions not granted')
   });
-  await panel.click('#autoqa-grant-hosts');
-  const granted = await panel.evaluate(async () => {
-    try {
-      const ok = await window.__autoqaGrantPromise;
-      const http = await chrome.permissions.contains({ origins: ['http://*/*'] });
-      const https = await chrome.permissions.contains({ origins: ['https://*/*'] });
-      return { ok: Boolean(ok) || (http && https), http, https };
-    } catch (error) {
-      return { ok: false, error: String(error?.message || error) };
-    }
-  });
-  return granted;
+
+  if (required && !snapshot.ok) {
+    throw new Error(bootstrapRequiredMessage());
+  }
+  return snapshot;
+}
+
+function extractLinkMetrics(report) {
+  const audit = report?.linkAudit || {};
+  const qm = audit.queueMetrics || report?.queueMetrics || {};
+  const incomplete = audit.incompleteChecks || [];
+  const countStatus = (re) => incomplete.filter(c => re.test(String(c.status || c.reason || ''))).length;
+  return {
+    discovered: audit.discovered ?? audit.eligible ?? null,
+    eligible: audit.eligible,
+    attempted: audit.attempted,
+    healthy: audit.verifiedHealthy,
+    broken: audit.confirmedIssues,
+    inconclusive: audit.inconclusive,
+    unprobed: audit.unprobed,
+    scannerAborted: audit.scannerAborted,
+    explicitlySkipped: audit.explicitlySkipped,
+    cacheHits: audit.cacheHits ?? qm.cacheHits ?? null,
+    cacheMisses: audit.cacheMisses ?? qm.cacheMisses ?? null,
+    networkProbeCount: audit.networkProbeCount ?? qm.networkProbeCount ?? audit.attempted ?? null,
+    primaryLinkMs: report?.scanTimings?.primaryLinkMs ?? null,
+    refinementLinkMs: report?.scanTimings?.refinementLinkMs ?? null,
+    peakTargetConcurrency: qm.targetConcurrency?.final ?? qm.peakTargetConcurrency ?? null,
+    externalPeakConcurrency: qm.externalPeakConcurrency ?? null,
+    count429: countStatus(/429/),
+    count5xx: countStatus(/5\d\d|http-5/),
+    timeoutCount: countStatus(/timeout/i),
+    networkFailureCount: countStatus(/network|failed|abort/i),
+    accountingOk: report?.coverage?.accountingOk !== false,
+    queueTerminationReason: audit.queueTerminationReason || qm.terminationReason || null
+  };
 }
 
 /**
- * Launch installed Google Chrome, then load the unpacked extension via CDP.
- * Branded Chrome 137+ ignores --load-extension; --enable-unsafe-extension-debugging
- * + Extensions.loadUnpacked is the supported automation path.
+ * Launch installed Google Chrome and load unpacked extension via CDP.
  */
 async function launchChromeWithExtension(userDataDir, extensionAbsPath) {
   const chrome = ensureChromeReady();
@@ -153,7 +182,9 @@ async function launchChromeWithExtension(userDataDir, extensionAbsPath) {
     );
   }
 
+  const wall0 = now();
   const port = await getFreePort();
+  const spawnAt = now();
   const child = spawn(executablePath, [
     `--remote-debugging-port=${port}`,
     '--enable-unsafe-extension-debugging',
@@ -178,10 +209,14 @@ async function launchChromeWithExtension(userDataDir, extensionAbsPath) {
 
   try {
     const versionInfo = await waitForDebugger(port);
+    const chromeLaunchMs = now() - spawnAt;
+    const cdpAt = now();
     const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+    const cdpConnectMs = now() - cdpAt;
     if (typeof browser.newBrowserCDPSession !== 'function') {
       throw new Error('Playwright newBrowserCDPSession is required to load extensions into Google Chrome');
     }
+    const extAt = now();
     const browserSession = await browser.newBrowserCDPSession();
     const loaded = await browserSession.send('Extensions.loadUnpacked', {
       path: path.resolve(extensionAbsPath)
@@ -190,8 +225,13 @@ async function launchChromeWithExtension(userDataDir, extensionAbsPath) {
     if (!extensionId) {
       throw new Error(`Extensions.loadUnpacked did not return an id: ${JSON.stringify(loaded)}`);
     }
-
     const context = browser.contexts()[0] || await browser.newContext();
+    const boot = await context.newPage();
+    await boot.goto(`chrome-extension://${extensionId}/sidepanel.html`, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+    await boot.waitForTimeout(500);
+    await waitForServiceWorker(context, extensionId, 45000);
+    const extensionLoadMs = now() - extAt;
+
     markChromeLaunchSucceeded({
       resolutionMethod: 'cdp:Extensions.loadUnpacked',
       channel: null,
@@ -199,22 +239,42 @@ async function launchChromeWithExtension(userDataDir, extensionAbsPath) {
       version: chrome.version || versionInfo?.Browser || null
     });
 
+    const panel = context.pages().find(p => p.url().includes('sidepanel.html')) || boot;
+    if (!panel.url().includes('sidepanel.html')) {
+      await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    }
+    // Never auto-request permissions here. Bootstrap is a separate one-time human step.
+    const permissionSnapshot = await verifyOptionalHostPermissions(panel, { required: false });
+
     return {
       browser,
       context,
+      panel,
       extensionId,
       child,
       port,
       versionInfo,
+      chromeInfo: chrome,
+      permissionSnapshot,
+      profileDir: userDataDir,
       launch: {
         method: 'cdp:Extensions.loadUnpacked',
         executablePath,
         port,
-        browser: versionInfo?.Browser || 'chrome'
+        browser: versionInfo?.Browser || 'chrome',
+        profileDir: userDataDir
+      },
+      launchTimings: {
+        chromeLaunchMs,
+        cdpConnectMs,
+        extensionLoadMs,
+        sessionOpenMs: now() - wall0
       },
       async close() {
+        const t = now();
         await browser.close().catch(() => {});
         await cleanupChild();
+        return now() - t;
       }
     };
   } catch (error) {
@@ -227,65 +287,71 @@ async function launchChromeWithExtension(userDataDir, extensionAbsPath) {
 }
 
 /**
- * Dogfood one URL against the unpacked extension in installed Google Chrome.
+ * Scan one URL inside an already-open Chrome+extension session.
  */
-export async function dogfoodUrl({
+export async function dogfoodUrlInSession(session, {
   url,
   outDir,
   sampleFrank = true,
   sampleHighlight = true,
-  timeoutMs = 120000,
-  requireCorpusAuthorization = true
+  timeoutMs = 180000,
+  requireCorpusAuthorization = true,
+  pageSettleMs = 1500
 } = {}) {
+  const dogfoodWallStart = now();
   fs.mkdirSync(outDir, { recursive: true });
-  if (!fs.existsSync(path.join(EXTENSION_DIR, 'manifest.json'))) {
-    throw new Error(`Missing extension at ${EXTENSION_DIR}; run npm run build:extension`);
-  }
-
   if (requireCorpusAuthorization && !isAuthorizedDogfoodUrl(url)) {
     throw new Error(
       `URL is outside authorized AutoQA corpus (golden/rotating/adversarial/discoveries) and local fixture paths: ${url}`
     );
   }
 
-  const chrome = ensureChromeReady();
-  if (!chrome.ok) {
-    throw new Error(
-      chrome.lastError ||
-      'Installed Google Chrome is not available for AutoQA. Install Google Chrome or set CHROME_PATH.'
-    );
+  if (urlNeedsOptionalHostPermission(url)) {
+    const snap = session.permissionSnapshot || await verifyOptionalHostPermissions(session.panel, { required: false });
+    session.permissionSnapshot = snap;
+    if (!snap.ok) {
+      throw new Error(bootstrapRequiredMessage());
+    }
   }
 
+  const { context, panel, extensionId, launch: launchMeta, chromeInfo, launchTimings } = session;
   const manifest = JSON.parse(fs.readFileSync(path.join(EXTENSION_DIR, 'manifest.json'), 'utf8'));
-  const predictedId = computeExtensionId(manifest.key);
-  const userDataDir = path.join(REPO_ROOT, '.autoqa', 'profiles', `dogfood-${process.pid}-${Date.now()}`);
-  fs.mkdirSync(userDataDir, { recursive: true });
-
-  const session = await launchChromeWithExtension(userDataDir, EXTENSION_DIR);
-  const { context, launch: launchMeta } = session;
-  const started = Date.now();
   const site = safeSiteName(url);
   const siteDir = path.join(outDir, site);
   fs.mkdirSync(siteDir, { recursive: true });
 
+  const timings = {
+    chromeLaunchMs: launchTimings?.chromeLaunchMs ?? null,
+    cdpConnectMs: launchTimings?.cdpConnectMs ?? null,
+    extensionLoadMs: launchTimings?.extensionLoadMs ?? null,
+    navigationMs: null,
+    pageSettleMs: null,
+    scanTotalMs: null,
+    discoveryMs: null,
+    axeMs: null,
+    primaryLinkMs: null,
+    refinementLinkMs: null,
+    frameMs: null,
+    interactionMs: null,
+    performanceMs: null,
+    correlationMs: null,
+    frankMs: null,
+    artifactCaptureMs: null,
+    evaluationMs: null,
+    cleanupMs: null,
+    dogfoodWallMs: null,
+    enrichMs: null
+  };
+
+  const page = await context.newPage();
   try {
-    const extensionId = session.extensionId || predictedId;
-    const boot = await context.newPage();
-    await boot.goto(`chrome-extension://${extensionId}/sidepanel.html`, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
-    await boot.waitForTimeout(1000);
-    await waitForServiceWorker(context, extensionId, 45000);
-
-    const panel = context.pages().find(p => p.url().includes('sidepanel.html')) || await context.newPage();
-    if (!panel.url().includes('sidepanel.html')) {
-      await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`, { waitUntil: 'domcontentloaded', timeout: 20000 });
-    }
-
-    const permissionGrant = await grantOptionalHostPermissions(panel);
-
-    const page = await context.newPage();
+    const navAt = now();
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: Math.min(45000, timeoutMs) });
+    timings.navigationMs = now() - navAt;
+    const settleAt = now();
+    await page.waitForTimeout(pageSettleMs);
+    timings.pageSettleMs = now() - settleAt;
     await capture(page, path.join(siteDir, 'page-before.png'));
-    await page.waitForTimeout(1500);
 
     const tabs = await panel.evaluate(async () => {
       const list = await chrome.tabs.query({});
@@ -294,17 +360,30 @@ export async function dogfoodUrl({
     const wantHost = (() => { try { return new URL(url).hostname; } catch { return ''; } })();
     const tab = tabs.find(t => (t.url || '').includes(wantHost)) || tabs.find(t => t.active);
     if (!tab?.id) throw new Error(`No matching tab for ${url}`);
-
     await panel.evaluate(async (tabId) => { await chrome.tabs.update(tabId, { active: true }); }, tab.id);
 
+    const scanAt = now();
     const scan = await panel.evaluate(async (tabId) => chrome.runtime.sendMessage({ type: 'SCAN_TAB', tabId }), tab.id);
     if (!scan?.report) throw new Error(`SCAN_TAB failed: ${JSON.stringify(scan)?.slice(0, 400)}`);
-
+    const enrichAt = now();
     const enriched = await panel.evaluate(async ({ tabId, report }) => {
       return chrome.runtime.sendMessage({ type: 'ENRICH', report, tabId });
     }, { tabId: tab.id, report: scan.report });
+    timings.enrichMs = now() - enrichAt;
+    timings.scanTotalMs = now() - scanAt;
     const report = enriched?.report || scan.report;
 
+    const st = report.scanTimings || {};
+    timings.discoveryMs = st.discoveryMs ?? null;
+    timings.axeMs = st.axeMs ?? null;
+    timings.primaryLinkMs = st.primaryLinkMs ?? null;
+    timings.refinementLinkMs = st.refinementLinkMs ?? null;
+    timings.frameMs = st.frameMs ?? st.iframeMs ?? null;
+    timings.interactionMs = st.interactionMs ?? null;
+    timings.performanceMs = st.performanceMs ?? null;
+    timings.correlationMs = st.correlationMs ?? null;
+
+    const artAt = now();
     await capture(page, path.join(siteDir, 'page-ready.png'));
     await capture(panel, path.join(siteDir, 'sidepanel.png'));
 
@@ -314,6 +393,7 @@ export async function dogfoodUrl({
     const pick = findings.find(f => f.frankVisible !== false && f.targetId) || findings[0];
 
     if (sampleFrank && pick) {
+      const frankAt = now();
       try {
         const frank = await panel.evaluate(async ({ tabId, finding, report }) => {
           return chrome.runtime.sendMessage({ type: 'PREPARE_FRANK', tabId, finding, report });
@@ -337,6 +417,9 @@ export async function dogfoodUrl({
       } catch (error) {
         frankSample = { ok: false, error: String(error?.message || error) };
       }
+      timings.frankMs = now() - frankAt;
+    } else {
+      timings.frankMs = 0;
     }
 
     if (sampleHighlight && pick?.targetId) {
@@ -361,13 +444,14 @@ export async function dogfoodUrl({
         highlightSample = { claimedSuccess: false, error: String(error?.message || error) };
       }
     }
+    timings.artifactCaptureMs = now() - artAt;
 
+    const evalAt = now();
     const invariants = evaluateInvariants(report, {
       frankReview: report.frankReview,
       guidanceSource: report.guidanceSource,
       highlight: highlightSample
     });
-
     const diagnostic = buildBugReport({
       version: manifest.version,
       report,
@@ -376,6 +460,9 @@ export async function dogfoodUrl({
       frank: frankSample?.plan ? { plan: frankSample.plan, finding: pick, reasoning: frankSample.reasoning } : null
     });
     fs.writeFileSync(path.join(siteDir, 'diagnostic.json'), `${JSON.stringify(diagnostic, null, 2)}\n`);
+    const linkMetrics = extractLinkMetrics(report);
+    timings.evaluationMs = now() - evalAt;
+    timings.dogfoodWallMs = now() - dogfoodWallStart;
 
     const summary = compactRunSummary({
       url: sanitizeUrl(url) || url,
@@ -385,19 +472,19 @@ export async function dogfoodUrl({
         capability: {
           status: 'ready',
           resolutionMethod: 'cdp:Extensions.loadUnpacked',
-          version: chrome.version || null
+          version: chromeInfo?.version || null
         }
       },
       scanCompleted: Boolean(report),
-      scanDurationMs: Date.now() - started,
+      scanDurationMs: timings.scanTotalMs,
       coverage: report.coverage,
       links: {
-        eligible: report.linkAudit?.eligible,
-        attempted: report.linkAudit?.attempted,
-        unprobed: report.linkAudit?.unprobed,
-        verifiedHealthy: report.linkAudit?.verifiedHealthy,
-        confirmedIssues: report.linkAudit?.confirmedIssues,
-        inconclusive: report.linkAudit?.inconclusive
+        eligible: linkMetrics.eligible,
+        attempted: linkMetrics.attempted,
+        unprobed: linkMetrics.unprobed,
+        verifiedHealthy: linkMetrics.healthy,
+        confirmedIssues: linkMetrics.broken,
+        inconclusive: linkMetrics.inconclusive
       },
       frank: {
         modelReadiness: report.frankReview?.modelReadiness,
@@ -408,9 +495,14 @@ export async function dogfoodUrl({
       warnings: invariants.warnings,
       evaluation: { invariantsOk: invariants.ok, highlight: highlightSample, frankSampleOk: frankSample?.ok }
     });
+    summary.timings = timings;
+    summary.linkMetrics = linkMetrics;
+    summary.scanTimings = report.scanTimings || null;
+
     fs.writeFileSync(path.join(siteDir, 'run-summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
-    fs.writeFileSync(path.join(siteDir, 'evaluation.json'), `${JSON.stringify({ invariants, frankSample, highlightSample }, null, 2)}\n`);
-    fs.writeFileSync(path.join(siteDir, 'notes.md'), `# ${site}\n\nURL: ${sanitizeUrl(url) || url}\nBrowser: chrome (${launchMeta?.method || 'unknown'})\nPermissions: ${permissionGrant?.ok ? 'ok' : 'limited'}\nScan duration: ${summary.scanDurationMs}ms\nInvariants: ${invariants.ok ? 'PASS' : 'FAIL'}\n`);
+    fs.writeFileSync(path.join(siteDir, 'evaluation.json'), `${JSON.stringify({ invariants, frankSample, highlightSample, timings, linkMetrics }, null, 2)}\n`);
+    fs.writeFileSync(path.join(siteDir, 'timings.json'), `${JSON.stringify(timings, null, 2)}\n`);
+    fs.writeFileSync(path.join(siteDir, 'notes.md'), `# ${site}\n\nURL: ${sanitizeUrl(url) || url}\nBrowser: chrome\nScan total: ${timings.scanTotalMs}ms\nPrimary links: ${timings.primaryLinkMs}ms\nRefinement: ${timings.refinementLinkMs}ms\nWall (page): ${timings.dogfoodWallMs}ms\nInvariants: ${invariants.ok ? 'PASS' : 'FAIL'}\n`);
 
     return {
       ok: invariants.ok,
@@ -421,10 +513,53 @@ export async function dogfoodUrl({
       siteDir,
       extensionId,
       browser: launchMeta,
-      permissionGrant
+      timings,
+      linkMetrics,
+      report
     };
   } finally {
-    await session.close().catch(() => {});
+    await page.close().catch(() => {});
+  }
+}
+
+/**
+ * Open a reusable Chrome+extension dogfood session on the dedicated AutoQA profile.
+ */
+export async function openDogfoodSession(_opts = {}) {
+  if (!fs.existsSync(path.join(EXTENSION_DIR, 'manifest.json'))) {
+    throw new Error(`Missing extension at ${EXTENSION_DIR}; run npm run build:extension`);
+  }
+  const userDataDir = ensureAutoqaChromeProfile();
+  return launchChromeWithExtension(userDataDir, EXTENSION_DIR);
+}
+
+export async function closeDogfoodSession(session) {
+  if (!session) return 0;
+  return session.close();
+}
+
+/**
+ * Dogfood one URL against the unpacked extension in installed Google Chrome.
+ */
+export async function dogfoodUrl(opts = {}) {
+  const session = await openDogfoodSession();
+  try {
+    const result = await dogfoodUrlInSession(session, opts);
+    const cleanupMs = await closeDogfoodSession(session);
+    if (result.timings) {
+      result.timings.cleanupMs = cleanupMs;
+      result.timings.dogfoodWallMs = (result.timings.dogfoodWallMs || 0) + (session.launchTimings?.sessionOpenMs || 0) + cleanupMs;
+      result.timings.profileDir = AUTOQA_CHROME_PROFILE_DIR;
+      fs.writeFileSync(path.join(result.siteDir, 'timings.json'), `${JSON.stringify(result.timings, null, 2)}\n`);
+      if (result.summary) {
+        result.summary.timings = result.timings;
+        fs.writeFileSync(path.join(result.siteDir, 'run-summary.json'), `${JSON.stringify(result.summary, null, 2)}\n`);
+      }
+    }
+    return result;
+  } catch (error) {
+    await closeDogfoodSession(session);
+    throw error;
   }
 }
 
@@ -436,7 +571,14 @@ async function main() {
     process.exit(2);
   }
   const result = await dogfoodUrl({ url, outDir });
-  console.log(JSON.stringify({ ok: result.ok, summary: result.summary, siteDir: result.siteDir, browser: result.browser }, null, 2));
+  console.log(JSON.stringify({
+    ok: result.ok,
+    summary: result.summary,
+    timings: result.timings,
+    linkMetrics: result.linkMetrics,
+    siteDir: result.siteDir,
+    browser: result.browser
+  }, null, 2));
   process.exit(result.ok ? 0 : 1);
 }
 

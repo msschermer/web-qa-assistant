@@ -46,6 +46,23 @@ export function createFixtureServer() {
       res.end(JSON.stringify({ ok: true, service: 'autoqa-fixture', mounts: MOUNTS.map(m => m.prefix) }));
       return;
     }
+    // Probe targets used by synthetic link-inventory fixtures (same as scripts/benchmark-corpus.mjs).
+    if (url.pathname.startsWith('/ok/')) {
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+      res.end('ok');
+      return;
+    }
+    if (url.pathname.startsWith('/missing/')) {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+      res.end('missing');
+      return;
+    }
+    const statusMatch = url.pathname.match(/^\/status\/(\d{3})$/);
+    if (statusMatch) {
+      res.writeHead(Number(statusMatch[1]), { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+      res.end('status');
+      return;
+    }
     for (const mount of MOUNTS) {
       if (!url.pathname.startsWith(mount.prefix)) continue;
       const rel = decodeURIComponent(url.pathname.slice(mount.prefix.length));
@@ -66,7 +83,27 @@ export function createFixtureServer() {
 }
 
 export function startFixtureServer({ port = PORT, host = HOST } = {}) {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
+    // Reuse an already-running AutoQA fixture server on the preferred port.
+    try {
+      const existing = await fetch(`http://${host}:${port}/health`, { signal: AbortSignal.timeout(800) });
+      if (existing.ok) {
+        const body = await existing.json().catch(() => ({}));
+        if (body?.service === 'autoqa-fixture') {
+          resolve({
+            server: { close: () => {} },
+            origin: `http://${host}:${port}`,
+            port,
+            host,
+            reused: true
+          });
+          return;
+        }
+      }
+    } catch {
+      /* nothing listening — continue to bind */
+    }
+
     const server = createFixtureServer();
     server.once('error', reject);
     server.listen(port, host, () => {
@@ -74,7 +111,8 @@ export function startFixtureServer({ port = PORT, host = HOST } = {}) {
         server,
         origin: `http://${host}:${port}`,
         port,
-        host
+        host,
+        reused: false
       });
     });
   });

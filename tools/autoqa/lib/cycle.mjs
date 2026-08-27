@@ -161,7 +161,7 @@ export function rejectAndRestore(preCycleSha = readState().preCycleSha) {
 }
 
 export function acceptCommit({ message, cycle, metadata = {} }) {
-  const add = git(['add', '-A', '--', '.', ':(exclude).autoqa/runs', ':(exclude).autoqa/profiles', ':(exclude)qa-runs']);
+  const add = git(['add', '-A', '--', '.', ':(exclude).autoqa/runs', ':(exclude).autoqa/profiles', ':(exclude).autoqa/chrome-profile', ':(exclude)qa-runs']);
   if (add.status !== 0) return { ok: false, error: add.stderr || 'git add failed' };
   const staged = git(['diff', '--cached', '--name-only']).stdout;
   if (!staged) return { ok: false, error: 'nothing staged to commit' };

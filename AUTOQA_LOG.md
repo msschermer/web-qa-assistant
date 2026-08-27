@@ -22,3 +22,11 @@ Cycle 1 begun @ d0441385c10a: activation handoff + corpus dogfood.
 ## 2026-08-27T16:26:00.000Z
 
 Cycle 1 ACCEPT: Chrome-default AutoQA (CDP Extensions.loadUnpacked), corpus dogfood authorization, activate→beginCycle handoff, 127.0.0.1 host permissions. Local + public Chrome smoke PASS. Release Judge ACCEPT.
+
+## 2026-08-27T16:30:04.724Z
+
+Cycle 2 begun @ dd6288dc7923: link scan speed under real Chrome.
+
+## 2026-08-27T16:57:49.155Z
+
+Cycle 2 NO_CHANGE_JUSTIFIED. Max primaryLinkMs 633ms on ~187-link page; dogfood wall dominated by harness/artifacts not link subsystem. Warm-cache B/C: 66/75 hits. Persistent `.autoqa/chrome-profile/` + no auto permissions.request.

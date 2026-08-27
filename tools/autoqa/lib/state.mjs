@@ -14,10 +14,17 @@ const DEFAULT_STATE = {
   startedAt: null,
   lastCycleAt: null,
   pauseReason: null,
+  /** When true, ACCEPT stops before commit/push (trust calibration). */
+  productAutoCommit: true,
+  calibration: null,
   repoRootExpected: 'C:/Users/mike/dev/web-qa-assistant',
   remoteExpected: 'msschermer/web-qa-assistant',
   branchExpected: 'main'
 };
+
+export function productCommitsAllowed(state = readState()) {
+  return state.enabled === true && state.productAutoCommit !== false;
+}
 
 export function readState() {
   ensureAutoqaDirs();

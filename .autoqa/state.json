@@ -3,14 +3,29 @@
   "baselineVersion": "1.7.5",
   "baselineTag": "v1.7.5",
   "baselineCommit": "33e378fd18de5f0c4afd855b7205670faff5be0f",
-  "cycle": 1,
+  "cycle": 2,
   "status": "active",
   "activeGoal": null,
   "preCycleSha": null,
   "lastAcceptedSha": "1f180410e2598f706f1a0933652502579dfcd3ea",
   "startedAt": "2026-08-27T14:29:40.001Z",
-  "lastCycleAt": "2026-08-27T16:27:00.000Z",
+  "lastCycleAt": "2026-08-27T16:57:49.155Z",
   "pauseReason": null,
+  "productAutoCommit": false,
+  "calibration": {
+    "phase": "trust-calibration",
+    "productAutoCommit": false,
+    "investigations": {
+      "ACCEPT": 0,
+      "REJECT": 0,
+      "NO_CHANGE_JUSTIFIED": 1,
+      "NEEDS_MORE_EVIDENCE": 0
+    },
+    "seededJudgeReject": null,
+    "seededFrankCritic": null,
+    "chromeDogfoodRuns": 11,
+    "chromeDogfoodFailures": 0
+  },
   "repoRootExpected": "C:/Users/mike/dev/web-qa-assistant",
   "remoteExpected": "msschermer/web-qa-assistant",
   "branchExpected": "main"

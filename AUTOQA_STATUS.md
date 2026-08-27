@@ -1,20 +1,25 @@
 # Web QA Autonomous Improvement
 
-Status: ACTIVE
+Status: ACTIVE — TRUST CALIBRATION
+Product auto-commit: DISABLED
 Enabled: yes
 Baseline: v1.7.5 (`33e378fd18de`)
-Current main: `1f180410e259`
-Cycle: 1
-Active goal: _
+Current main: `dd6288dc7923`
+Cycle: 2
 
-## Current quality
-Chrome dogfood validated: local fixtures + public corpus smoke (example.com, example.org). Invariants PASS. Release Judge ACCEPT for Chrome/policy correction.
+Investigations:
+0 ACCEPT
+0 REJECT
+1 NO_CHANGE
 
-## Last accepted change
-Commit `1f180410e259` — Chrome-default AutoQA + corpus authorization
+Chrome dogfood reliability: persistent profile verified (local 2-session, no prompt)
+Release Judge seeded regression: not yet
+Frank Critic seeded checks: not yet
 
-## Current work
-Harness correction complete. Next: product improvements (link scan speed under real Chrome, warm-cache, Frank correctness).
+Current investigation:
+Cycle 2 complete — NO_CHANGE_JUSTIFIED (link architecture)
 
-## Human action
-None
+Human action:
+Optional one-time public corpus bootstrap:
+`node tools/autoqa/chrome-profile-bootstrap.mjs`
+(Local fixture dogfood does not need this.)
