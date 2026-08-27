@@ -3,21 +3,19 @@
 Status: INACTIVE
 Enabled: no
 Baseline: v1.7.5 (`33e378fd18de`)
-Current main: _(see `git rev-parse --short HEAD`)_
-Cycle: 0
+Current main: `e3a1c57c5b68`
+Cycle: 1
 
 ## Current quality
-
-_Bootstrap in progress. Scores populate after baseline dogfood and cycles._
+- Bootstrap lifecycle: REJECT + restore proved
+- Tests at bootstrap: 590/590 passed
+- Baseline tag: v1.7.5
 
 ## Last accepted change
-
-None yet (bootstrap).
+None from AutoQA yet (bootstrap REJECT only).
 
 ## Current work
-
-Single-repo AutoQA infrastructure. Autonomous mode OFF until explicitly activated.
+Bootstrap complete. Autonomous mode OFF.
 
 ## Human action
-
-After bootstrap report: say **Activate Web QA autonomous improvement.** when ready.
+Say “Activate Web QA autonomous improvement.” when ready.

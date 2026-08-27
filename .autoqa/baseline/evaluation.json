@@ -1,0 +1,40 @@
+{
+  "baselineTag": "v1.7.5",
+  "baselineCommit": "33e378fd18de5f0c4afd855b7205670faff5be0f",
+  "head": "e3a1c57c5b68223e92a3f9c7e3d72de128f71693",
+  "evaluatedAt": "2026-08-27T06:52:17.008Z",
+  "invariantsSmoke": {
+    "ok": true,
+    "hardFailures": [],
+    "warnings": [],
+    "checkedAt": "2026-08-27T06:52:04.411Z"
+  },
+  "frankCriticSmoke": {
+    "score": 88,
+    "issueCodes": [
+      "duplicate-remediation-sentence"
+    ]
+  },
+  "releaseJudgeSmoke": {
+    "decision": "REJECT",
+    "role": "release-judge",
+    "reasons": [
+      "bootstrap harmless candidate is intentionally rejected to prove restore"
+    ],
+    "risks": [
+      "none — working tree must restore to preCycleSha"
+    ],
+    "comparedTo": {
+      "baseline": "v1.7.5",
+      "head": "e3a1c57c5b68223e92a3f9c7e3d72de128f71693"
+    },
+    "evaluatedAt": "2026-08-27T06:52:04.413Z"
+  },
+  "tests": {
+    "ok": true,
+    "passed": 590,
+    "failed": 0,
+    "total": 590
+  },
+  "notes": "Synthetic baseline smoke during bootstrap. Real corpus dogfood remains session-gated (browser)."
+}

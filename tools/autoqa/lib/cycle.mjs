@@ -160,7 +160,7 @@ export function runNpm(script, env = {}) {
     cwd: REPO_ROOT,
     encoding: 'utf8',
     env: { ...process.env, ...env },
-    shell: true
+    shell: process.platform === 'win32'
   });
   return { ok: r.status === 0, status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
 }
@@ -169,7 +169,7 @@ export function runTests() {
   const r = spawnSync('npm', ['test'], {
     cwd: REPO_ROOT,
     encoding: 'utf8',
-    shell: true
+    shell: process.platform === 'win32'
   });
   const out = `${r.stdout || ''}\n${r.stderr || ''}`;
   const passMatch = out.match(/ℹ pass (\d+)/);
