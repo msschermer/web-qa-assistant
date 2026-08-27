@@ -1,0 +1,42 @@
+{
+  "name": "rotating",
+  "description": "Diverse public sites sampled between cycles. Bounded, respectful dogfood only. Quarantine when blocked or unsafe. Hosts must stay on the repo allowlist used by scripts/check.mjs.",
+  "sites": [
+    {
+      "id": "example-com",
+      "url": "https://example.com/",
+      "tier": "rotating",
+      "profile": "simple-static"
+    },
+    {
+      "id": "example-org",
+      "url": "https://www.example.org/",
+      "tier": "rotating",
+      "profile": "simple-static"
+    },
+    {
+      "id": "example-net",
+      "url": "https://www.example.net/",
+      "tier": "rotating",
+      "profile": "simple-static"
+    },
+    {
+      "id": "w3-tr",
+      "url": "https://www.w3.org/TR/",
+      "tier": "rotating",
+      "profile": "docs-heavy"
+    },
+    {
+      "id": "mdn-web",
+      "url": "https://developer.mozilla.org/en-US/docs/Web",
+      "tier": "rotating",
+      "profile": "docs-spa-ish"
+    },
+    {
+      "id": "w3-home",
+      "url": "https://www.w3.org/",
+      "tier": "rotating",
+      "profile": "docs-home"
+    }
+  ]
+}

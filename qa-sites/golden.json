@@ -1,0 +1,41 @@
+{
+  "name": "golden",
+  "description": "Stable pages that previously exposed important Web QA bugs or contracts. Prefer local fixtures; optional public controls are marked live.",
+  "sites": [
+    {
+      "id": "fixture-clean",
+      "url": "http://127.0.0.1:8787/qa-matrix/clean.html",
+      "tier": "golden",
+      "profile": "quiet-control",
+      "local": true
+    },
+    {
+      "id": "fixture-problems",
+      "url": "http://127.0.0.1:8787/qa-matrix/problems.html",
+      "tier": "golden",
+      "profile": "multi-discipline-issues",
+      "local": true
+    },
+    {
+      "id": "fixture-many-links",
+      "url": "http://127.0.0.1:8787/benchmark-corpus/catalog-many-links.html",
+      "tier": "golden",
+      "profile": "large-link-inventory",
+      "local": true
+    },
+    {
+      "id": "fixture-frames",
+      "url": "http://127.0.0.1:8787/qa-matrix/frame-interaction.html",
+      "tier": "golden",
+      "profile": "iframe-and-disclosure",
+      "local": true
+    },
+    {
+      "id": "fixture-async",
+      "url": "http://127.0.0.1:8787/qa-matrix/async-interaction.html",
+      "tier": "golden",
+      "profile": "async-disclosure",
+      "local": true
+    }
+  ]
+}

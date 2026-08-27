@@ -1,0 +1,34 @@
+[
+  {
+    "id": "primary-coverage-vs-refinement",
+    "domain": "crawler",
+    "lesson": "Primary link coverage is separate from refinement confidence. Completeness means every eligible URL is attempted; refinement upgrades inconclusive results.",
+    "firstSeenCycle": 0,
+    "examples": 1,
+    "regressionTests": ["tests/scan-acceleration-175.test.js", "tests/link-queue-crawler.test.js"]
+  },
+  {
+    "id": "model-readiness-vs-review",
+    "domain": "frank",
+    "lesson": "Model readiness is not model review completion. Scan guidanceSource stays deterministic until Ask Frank completes a model review.",
+    "firstSeenCycle": 0,
+    "examples": 1,
+    "regressionTests": ["tests/frank-guidance-integrity-175.test.js"]
+  },
+  {
+    "id": "wrong-highlight-worse-than-none",
+    "domain": "targeting",
+    "lesson": "A wrong Highlight is worse than no Highlight. Stale or mismatched targets must not claim success.",
+    "firstSeenCycle": 0,
+    "examples": 1,
+    "regressionTests": ["tests/image-target-highlight.test.js"]
+  },
+  {
+    "id": "link-non-color-border-cue",
+    "domain": "accessibility",
+    "lesson": "Absence of underline does not imply absence of a persistent non-color cue (e.g. border-bottom).",
+    "firstSeenCycle": 0,
+    "examples": 0,
+    "regressionTests": []
+  }
+]

@@ -144,7 +144,7 @@ function scanForClientData(dir) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
-      if (['node_modules', '.git', 'dist', 'qa-runs'].includes(e.name)) continue;
+      if (['node_modules', '.git', 'dist', 'qa-runs', '.autoqa'].includes(e.name)) continue;
       scanForClientData(full);
       continue;
     }

@@ -1,0 +1,41 @@
+{
+  "name": "adversarial",
+  "description": "Challenging patterns. Prefer local fixtures; live entries must remain bounded.",
+  "sites": [
+    {
+      "id": "adv-spa-shell",
+      "url": "http://127.0.0.1:8787/benchmark-corpus/spa-shell.html",
+      "tier": "adversarial",
+      "profile": "spa",
+      "local": true
+    },
+    {
+      "id": "adv-frames-gallery",
+      "url": "http://127.0.0.1:8787/benchmark-corpus/frames-gallery.html",
+      "tier": "adversarial",
+      "profile": "iframe-heavy",
+      "local": true
+    },
+    {
+      "id": "adv-checkout-form",
+      "url": "http://127.0.0.1:8787/benchmark-corpus/checkout-form.html",
+      "tier": "adversarial",
+      "profile": "forms",
+      "local": true
+    },
+    {
+      "id": "adv-news-hub",
+      "url": "http://127.0.0.1:8787/benchmark-corpus/news-hub.html",
+      "tier": "adversarial",
+      "profile": "media-nav-heavy",
+      "local": true
+    },
+    {
+      "id": "adv-cloudflare-fixture",
+      "url": "http://127.0.0.1:8787/interstitial/cloudflare-challenge.html",
+      "tier": "adversarial",
+      "profile": "challenge-interstitial",
+      "local": true
+    }
+  ]
+}

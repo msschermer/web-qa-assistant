@@ -1,0 +1,17 @@
+{
+  "enabled": false,
+  "baselineVersion": "1.7.5",
+  "baselineTag": "v1.7.5",
+  "baselineCommit": "33e378fd18de5f0c4afd855b7205670faff5be0f",
+  "cycle": 0,
+  "status": "inactive",
+  "activeGoal": null,
+  "preCycleSha": null,
+  "lastAcceptedSha": null,
+  "startedAt": null,
+  "lastCycleAt": null,
+  "pauseReason": null,
+  "repoRootExpected": "C:/Users/mike/dev/web-qa-assistant",
+  "remoteExpected": "msschermer/web-qa-assistant",
+  "branchExpected": "main"
+}

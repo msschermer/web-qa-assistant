@@ -1,0 +1,14 @@
+[
+  {
+    "id": "403-429-not-broken",
+    "domain": "links",
+    "lesson": "HTTP 403/429 destinations are inconclusive review, never confirmed broken.",
+    "regressionTests": ["tests/link-verification.test.js"]
+  },
+  {
+    "id": "noindex-utility-path",
+    "domain": "seo",
+    "lesson": "Utility/thank-you paths with noindex on production should stay quiet, not Recommended Order blockers.",
+    "regressionTests": ["tests/environment-policy.test.js"]
+  }
+]

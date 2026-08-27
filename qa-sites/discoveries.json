@@ -1,0 +1,5 @@
+{
+  "name": "discoveries",
+  "description": "Temporary pool of newly encountered pages with novel behavior. Promote to golden/adversarial when stable.",
+  "sites": []
+}

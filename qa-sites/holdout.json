@@ -1,0 +1,26 @@
+{
+  "name": "holdout",
+  "description": "Release Judge holdout. Engineering agent must not tune directly against these specifics.",
+  "sites": [
+    {
+      "id": "holdout-fixture-resource",
+      "url": "http://127.0.0.1:8787/qa-matrix/resource-ownership.html",
+      "tier": "holdout",
+      "profile": "third-party-resources",
+      "local": true
+    },
+    {
+      "id": "holdout-fixture-interaction-clean",
+      "url": "http://127.0.0.1:8787/qa-matrix/interaction-clean.html",
+      "tier": "holdout",
+      "profile": "quiet-interaction",
+      "local": true
+    },
+    {
+      "id": "holdout-mdn-css",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/CSS",
+      "tier": "holdout",
+      "profile": "docs-css"
+    }
+  ]
+}

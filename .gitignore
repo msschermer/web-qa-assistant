@@ -15,3 +15,10 @@ tools/accept-dogfood/.chrome-profile*/
 tools/accept-dogfood/**/extension-accept-results.json
 tools/accept-dogfood/assets/
 tools/accept-dogfood/*.json
+
+# AutoQA run artifacts and local browser profiles (keep harness sources + state)
+.autoqa/runs/**
+!.autoqa/runs/.gitkeep
+.autoqa/profiles/
+tools/autoqa/.chrome-profile*/
+AUTOQA_BOOTSTRAP_PROBE.tmp.md
