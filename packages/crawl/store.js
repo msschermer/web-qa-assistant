@@ -224,7 +224,12 @@ export function openAuditStore(dbPath) {
     getUrlByNormalized: db.prepare('SELECT * FROM audit_urls WHERE audit_id = ? AND normalized_url = ?'),
     countUrlsByStatus: db.prepare("SELECT status, COUNT(*) AS n FROM audit_urls WHERE audit_id = ? GROUP BY status"),
     listUrls: db.prepare('SELECT * FROM audit_urls WHERE audit_id = ? ORDER BY id ASC LIMIT ? OFFSET ?'),
-    recentUrls: db.prepare('SELECT * FROM audit_urls WHERE audit_id = ? AND status != ? ORDER BY id DESC LIMIT ?'),
+    // Ordered by when the row was actually recorded, not by insertion id: a
+    // page enqueued early and fetched a minute later has a low id and never
+    // reached a feed sorted by id, which made "recent activity" a list of
+    // whatever happened to be discovered last.
+    recentUrls: db.prepare("SELECT * FROM audit_urls WHERE audit_id = ? AND status != ? ORDER BY COALESCE(fetched_at,'') DESC, id DESC LIMIT ?"),
+    inFlightUrls: db.prepare("SELECT * FROM audit_urls WHERE audit_id = ? AND status = 'fetching' ORDER BY id ASC LIMIT ?"),
     nextQueuedUrl: db.prepare("SELECT * FROM audit_urls WHERE audit_id = ? AND status = 'queued' ORDER BY id ASC LIMIT 1"),
     markUrlFetching: db.prepare("UPDATE audit_urls SET status = 'fetching' WHERE id = ?"),
     nextUrlsNeedingRender: db.prepare("SELECT * FROM audit_urls WHERE audit_id = ? AND status = 'fetched' AND rendered = 0 AND (claimed_at IS NULL OR claimed_at < ?) ORDER BY id ASC LIMIT ?"),
@@ -413,6 +418,11 @@ export function openAuditStore(dbPath) {
      * feed in the audit UI — not a general-purpose listing. */
     recentUrls(auditId, limit = 6) {
       return stmt.recentUrls.all(auditId, 'queued', limit);
+    },
+    /** The URLs the crawl has claimed but not yet recorded a result for — what
+     * the progress screen shows as "now requesting". */
+    inFlightUrls(auditId, limit = 3) {
+      return stmt.inFlightUrls.all(auditId, limit);
     },
 
     /** The local render pass (run in the user's own browser, never ours —

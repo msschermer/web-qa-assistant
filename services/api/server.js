@@ -425,7 +425,8 @@ function auditProgressPayload(audit) {
     // alike on the progress screen.
     paused: Boolean(runningAudits.get(audit.id)?.paused),
     budgetCeiling: CRAWL_LIMITS.hardMaxPages,
-    recentUrls: auditStore.recentUrls(audit.id, 12)
+    recentUrls: auditStore.recentUrls(audit.id, 12),
+    inFlightUrls: auditStore.inFlightUrls(audit.id, 3).map((r) => r.url)
   };
 }
 

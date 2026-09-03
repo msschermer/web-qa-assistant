@@ -839,6 +839,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         --sa-primary-hover:var(--wqa-brand-strong);
         --sa-primary-soft:var(--wqa-brand-soft);
         --sa-primary-line:var(--wqa-brand-line);
+        --sa-primary-text:var(--wqa-brand-text);
 
         /* Semantic TEXT colours — safe on their own wash and on any ground.
            These are what a badge, a pill or an error message uses. */
@@ -920,12 +921,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .run-target{margin:4px 0 0;font-size:13.5px;color:var(--sa-ink-faint);font-family:var(--sa-mono);overflow-wrap:anywhere}
       .run-actions{margin-left:auto;display:flex;gap:10px;flex-wrap:wrap}
       .run-progress{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);padding:16px 18px;margin:0 0 16px}
-      .run-progress-top{display:flex;align-items:baseline;gap:12px;margin:0 0 10px}
-      .run-progress .phase-label{margin:0;font-size:14px;font-weight:600;color:var(--sa-ink)}
-      .run-pct{margin-left:auto;font-size:22px;font-weight:650;letter-spacing:-.02em;color:var(--sa-primary);font-variant-numeric:tabular-nums}
       .run-progress .progress-bar{margin:0}
-      .run-scale{margin:10px 0 0;font-size:12.5px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
-      .run-scale:empty{display:none}
       /* Six counters read as one instrument row, not as a ragged wrap. */
       .stat-grid.run-stats{grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:0 0 16px}
       .stat-grid.run-stats>div{padding:12px 14px}
@@ -958,6 +954,109 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .card-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--sa-line)}
       .card-head h3{margin:0;font-size:13.5px;font-weight:600;color:var(--sa-ink)}
       .feed-heading{margin:0 0 10px;font-size:13.5px;font-weight:600;color:var(--sa-ink);letter-spacing:0;text-transform:none;padding:0;border:0}
+
+      /* Scan progress -------------------------------------------------------
+         The screen an operator watches, so it answers "what is happening right
+         now" before it answers anything else: phase, rate, and the URL in
+         flight. Nothing here is a summary; summaries are the results view. */
+      .crumb{margin:0 0 6px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--sa-ink-faint)}
+      .crumb span{margin:0 6px;opacity:.55}
+      .run-identity h2{margin:0}
+      .run-identity h2 .run-target{font-family:var(--sa-mono);font-size:.72em;color:var(--sa-ink-soft);font-weight:600}
+      .chip-row{display:flex;flex-wrap:wrap;gap:8px;margin:9px 0 0}
+      .state-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--sa-line);background:var(--sa-subtle);border-radius:999px;padding:4px 11px;font-size:12px;color:var(--sa-ink-soft);white-space:nowrap}
+      .state-chip.live{border-color:var(--sa-primary-line);background:var(--sa-primary-soft);color:var(--sa-primary-text)}
+      .state-chip.provisional{border-color:color-mix(in srgb,var(--sa-warn) 40%,transparent);background:var(--sa-warn-soft);color:var(--sa-warn)}
+      .pulse-dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:0 0 auto;animation:sa-pulse 1.8s ease-in-out infinite}
+      @keyframes sa-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.72)}}
+      .icon-btn{width:38px;padding:0;justify-content:center}
+      .stop-glyph{width:11px;height:11px;border-radius:2px;background:currentColor;display:block}
+      .btn.quiet{background:var(--sa-primary-soft);border-color:var(--sa-primary-line);color:var(--sa-primary-text)}
+      .btn.quiet:hover:not(:disabled){background:color-mix(in srgb,var(--sa-primary) 22%,transparent)}
+
+      /* Phase stepper. A crawl waiting on the browser pass is not a stuck
+         crawl, and the only way to tell from a single bar is to be told. */
+      .stepper{list-style:none;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:0;margin:0 0 16px;padding:0}
+      .step{display:flex;align-items:center;gap:10px;min-width:0}
+      .step-mark{flex:0 0 auto;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:650;border:1px solid var(--sa-line-strong);background:var(--sa-subtle);color:var(--sa-ink-faint)}
+      .step[data-state=done] .step-mark{background:var(--sa-success-soft);border-color:color-mix(in srgb,var(--sa-success) 45%,transparent);color:var(--sa-success)}
+      .step[data-state=active] .step-mark{background:var(--sa-primary);border-color:var(--sa-primary);color:#fff}
+      .step-body{min-width:0}
+      .step-name{display:block;font-size:13px;font-weight:600;color:var(--sa-ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .step[data-state=done] .step-name,.step[data-state=active] .step-name{color:var(--sa-ink)}
+      .step-note{display:block;margin-top:1px;font-size:11.5px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .step-rule{flex:1 1 auto;height:1px;background:var(--sa-line);margin:0 12px;min-width:12px}
+      .step[data-state=done] .step-rule{background:color-mix(in srgb,var(--sa-success) 40%,transparent)}
+
+      .phase-card{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);padding:15px 17px 16px;margin:0 0 14px}
+      .phase-top{display:flex;align-items:center;gap:11px;margin:0 0 11px;flex-wrap:wrap}
+      .phase-badge{font-size:11px;font-weight:650;letter-spacing:.05em;text-transform:uppercase;color:var(--sa-primary-text);background:var(--sa-primary-soft);border:1px solid var(--sa-primary-line);border-radius:999px;padding:3px 10px}
+      .phase-name{margin:0;font-size:15px;font-weight:650;color:var(--sa-ink)}
+      .phase-count{margin-left:auto;font-size:12.5px;color:var(--sa-ink-soft);font-variant-numeric:tabular-nums}
+      /* dt and dd are separate grid items, so each pair is wrapped rather than
+         relying on auto-placement, which laid them out side by side. */
+      .phase-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin:14px 0 0}
+      .metric-pair{min-width:0}
+      .phase-metrics dt{font-size:10.5px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--sa-ink-faint);margin:0 0 4px}
+      .phase-metrics dd{margin:0;font-size:15px;font-weight:600;color:var(--sa-ink);font-variant-numeric:tabular-nums}
+      .now-requesting{display:flex;align-items:baseline;gap:10px;margin:14px 0 0;padding:10px 12px;background:var(--sa-subtle);border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);min-width:0}
+      .nr-label{flex:0 0 auto;font-size:10.5px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--sa-ink-faint)}
+      .nr-url{font-family:var(--sa-mono);font-size:12px;color:var(--sa-ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+
+      .budget-callout{display:flex;align-items:center;gap:13px;margin:0 0 14px;padding:13px 15px;border:1px solid var(--sa-primary-line);background:var(--sa-primary-soft);border-radius:var(--sa-radius)}
+      .callout-mark{flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:var(--sa-primary)}
+      .budget-text{margin:0;flex:1 1 auto;font-size:13px;line-height:1.5;color:var(--sa-ink-soft)}
+      .budget-text b{color:var(--sa-ink);font-variant-numeric:tabular-nums}
+      .budget-callout .btn{flex:0 0 auto}
+      .budget-error{margin:-6px 0 14px;font-size:12.5px;color:var(--sa-critical)}
+
+      .run-columns{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:14px;margin:0 0 14px;align-items:start}
+      .run-side{display:grid;gap:14px;align-content:start}
+      .card-head{display:flex;align-items:center;gap:10px;margin:0 0 3px}
+      .card-head .feed-heading{margin:0}
+      .card-head .state-chip,.card-head .mix-total{margin-left:auto}
+      .mix-total{font-size:12px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
+      .panel-card>.hint{margin:0 0 11px}
+
+      .recent-feed li{align-items:flex-start;gap:11px;padding:10px 0;border-bottom:1px solid var(--sa-line);background:transparent}
+      .recent-feed li:last-child{border-bottom:0}
+      .feed-mark{flex:0 0 auto;width:20px;height:20px;margin-top:1px;border-radius:50%;display:grid;place-items:center;font-size:10px;font-weight:700;background:var(--sa-subtle);color:var(--sa-ink-faint);border:1px solid var(--sa-line)}
+      .feed-mark[data-kind=ok]{background:var(--sa-success-soft);border-color:color-mix(in srgb,var(--sa-success) 40%,transparent);color:var(--sa-success)}
+      .feed-mark[data-kind=found]{background:var(--sa-primary-soft);border-color:var(--sa-primary-line);color:var(--sa-primary-text)}
+      .feed-mark[data-kind=bad]{background:var(--sa-critical-soft);border-color:color-mix(in srgb,var(--sa-critical) 40%,transparent);color:var(--sa-critical)}
+      .feed-body{flex:1 1 auto;min-width:0}
+      .feed-title{display:block;font-size:13px;color:var(--sa-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .feed-title code{font-family:var(--sa-mono);font-size:12px;color:var(--sa-ink)}
+      .feed-note{display:block;margin-top:2px;font-size:11.5px;color:var(--sa-ink-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .feed-age{flex:0 0 auto;font-size:11px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums;padding-top:2px}
+
+      .signal-lead{margin:0 0 12px;padding:12px 13px;border:1px solid var(--sa-primary-line);background:var(--sa-primary-soft);border-radius:var(--sa-radius-sm)}
+      .signal-lead b{display:block;margin-bottom:4px;font-size:13px;color:var(--sa-ink)}
+      .signal-lead span{font-size:12.5px;line-height:1.5;color:var(--sa-ink-soft)}
+      .signal-list{list-style:none;margin:0;padding:0;display:grid;gap:1px}
+      .signal-list li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:start;padding:9px 0;border-top:1px solid var(--sa-line)}
+      .signal-list li:first-child{border-top:0}
+      .signal-name{grid-area:1/1;font-size:13px;color:var(--sa-ink);overflow-wrap:anywhere}
+      .signal-note{grid-area:2/1;font-size:11.5px;color:var(--sa-ink-faint)}
+      .signal-badge{grid-area:1/2;justify-self:end;font-size:11px;font-weight:600;border-radius:999px;padding:2px 9px;white-space:nowrap;border:1px solid transparent}
+      .signal-badge[data-kind=early]{background:var(--sa-warn-soft);color:var(--sa-warn);border-color:color-mix(in srgb,var(--sa-warn) 35%,transparent)}
+      .signal-badge[data-kind=confirmed]{background:var(--sa-success-soft);color:var(--sa-success);border-color:color-mix(in srgb,var(--sa-success) 35%,transparent)}
+
+      .mix-rows{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+      .mix-rows li{display:grid;grid-template-columns:64px minmax(0,1fr) 38px;gap:11px;align-items:center;font-size:12.5px;color:var(--sa-ink-soft)}
+      .mix-track{height:7px;border-radius:999px;background:var(--sa-subtle);overflow:hidden}
+      .mix-fill{height:100%;border-radius:999px}
+      .mix-count{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;color:var(--sa-ink)}
+
+      .run-config{display:flex;align-items:center;gap:12px;margin:0;padding:11px 14px;border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);font-size:12px;color:var(--sa-ink-faint)}
+      .run-config-facts{flex:1 1 auto;overflow-wrap:anywhere}
+      .run-config .link-btn{margin-left:0}
+
+      @media(max-width:1040px){
+        .run-columns{grid-template-columns:minmax(0,1fr)}
+        .stepper{grid-auto-flow:row;gap:10px}
+        .step-rule{display:none}
+      }
 
       /* Stat tiles ---------------------------------------------------------- */
       .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:0 0 18px}
@@ -1258,14 +1357,12 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .advanced textarea{font-family:var(--sa-mono);font-size:12.5px;resize:vertical;min-height:60px}
 
       /* Progress ------------------------------------------------------------ */
-      .phase-label{font-size:13.5px;color:var(--sa-ink-soft);margin:0 0 12px}
       .progress-bar{height:8px;border-radius:999px;background:var(--sa-info-soft);overflow:hidden;margin-bottom:22px}
       .progress-fill{height:100%;background:var(--sa-primary);width:4%;transition:width .3s ease;border-radius:999px}
       .recent-feed{list-style:none;margin:0;padding:0;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);overflow:hidden;box-shadow:var(--sa-shadow-sm)}
       .recent-feed li{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:9px 12px;border-bottom:1px solid var(--sa-line)}
       .recent-feed li:last-child{border-bottom:0}
       .recent-feed .url{flex:1 1 auto;font-family:var(--sa-mono);font-size:12px;color:var(--sa-ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .reassure{margin:14px 0 0;max-width:76ch}
 
       /* Severity + breakdown ------------------------------------------------- */
       .severity-block{margin:0}
@@ -1590,37 +1687,78 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         </div>
         <div class="view view-progress">
           <div class="main run-main">
+          <p class="crumb">Site audit <span aria-hidden="true">/</span> Scan progress</p>
           <div class="page-head run-head">
-            <div>
-              <h2>Auditing the site</h2>
-              <p class="run-target tb-project">&mdash;</p>
+            <div class="run-identity">
+              <h2>Scanning <span class="run-target tb-project">&mdash;</span></h2>
+              <div class="chip-row">
+                <span class="state-chip live"><span class="pulse-dot" aria-hidden="true"></span><span class="run-where">Running on gateway</span></span>
+                <span class="state-chip"><span class="stat-elapsed">Elapsed 0s</span></span>
+                <span class="state-chip">Progress saved continuously</span>
+              </div>
             </div>
             <div class="run-actions">
-              <button type="button" class="btn view-partial-btn">View results so far</button>
-              <button type="button" class="btn danger cancel-btn">Cancel audit</button>
+              <button type="button" class="btn view-partial-btn">Continue in background</button>
+              <button type="button" class="btn quiet pause-btn">Pause</button>
+              <button type="button" class="btn icon-btn danger cancel-btn" title="Stop this audit"><span class="stop-glyph" aria-hidden="true"></span><span class="sr-only">Stop this audit</span></button>
             </div>
           </div>
-          <section class="run-progress">
-            <div class="run-progress-top">
-              <p class="phase-label"></p>
-              <span class="run-pct">0%</span>
+
+          <!-- The four phases of an audit, so a crawl that looks stuck can be
+               read as "waiting on the browser pass" rather than as broken. -->
+          <ol class="stepper" aria-label="Audit phases"></ol>
+
+          <section class="phase-card">
+            <div class="phase-top">
+              <span class="phase-badge">Phase 1 of 4</span>
+              <h3 class="phase-name">Preparing</h3>
+              <span class="phase-count"></span>
             </div>
             <div class="progress-bar"><div class="progress-fill"></div></div>
-            <p class="run-scale tb-scale"></p>
+            <dl class="phase-metrics"></dl>
+            <p class="now-requesting" hidden><span class="nr-label">Now requesting</span><span class="nr-url"></span></p>
           </section>
-          <dl class="stat-grid run-stats">
-            <div><dt>Discovered</dt><dd class="stat-discovered">0</dd></div>
-            <div><dt>Crawled</dt><dd class="stat-crawled">0</dd></div>
-            <div><dt>Links checked</dt><dd class="stat-links">0</dd></div>
-            <div><dt>Findings</dt><dd class="stat-findings">0</dd></div>
-            <div><dt>Errors</dt><dd class="stat-errors">0</dd></div>
-            <div><dt>Elapsed</dt><dd class="stat-elapsed">0s</dd></div>
-          </dl>
-          <section class="run-feed">
-            <h3 class="feed-heading">Recent activity</h3>
-            <ul class="recent-feed"></ul>
+
+          <!-- Raising the budget reopens the frontier without refetching what
+               is already done, so this is an offer rather than a warning. -->
+          <section class="budget-callout" hidden>
+            <span class="callout-mark" aria-hidden="true"></span>
+            <p class="budget-text"></p>
+            <button type="button" class="btn budget-btn"></button>
           </section>
-          <p class="hint reassure">This crawl runs on the assistant gateway, not in this tab. You can close this window or navigate away — it keeps going, and reopening Site Audit on this site reconnects to it.</p>
+          <p class="budget-error" role="status" hidden></p>
+
+          <div class="run-columns">
+            <section class="panel-card run-activity">
+              <div class="card-head">
+                <h3 class="feed-heading">Live activity</h3>
+                <span class="state-chip live"><span class="pulse-dot" aria-hidden="true"></span>Updating live</span>
+              </div>
+              <p class="hint">Requests, discoveries and independently confirmed destinations.</p>
+              <ul class="recent-feed"></ul>
+            </section>
+            <div class="run-side">
+              <section class="panel-card early-signals">
+                <div class="card-head">
+                  <h3 class="feed-heading">Lumen early signals</h3>
+                  <span class="state-chip provisional">Organizing</span>
+                </div>
+                <p class="hint">Interpretation stays provisional until evidence collection ends.</p>
+                <div class="signal-lead" hidden></div>
+                <ul class="signal-list"></ul>
+              </section>
+              <section class="panel-card run-mix">
+                <div class="card-head">
+                  <h3 class="feed-heading">Findings so far</h3>
+                  <span class="mix-total"></span>
+                </div>
+                <p class="hint">Provisional counts from completed requests only.</p>
+                <ul class="mix-rows"></ul>
+              </section>
+            </div>
+          </div>
+
+          <p class="run-config"><span class="run-config-facts"></span><button type="button" class="link-btn run-config-btn">Adjust queued work</button></p>
           </div>
         </div>
         <div class="view view-results">
@@ -1804,6 +1942,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     shadow.querySelector('.close').addEventListener('click', closeSiteAudit);
     shadow.querySelector('.start-btn').addEventListener('click', startSiteAudit);
     shadow.querySelector('.cancel-btn').addEventListener('click', cancelSiteAudit);
+    shadow.querySelector('.pause-btn').addEventListener('click', togglePause);
+    shadow.querySelector('.run-config-btn').addEventListener('click', () => setSiteAuditView('setup'));
     shadow.querySelector('.view-partial-btn').addEventListener('click', () => showSiteAuditResults());
     shadow.querySelector('.new-audit-btn').addEventListener('click', () => {
       stopPolling();
@@ -2001,7 +2141,19 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const r = await chrome.runtime.sendMessage({ type: 'SITE_AUDIT_STATUS', auditId: siteAudit.auditId }).catch(() => null);
     const audit = r?.audit;
     if (!audit || !siteAudit) return;
-    if (siteAudit.view === 'progress') renderSiteAuditProgress(audit);
+    if (siteAudit.view === 'progress') {
+      renderSiteAuditProgress(audit);
+      // Early signals and the severity mix read the finding groups, so the
+      // progress screen keeps them fresh on the same slower beat the results
+      // view uses rather than refetching every two seconds.
+      const now = Date.now();
+      if (now - (siteAudit.lastGroupsRead || 0) >= SITE_AUDIT_RESULTS_REFRESH_MS) {
+        siteAudit.lastGroupsRead = now;
+        chrome.runtime.sendMessage({ type: 'SITE_AUDIT_FINDINGS', auditId: siteAudit.auditId, groupByRule: true })
+          .then((r) => { if (siteAudit && r?.groups) { siteAudit.rawFindingGroups = r.groups; renderEarlySignals(audit); renderRunMix(audit); } })
+          .catch(() => {});
+      }
+    }
     const finished = ['complete', 'cancelled', 'failed'].includes(audit.status);
     if (siteAudit.view === 'results') {
       // ONE cadence for the whole view. Repainting the banner every 2s while
@@ -2086,59 +2238,467 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     for (const el of shadow.querySelectorAll('.tb-scale')) {
       el.textContent = discovered ? `${fetched} of ${pageWord(discovered)} surveyed` : (fetched ? `${pageWord(fetched)} surveyed` : String.fromCharCode(8212));
     }
-    const scale = shadow.querySelector('.run-scale');
-    if (scale) {
-      scale.textContent = discovered
-        ? `${fetched} of ${discovered} discovered ${discovered === 1 ? 'page' : 'pages'} fetched so far`
-        : '';
+  }
+
+  /**
+   * The four phases an audit moves through, in order.
+   *
+   * A single progress bar cannot distinguish "crawling slowly" from "finished
+   * crawling, waiting for a browser pass nobody started". The stepper exists
+   * so a run that looks stalled can be read for which phase it is actually in.
+   */
+  const SITE_AUDIT_PHASES = [
+    { id: 'discover', name: 'Discover', matches: ['queued', 'discovering'] },
+    { id: 'crawl', name: 'Crawl pages', matches: ['crawling', 'paused'] },
+    { id: 'render', name: 'Browser checks', matches: [] },
+    { id: 'analyze', name: 'Lumen analysis', matches: ['analyzing', 'complete', 'cancelled', 'failed'] }
+  ];
+
+  function phaseIndexFor(audit) {
+    const phase = String(audit?.phase || 'queued');
+    const rp = audit?.renderProgress || {};
+    if (phase === 'analyzing' || phase === 'complete') {
+      // The render pass sits between the crawl and the reading, and it is
+      // optional — a finished crawl with nothing rendered is waiting at
+      // phase 3, not done with it.
+      if (Number(rp.total || 0) > 0 && Number(rp.rendered || 0) < Number(rp.total || 0)) return 2;
+      return 3;
     }
+    const index = SITE_AUDIT_PHASES.findIndex((p) => p.matches.includes(phase));
+    return index < 0 ? 0 : index;
+  }
+
+  /** Pages per second, smoothed over the recent poll history rather than the
+   * last interval — a two-second window over a crawl that fetches in bursts
+   * reports numbers that swing between zero and twenty. */
+  function crawlRate(audit) {
+    const fetched = Number(audit?.urlCounts?.fetched || 0);
+    const now = Date.now();
+    const history = siteAudit.rateHistory || (siteAudit.rateHistory = []);
+    const last = history[history.length - 1];
+    if (!last || last.fetched !== fetched) history.push({ at: now, fetched });
+    while (history.length > 12) history.shift();
+    if (history.length < 2) return null;
+    const first = history[0];
+    const seconds = (now - first.at) / 1000;
+    const pages = fetched - first.fetched;
+    if (seconds < 2 || pages <= 0) return null;
+    return pages / seconds;
+  }
+
+  function humanDuration(seconds) {
+    const s = Math.max(0, Math.round(seconds));
+    if (s < 60) return `${s} second${s === 1 ? '' : 's'}`;
+    const m = Math.round(s / 60);
+    if (m < 60) return `${m} minute${m === 1 ? '' : 's'}`;
+    const h = Math.floor(m / 60);
+    return `${h}h ${m % 60}m`;
+  }
+
+  function elapsedLabel(audit) {
+    const started = Date.parse(audit?.startedAt || '') || siteAudit.startedAt || Date.now();
+    const s = Math.max(0, Math.round((Date.now() - started) / 1000));
+    if (s < 60) return `Elapsed ${s}s`;
+    return `Elapsed ${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
+  }
+
+  function renderStepper(audit) {
+    const list = siteAudit.shadow.querySelector('.stepper');
+    if (!list) return;
+    const counts = audit?.urlCounts || {};
+    const discovered = Object.values(counts).reduce((s, n) => s + Number(n || 0), 0);
+    const fetched = Number(counts.fetched || 0);
+    const rp = audit?.renderProgress || {};
+    const budget = Number(audit?.config?.maxPages || 0);
+    const active = phaseIndexFor(audit);
+    const finished = ['complete', 'cancelled', 'failed'].includes(String(audit?.status || ''));
+    const notes = [
+      discovered ? `${discovered} URL${discovered === 1 ? '' : 's'} found` : 'Reading robots.txt and sitemap',
+      budget ? `${fetched} of ${budget}` : `${fetched} fetched`,
+      Number(rp.total || 0) ? `${Number(rp.rendered || 0)} of ${rp.total} checked` : 'Waiting',
+      finished ? 'Complete' : active >= 3 ? 'Reading the evidence' : 'Preparing'
+    ];
+    list.innerHTML = '';
+    SITE_AUDIT_PHASES.forEach((phase, i) => {
+      const li = document.createElement('li');
+      li.className = 'step';
+      li.dataset.state = i < active ? 'done' : i === active ? 'active' : 'waiting';
+      const mark = document.createElement('span');
+      mark.className = 'step-mark';
+      mark.textContent = i < active ? '✓' : String(i + 1);
+      const body = document.createElement('span');
+      body.className = 'step-body';
+      const name = document.createElement('span');
+      name.className = 'step-name';
+      name.textContent = phase.name;
+      const note = document.createElement('span');
+      note.className = 'step-note';
+      note.textContent = notes[i];
+      body.append(name, note);
+      li.append(mark, body);
+      if (i < SITE_AUDIT_PHASES.length - 1) {
+        const rule = document.createElement('span');
+        rule.className = 'step-rule';
+        li.appendChild(rule);
+      }
+      list.appendChild(li);
+    });
+  }
+
+  function renderPhaseCard(audit) {
+    const shadow = siteAudit.shadow;
+    const counts = audit?.urlCounts || {};
+    const discovered = Object.values(counts).reduce((s, n) => s + Number(n || 0), 0);
+    const fetched = Number(counts.fetched || 0);
+    const budget = Number(audit?.config?.maxPages || 0);
+    const active = phaseIndexFor(audit);
+    const paused = Boolean(audit?.paused);
+    const finished = ['complete', 'cancelled', 'failed'].includes(String(audit?.status || ''));
+
+    shadow.querySelector('.phase-badge').textContent = `Phase ${active + 1} of ${SITE_AUDIT_PHASES.length}`;
+    shadow.querySelector('.phase-name').textContent = paused ? 'Paused' : SITE_AUDIT_PHASES[active].name;
+    const pct = budget ? Math.min(100, Math.round((fetched / budget) * 100)) : 0;
+    shadow.querySelector('.phase-count').textContent = budget ? `${fetched} of ${budget} page budget · ${pct}%` : `${fetched} fetched`;
+    shadow.querySelector('.progress-fill').style.width = `${Math.max(2, pct)}%`;
+
+    const rate = paused || finished ? null : crawlRate(audit);
+    const remaining = Math.max(0, budget - fetched);
+    const metrics = [
+      ['Discovered', `${discovered} URL${discovered === 1 ? '' : 's'}`],
+      ['Budget remaining', `${remaining} page${remaining === 1 ? '' : 's'}`],
+      // Rate and finish are measurements of this run, so they say so when they
+      // have not got one yet rather than showing a confident zero.
+      ['Current rate', paused ? 'Paused' : rate ? `${rate.toFixed(1)} pages/sec` : 'Measuring'],
+      ['Estimated finish', paused ? 'Paused' : finished ? 'Finished' : rate && remaining ? `~${humanDuration(remaining / rate)}` : remaining ? 'Measuring' : 'Any moment']
+    ];
+    const dl = shadow.querySelector('.phase-metrics');
+    dl.innerHTML = '';
+    for (const [label, value] of metrics) {
+      const pair = document.createElement('div');
+      pair.className = 'metric-pair';
+      const dt = document.createElement('dt');
+      dt.textContent = label;
+      const dd = document.createElement('dd');
+      dd.textContent = value;
+      pair.append(dt, dd);
+      dl.appendChild(pair);
+    }
+
+    // The URL actually in flight: a row the crawl has claimed but not yet
+    // recorded a result for.
+    const inFlight = (audit?.inFlightUrls || [])[0];
+    const nr = shadow.querySelector('.now-requesting');
+    if (inFlight && !paused && !finished) {
+      nr.hidden = false;
+      nr.querySelector('.nr-url').textContent = inFlight;
+      nr.querySelector('.nr-url').title = inFlight;
+    } else {
+      nr.hidden = true;
+    }
+  }
+
+  /** The offer to widen a page-limited crawl. Only shown when there is a
+   * frontier to widen it onto — an audit that reached the end of the site has
+   * nothing to buy with a bigger budget. */
+  function renderBudgetCallout(audit) {
+    const shadow = siteAudit.shadow;
+    const callout = shadow.querySelector('.budget-callout');
+    if (!callout) return;
+    const counts = audit?.urlCounts || {};
+    const outside = Number(counts.queued || 0);
+    const budget = Number(audit?.config?.maxPages || 0);
+    const ceiling = Number(audit?.budgetCeiling || 300);
+    if (!outside || !budget || budget >= ceiling) { callout.hidden = true; return; }
+    const target = Math.min(ceiling, Math.max(budget + 20, Math.min(budget + outside, budget * 2, ceiling)));
+    if (target <= budget) { callout.hidden = true; return; }
+    callout.hidden = false;
+    // Numbers only — nothing crawl-sourced reaches this markup.
+    callout.querySelector('.budget-text').innerHTML =
+      `<b>${outside}</b> discovered URL${outside === 1 ? '' : 's'} fall outside this <b>${budget}</b>-page audit. Raise the budget now without restarting completed work.`;
+    const btn = callout.querySelector('.budget-btn');
+    btn.textContent = `Increase to ${target} pages`;
+    btn.onclick = () => raiseBudget(target);
+  }
+
+  async function raiseBudget(maxPages) {
+    const shadow = siteAudit.shadow;
+    const btn = shadow.querySelector('.budget-btn');
+    const error = shadow.querySelector('.budget-error');
+    btn.disabled = true;
+    error.hidden = true;
+    try {
+      const r = await chrome.runtime.sendMessage({ type: 'SITE_AUDIT_BUDGET', auditId: siteAudit.auditId, maxPages }).catch((e) => ({ ok: false, error: e?.message }));
+      if (!r?.ok) throw new Error(r?.error || 'Could not raise the page budget.');
+      // A finished crawl that just got a bigger budget is running again.
+      beginPolling();
+    } catch (e) {
+      error.hidden = false;
+      error.textContent = String(e?.message || e);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function togglePause() {
+    const shadow = siteAudit.shadow;
+    const btn = shadow.querySelector('.pause-btn');
+    const next = !siteAudit.paused;
+    btn.disabled = true;
+    try {
+      const r = await chrome.runtime.sendMessage({ type: 'SITE_AUDIT_PAUSE', auditId: siteAudit.auditId, paused: next }).catch((e) => ({ ok: false, error: e?.message }));
+      if (r?.ok) siteAudit.paused = Boolean(r.paused);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  /** Relative age in the coarsest unit still true, for a feed that updates
+   * every two seconds. */
+  function feedAge(iso) {
+    const then = Date.parse(iso || '');
+    if (!Number.isFinite(then)) return '';
+    const s = Math.max(0, Math.round((Date.now() - then) / 1000));
+    if (s < 3) return 'just now';
+    if (s < 60) return `${s}s`;
+    if (s < 3600) return `${Math.floor(s / 60)}m`;
+    return `${Math.floor(s / 3600)}h`;
+  }
+
+  /**
+   * The live activity feed.
+   *
+   * Every row is a fact the store already holds about a specific row: what was
+   * fetched, what it answered, whether it is indexable, what could not be
+   * reached. Discoveries and confirmed broken destinations come from counter
+   * deltas between polls. Nothing here is invented to fill the feed — a quiet
+   * crawl shows a quiet feed.
+   */
+  function renderRecentActivity(audit) {
+    const list = siteAudit.shadow.querySelector('.recent-feed');
+    if (!list) return;
+    const rows = [];
+    const counts = audit?.urlCounts || {};
+    const links = audit?.linkCounts || {};
+    const prev = siteAudit.lastCounts || {};
+    const queued = Number(counts.queued || 0);
+    const broken = Number(links.broken || 0);
+    // Counter deltas are events with no row of their own, so they are
+    // remembered across polls — with the time they happened, because a row
+    // kept saying "just now" thirty seconds after the fact.
+    const remembered = [];
+    if (prev.queued !== undefined && queued > prev.queued) {
+      remembered.push({ kind: 'found', mark: '+', at: Date.now(), title: `Discovered ${queued - prev.queued} new URL${queued - prev.queued === 1 ? '' : 's'}`, note: 'Added to the queue; duplicates removed automatically' });
+    }
+    if (prev.broken !== undefined && broken > prev.broken) {
+      remembered.push({ kind: 'bad', mark: '!', at: Date.now(), title: `Confirmed ${broken - prev.broken} broken destination${broken - prev.broken === 1 ? '' : 's'}`, note: 'Independent destination request · evidence retained' });
+    }
+    siteAudit.lastCounts = { queued, broken };
+    siteAudit.feedMemory = [...remembered, ...(siteAudit.feedMemory || [])].slice(0, 4);
+    for (const row of siteAudit.feedMemory) {
+      rows.push({ ...row, age: feedAge(new Date(row.at).toISOString()) });
+    }
+    for (const u of (audit?.recentUrls || [])) {
+      if (u.status === 'fetching') continue;
+      const code = Number(u.http_status || 0);
+      const notes = [];
+      if (code) notes.push(`${code} ${code < 300 ? 'OK' : code < 400 ? 'redirect' : code < 500 ? 'not found' : 'server error'}`);
+      if (u.status === 'fetched') {
+        notes.push(u.indexable === 1 ? 'indexable' : u.indexable === 0 ? 'noindex' : 'indexability not read');
+        if (u.canonical) notes.push('canonical resolved');
+      }
+      if (u.error) notes.push(String(u.error).slice(0, 60));
+      rows.push({
+        kind: u.status === 'error' ? 'bad' : u.status === 'skipped' ? 'skip' : 'ok',
+        mark: u.status === 'error' ? '!' : u.status === 'skipped' ? '–' : '✓',
+        title: u.status === 'error' ? 'Could not fetch' : u.status === 'skipped' ? 'Skipped by robots.txt' : 'Fetched',
+        url: shortUrl(u.url),
+        fullUrl: u.url,
+        note: notes.join(' · '),
+        age: feedAge(u.fetched_at)
+      });
+    }
+
+    list.innerHTML = '';
+    if (!rows.length) {
+      const li = document.createElement('li');
+      li.className = 'empty-row';
+      li.textContent = 'Nothing has completed yet.';
+      list.appendChild(li);
+      return;
+    }
+    for (const row of rows.slice(0, 9)) {
+      const li = document.createElement('li');
+      const mark = document.createElement('span');
+      mark.className = 'feed-mark';
+      mark.dataset.kind = row.kind;
+      mark.setAttribute('aria-hidden', 'true');
+      mark.textContent = row.mark;
+      const body = document.createElement('span');
+      body.className = 'feed-body';
+      const title = document.createElement('span');
+      title.className = 'feed-title';
+      title.textContent = row.title;
+      if (row.url) {
+        const code = document.createElement('code');
+        code.textContent = ` ${row.url}`;
+        code.title = row.fullUrl || '';
+        title.appendChild(code);
+      }
+      const note = document.createElement('span');
+      note.className = 'feed-note';
+      note.textContent = row.note || '';
+      body.append(title, note);
+      const age = document.createElement('span');
+      age.className = 'feed-age';
+      age.textContent = row.age || '';
+      li.append(mark, body, age);
+      list.appendChild(li);
+    }
+  }
+
+  /**
+   * Early signals: what the evidence already looks like it is saying, labelled
+   * as provisional because collection has not finished.
+   *
+   * This is a deterministic reading of the groups already loaded, never a
+   * model's. A rule that has appeared on nearly every page crawled so far is
+   * evidence of one shared cause rather than N independent defects — that is
+   * an observation about repetition, and it is stated as one.
+   */
+  function renderEarlySignals(audit) {
+    const shadow = siteAudit.shadow;
+    const lead = shadow.querySelector('.signal-lead');
+    const list = shadow.querySelector('.signal-list');
+    if (!lead || !list) return;
+    const groups = siteAudit.rawFindingGroups || [];
+    const fetched = Number(audit?.urlCounts?.fetched || 0);
+    // Severity first, then breadth — the same ranking every other surface uses.
+    // Sorting by breadth alone put "Analytics/tracking tag detected", an
+    // info-level observation, at the head of a list meant to surface what
+    // matters, which is the volume-wins failure the product exists to avoid.
+    const rank = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+    const ranked = [...groups]
+      .filter((g) => g.confidence !== 'inconclusive' && g.category !== 'context')
+      .sort((a, b) =>
+        (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9) ||
+        (b.affected_urls || 0) - (a.affected_urls || 0));
+
+    const sitewide = ranked.find((g) => fetched >= 3 && Number(g.affected_urls || 0) >= Math.ceil(fetched * 0.75));
+    lead.hidden = !sitewide;
+    if (sitewide) {
+      lead.innerHTML = '';
+      const b = document.createElement('b');
+      b.textContent = 'A shared cause is emerging';
+      const span = document.createElement('span');
+      span.textContent = `${findingLabel(sitewide)} appears on ${sitewide.affected_urls} of the ${fetched} pages fetched so far. Repetition at that rate usually means one shared component rather than ${sitewide.affected_urls} separate defects. Final priority waits for the full crawl.`;
+      lead.append(b, span);
+    }
+
+    list.innerHTML = '';
+    const shown = ranked.slice(0, 4);
+    if (!shown.length) {
+      const li = document.createElement('li');
+      li.className = 'empty-row';
+      li.textContent = fetched ? 'Nothing established yet.' : 'Waiting for the first page.';
+      list.appendChild(li);
+      return;
+    }
+    for (const g of shown) {
+      const li = document.createElement('li');
+      const name = document.createElement('span');
+      name.className = 'signal-name';
+      name.textContent = findingLabel(g);
+      const badge = document.createElement('span');
+      badge.className = 'signal-badge';
+      const confirmed = g.confidence === 'confirmed' || g.confidence === 'corroborated';
+      badge.dataset.kind = confirmed ? 'confirmed' : 'early';
+      badge.textContent = confirmed ? 'Confirmed' : 'Early signal';
+      const note = document.createElement('span');
+      note.className = 'signal-note';
+      const wide = fetched >= 3 && Number(g.affected_urls || 0) >= Math.ceil(fetched * 0.75);
+      note.textContent = `${g.affected_urls} of ${fetched} page${fetched === 1 ? '' : 's'}${wide ? ' · likely shared component' : ''}`;
+      li.append(name, badge, note);
+      list.appendChild(li);
+    }
+  }
+
+  /** The severity split of what has landed so far. */
+  function renderRunMix(audit) {
+    const shadow = siteAudit.shadow;
+    const list = shadow.querySelector('.mix-rows');
+    if (!list) return;
+    const groups = siteAudit.rawFindingGroups || [];
+    const buckets = { high: 0, medium: 0, low: 0 };
+    for (const g of groups) {
+      const sev = String(g.severity || 'info');
+      if (sev === 'critical' || sev === 'high') buckets.high += g.instances;
+      else if (sev === 'medium') buckets.medium += g.instances;
+      else buckets.low += g.instances;
+    }
+    const total = buckets.high + buckets.medium + buckets.low;
+    shadow.querySelector('.mix-total').textContent = `${total} observation${total === 1 ? '' : 's'}`;
+    const rows = [
+      ['High', buckets.high, 'var(--sa-sev-high)'],
+      ['Medium', buckets.medium, 'var(--sa-sev-medium)'],
+      ['Low / info', buckets.low, 'var(--sa-sev-info)']
+    ];
+    const max = Math.max(1, ...rows.map((r) => r[1]));
+    list.innerHTML = '';
+    for (const [label, value, colour] of rows) {
+      const li = document.createElement('li');
+      const name = document.createElement('span');
+      name.textContent = label;
+      const track = document.createElement('span');
+      track.className = 'mix-track';
+      const fill = document.createElement('span');
+      fill.className = 'mix-fill';
+      fill.style.width = `${value ? Math.max(4, (value / max) * 100) : 0}%`;
+      fill.style.background = colour;
+      track.appendChild(fill);
+      const count = document.createElement('span');
+      count.className = 'mix-count';
+      count.textContent = String(value);
+      li.append(name, track, count);
+      list.appendChild(li);
+    }
+  }
+
+  /** The crawl's own settings, so the numbers above can be read against the
+   * work that produced them. */
+  function renderRunConfig(audit) {
+    const el = siteAudit.shadow.querySelector('.run-config-facts');
+    if (!el) return;
+    const c = audit?.config || {};
+    const facts = [
+      `${Number(c.concurrency || 0)} concurrent request${Number(c.concurrency) === 1 ? '' : 's'}`,
+      `${Number(c.requestDelayMs || 0)} ms delay`,
+      c.respectRobots ? 'robots.txt respected' : 'robots.txt ignored',
+      c.checkExternalLinks ? 'external validation enabled' : 'external validation off'
+    ];
+    if (c.maxDepth != null) facts.push(`max depth ${c.maxDepth}`);
+    el.textContent = facts.join('  ·  ');
   }
 
   function renderSiteAuditProgress(audit) {
-    const shadow = siteAudit.shadow;
     paintTitleBlock(audit);
-    const counts = audit.urlCounts || {};
-    const discovered = Object.values(counts).reduce((s, n) => s + n, 0);
-    const crawled = Number(counts.fetched || 0);
-    const errored = Number(counts.error || 0);
-    const target = Number(audit.config?.maxPages || 40);
-    // `Phase: fetching` leaked an internal state token as the operator's only
-    // description of what the product was doing during the longest wait.
-    shadow.querySelector('.phase-label').textContent = audit.status === 'running'
-      ? (SITE_AUDIT_PHASE_COPY[audit.phase] || 'Working…')
-      : SITE_AUDIT_STATUS_COPY[audit.status] || `Status: ${audit.status}`;
-    const pct = Math.max(0, Math.min(100, Math.round(((crawled + errored) / target) * 100)));
-    shadow.querySelector('.progress-fill').style.width = `${Math.max(2, pct)}%`;
-    const pctLabel = shadow.querySelector('.run-pct');
-    if (pctLabel) pctLabel.textContent = `${pct}%`;
-    shadow.querySelector('.stat-discovered').textContent = String(discovered);
-    shadow.querySelector('.stat-crawled').textContent = String(crawled);
-    shadow.querySelector('.stat-links').textContent = String(Object.values(audit.linkCounts || {}).reduce((s, n) => s + n, 0));
-    shadow.querySelector('.stat-findings').textContent = String(audit.findingsCount || 0);
-    shadow.querySelector('.stat-errors').textContent = String(errored);
-    shadow.querySelector('.stat-elapsed').textContent = `${Math.max(0, Math.round((Date.now() - siteAudit.startedAt) / 1000))}s`;
-    shadow.querySelector('.view-partial-btn').disabled = crawled === 0;
+    siteAudit.paused = Boolean(audit?.paused);
+    const shadow = siteAudit.shadow;
+    shadow.querySelector('.stat-elapsed').textContent = elapsedLabel(audit);
+    shadow.querySelector('.run-where').textContent = audit?.paused ? 'Paused on gateway' : 'Running on gateway';
+    shadow.querySelector('.chip-row .state-chip.live').classList.toggle('provisional', Boolean(audit?.paused));
+    const pause = shadow.querySelector('.pause-btn');
+    pause.textContent = audit?.paused ? 'Resume' : 'Pause';
+    const finished = ['complete', 'cancelled', 'failed'].includes(String(audit?.status || ''));
+    pause.hidden = finished;
+    shadow.querySelector('.cancel-btn').hidden = finished;
+    shadow.querySelector('.view-partial-btn').disabled = Number(audit?.urlCounts?.fetched || 0) === 0;
+    renderStepper(audit);
+    renderPhaseCard(audit);
+    renderBudgetCallout(audit);
     renderRecentActivity(audit);
-  }
-
-  function renderRecentActivity(audit) {
-    const feed = siteAudit.shadow.querySelector('.recent-feed');
-    feed.innerHTML = '';
-    for (const u of audit.recentUrls || []) {
-      const li = document.createElement('li');
-      const pill = document.createElement('span');
-      // 401/403/429 mean the page blocked our automated request, not that it's
-      // actually down — conflating the two (as this used to) makes a site's
-      // own bot-protection look like a broken page.
-      const status = u.status === 'error' ? 'broken' : [401, 403, 429].includes(u.http_status) ? 'blocked' : (u.http_status && u.http_status >= 400) ? 'broken' : 'healthy';
-      pill.className = `status-pill ${status}`;
-      pill.textContent = u.http_status ? String(u.http_status) : (u.status || '');
-      const urlSpan = document.createElement('span');
-      urlSpan.className = 'url';
-      urlSpan.textContent = u.url;
-      li.append(pill, urlSpan);
-      feed.appendChild(li);
-    }
+    renderEarlySignals(audit);
+    renderRunMix(audit);
+    renderRunConfig(audit);
   }
 
   function renderSiteAuditRenderSection(audit) {
