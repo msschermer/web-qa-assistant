@@ -21,6 +21,7 @@ import { issueInstallationToken, verifyInstallationToken } from '../../packages/
 import { probeExternalCandidates, mapExternalProbeRows } from '../../packages/security/safe-probe.js';
 import { openAuditStore, newAuditId, normalizeAuditUrl } from '../../packages/crawl/store.js';
 import { runAudit, isCrawlableStartUrl, planCrawlConfig, CRAWL_LIMITS } from '../../packages/crawl/crawler.js';
+import { guidanceForRule } from '../../packages/findings/rule-guidance.js';
 import { renderAuditReportHtml } from '../../packages/crawl/report.js';
 import { buildAuditDebugBundle } from '../../packages/crawl/debug-report.js';
 
@@ -604,7 +605,12 @@ app.get('/api/audits/:id/findings', requireExtensionKey, (req, res) => {
   const audit = getOwnedAudit(req, res);
   if (!audit) return;
   if (String(req.query?.groupByRule || '') === '1') {
-    return res.json({ ok: true, requestId: req.webQaRequestId, groups: auditStore.findingsByRule(req.params.id) });
+    // Guidance rides with the group so the overlay's Guidance tab and the
+    // exported report recommend the same move for the same rule, from one
+    // definition. A second copy in the client is how they start disagreeing.
+    const groups = auditStore.findingsByRule(req.params.id)
+      .map((g) => ({ ...g, guidance: guidanceForRule(g.rule_id) }));
+    return res.json({ ok: true, requestId: req.webQaRequestId, groups });
   }
   const url = String(req.query?.url || '').trim() || null;
   const ruleId = String(req.query?.ruleId || '').trim() || null;
@@ -759,12 +765,22 @@ app.get('/api/audits/:id/export.csv', requireExtensionKey, (req, res) => {
   const dataset = String(req.query?.dataset || 'findings');
   if (!CSV_COLUMNS[dataset]) return res.status(400).json({ ok: false, error: 'dataset must be one of urls, links, findings, urls-summary.', requestId: req.webQaRequestId });
   const status = dataset === 'links' ? (String(req.query?.status || '').trim() || null) : null;
-  const rows = dataset === 'urls' ? auditStore.listUrls(req.params.id, { limit: 50000, offset: 0 })
+  // "Export view" hands back exactly the rows on screen rather than the whole
+  // dataset. The client sends the rule ids its filters left visible; anything
+  // unrecognised is dropped rather than widening the export by surprise.
+  const wantedRules = String(req.query?.ruleIds || '')
+    .split(',').map((r) => r.trim()).filter((r) => /^[a-zA-Z0-9._-]{1,80}$/.test(r)).slice(0, 200);
+  let rows = dataset === 'urls' ? auditStore.listUrls(req.params.id, { limit: 50000, offset: 0 })
     : dataset === 'links' ? auditStore.listLinks(req.params.id, { limit: 50000, offset: 0, status })
       : dataset === 'urls-summary' ? urlsSummaryRows(req.params.id)
         : denormalizedFindingRows(req.params.id, auditStore.listFindings(req.params.id, { limit: 50000, offset: 0 }));
+  if (dataset === 'findings' && wantedRules.length) {
+    const wanted = new Set(wantedRules);
+    rows = rows.filter((row) => wanted.has(String(row.rule_id || '')));
+  }
+  const scoped = dataset === 'findings' && wantedRules.length ? '-view' : '';
   res.setHeader('content-type', 'text/csv; charset=utf-8');
-  res.setHeader('content-disposition', `attachment; filename="audit-${req.params.id}-${dataset}.csv"`);
+  res.setHeader('content-disposition', `attachment; filename="audit-${req.params.id}-${dataset}${scoped}.csv"`);
   res.send(toCsv(rows, CSV_COLUMNS[dataset]));
 });
 

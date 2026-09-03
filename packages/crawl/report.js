@@ -8,34 +8,11 @@
  * reliably itself, so an LLM has no business being in the loop for it.
  */
 
+import { guidanceForRule } from '../findings/rule-guidance.js';
+
 const SEVERITY_RANK = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
 
-const RULE_GUIDANCE = {
-  'seo.title-missing': 'Add a unique, descriptive <title> to each affected page.',
-  'seo.title-multiple': 'Keep exactly one <title> element per page.',
-  'seo.description-missing': 'Add a meta description summarizing the page for search results.',
-  'seo.description-multiple': 'Keep exactly one meta description per page.',
-  'seo.canonical-missing': 'Declare a canonical URL, or confirm the page intentionally has none.',
-  'seo.canonical-multiple': 'Keep exactly one canonical link per page.',
-  'seo.noindex': 'Confirm noindex is intentional — it removes the page from search results.',
-  'structure.h1-missing': "Add a single H1 that describes the page's main topic.",
-  'structure.h1-multiple': 'Reduce to one H1 per page; use H2+ for subsections.',
-  'schema.missing': 'Add schema.org structured data (JSON-LD) relevant to this page type.',
-  'schema.invalid-json': 'Fix the JSON syntax in the structured data block so search engines can read it.',
-  'seo.duplicate-title': 'Give each page a unique, specific title — merge or differentiate pages that currently share one.',
-  'seo.duplicate-description': 'Write a unique meta description for each page, or remove the duplicate so it is not misleading in search results.',
-  'seo.thin-content': 'Expand the page with substantive, unique content, or consolidate/redirect it into a more complete page.'
-};
 
-function guidanceFor(ruleId) {
-  if (RULE_GUIDANCE[ruleId]) return RULE_GUIDANCE[ruleId];
-  if (/^navigation\.link-(404|410)/.test(ruleId)) return 'Fix or remove the link, or 301-redirect the destination to a working URL.';
-  if (/^navigation\.link-5xx/.test(ruleId)) return 'Investigate the server error at the destination — the link itself may be fine once that is fixed.';
-  if (/^navigation\.link-review/.test(ruleId)) return 'Confirm whether the destination is meant to require authentication or is rate-limiting requests.';
-  if (/^axe\./.test(ruleId)) return 'Open the Accessibility tab for this rule\'s WCAG detail — this was found by rendering the page in a real browser.';
-  if (/^performance\./.test(ruleId)) return 'Review the flagged resource for size or format optimizations.';
-  return 'Review the affected pages and apply the fix implied by the finding above.';
-}
 
 function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -128,7 +105,7 @@ export function renderAuditReportHtml({ audit, urls, links, findings, findingGro
           <li>
             <div class="p-top"><span class="pill pill-${esc(g.severity)}">${esc(g.severity || g.category)}</span><strong>${esc(g.rule_id)}</strong></div>
             <p class="p-scope">${g.instances} instance${g.instances === 1 ? '' : 's'} across ${g.affected_urls} page${g.affected_urls === 1 ? '' : 's'}</p>
-            <p class="p-guidance">${esc(guidanceFor(g.rule_id))}</p>
+            <p class="p-guidance">${esc(guidanceForRule(g.rule_id))}</p>
           </li>`).join('')}</ol>` : '<p class="empty">No findings recorded.</p>'}
       `
     },

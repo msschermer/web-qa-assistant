@@ -317,9 +317,9 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
     return{links:result.links};
   }
   if(msg.type==='SITE_AUDIT_EXPORT'){
-    const qs=new URLSearchParams({dataset:msg.dataset||'findings',...(msg.status?{status:msg.status}:{})});
+    const qs=new URLSearchParams({dataset:msg.dataset||'findings',...(msg.status?{status:msg.status}:{}),...(msg.ruleIds?{ruleIds:msg.ruleIds}:{})});
     const result=await gatewayGetText(`/api/audits/${encodeURIComponent(msg.auditId)}/export.csv?${qs}`,20000,'SITE_AUDIT_EXPORT');
-    return{text:result.text,filename:`audit-${msg.auditId}-${msg.dataset||'findings'}.csv`};
+    return{text:result.text,filename:`audit-${msg.auditId}-${msg.dataset||'findings'}${msg.ruleIds?'-view':''}.csv`};
   }
   if(msg.type==='SITE_AUDIT_REPORT'){
     const result=await gatewayGetText(`/api/audits/${encodeURIComponent(msg.auditId)}/report.html`,30000,'SITE_AUDIT_REPORT');

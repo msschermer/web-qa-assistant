@@ -840,6 +840,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         --sa-primary-soft:var(--wqa-brand-soft);
         --sa-primary-line:var(--wqa-brand-line);
         --sa-primary-text:var(--wqa-brand-text);
+        --sa-surface-raised:var(--wqa-surface-raised);
 
         /* Semantic TEXT colours — safe on their own wash and on any ground.
            These are what a badge, a pill or an error message uses. */
@@ -1354,6 +1355,69 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .confidence-dot.inferred{background:var(--sa-sev-medium)}
       .confidence-dot.inconclusive{background:var(--sa-line-strong)}
 
+      /* Findings -------------------------------------------------------------
+         Patterns on the left, one inspected pattern on the right. The count an
+         operator acts on is patterns, not observations, and the footer keeps
+         the larger number visible so nothing looks quietly reduced. */
+      .fx-head{align-items:flex-start;margin-bottom:14px}
+      .fx-head .panel-title{margin:0}
+      .fx-meta{margin:5px 0 0;font-size:12.5px;color:var(--sa-ink-faint)}
+      .fx-stats{margin-bottom:12px}
+
+      .fx-lenses{display:flex;align-items:center;gap:12px;margin:0 0 10px;flex-wrap:wrap}
+      .lens-tabs{display:flex;gap:4px;flex-wrap:wrap}
+      .lens{min-height:31px;padding:0 11px;border:1px solid transparent;border-radius:var(--sa-radius-sm);background:transparent;color:var(--sa-ink-faint);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+      .lens:hover{background:var(--sa-subtle);color:var(--sa-ink)}
+      .lens.active{background:var(--sa-primary-soft);border-color:var(--sa-primary-line);color:var(--sa-primary-text)}
+      .lens:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
+      .fx-lenses .filter-state{margin-left:auto}
+
+      .lens-note{display:flex;align-items:center;gap:14px;margin:0 0 12px;padding:11px 14px;border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface)}
+      .lens-note-body{flex:1 1 auto;min-width:0}
+      .lens-note-body b{display:block;font-size:13px;color:var(--sa-ink);margin-bottom:2px}
+      .lens-note-body span{font-size:12.5px;line-height:1.5;color:var(--sa-ink-soft)}
+      .lens-state{flex:0 0 auto}
+
+      .fx-split{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px;align-items:start;margin:0 0 12px}
+      .fx-list-card{padding:0;overflow:hidden}
+      .fx-list-card .card-head{padding:13px 15px 11px;margin:0;border-bottom:1px solid var(--sa-line)}
+      .fx-select-hint{margin:0}
+      .fx-table{border:0;border-radius:0;background:transparent}
+      .fx-table th{background:var(--sa-subtle)}
+      .fx-row{cursor:pointer}
+      .fx-row.selected{background:var(--sa-primary-soft)}
+      .fx-row.selected td{color:var(--sa-ink)}
+      .fx-row.selected td:first-child{box-shadow:inset 2px 0 0 var(--sa-primary)}
+      .fx-issue{display:block;font-size:13px;font-weight:600;color:var(--sa-ink);overflow-wrap:anywhere}
+      .fx-issue-meta{display:flex;align-items:center;gap:8px;margin-top:4px;font-size:11.5px;color:var(--sa-ink-faint)}
+      .fx-pages-word{color:var(--sa-ink-faint);font-weight:400}
+      .fx-list-card .pager{margin:0;padding:11px 15px;border-top:1px solid var(--sa-line)}
+
+      .fx-detail{align-self:start}
+      .fx-kicker{margin:0 0 5px;font-size:10.5px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--sa-primary-text)}
+      .fx-detail-title{margin:0 0 10px;font-size:17px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
+      .fx-tabs{display:flex;gap:2px;margin:12px 0 12px;border-bottom:1px solid var(--sa-line)}
+      .fx-tab{padding:7px 11px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--sa-ink-faint);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;margin-bottom:-1px}
+      .fx-tab:hover{color:var(--sa-ink)}
+      .fx-tab.active{color:var(--sa-primary-text);border-bottom-color:var(--sa-primary)}
+      .fx-tab:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
+      .fx-tab-body .evidence-label{margin-top:2px}
+      .fx-instances{display:grid;gap:2px;max-height:280px;overflow:auto;padding:2px 0}
+
+      .columns-wrap{position:relative}
+      .columns-menu{position:absolute;z-index:6;right:0;top:calc(100% + 6px);width:230px;padding:9px;background:var(--sa-surface-raised,var(--sa-surface));border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-lg)}
+      .columns-title{margin:0 0 7px;padding:0 4px;font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--sa-ink-faint)}
+      .columns-row{display:flex;align-items:center;gap:9px;padding:6px 4px;font-size:12.5px;color:var(--sa-ink-soft);cursor:pointer;border-radius:var(--sa-radius-sm)}
+      .columns-row:hover{background:var(--sa-subtle)}
+
+      .fx-foot{display:flex;align-items:center;gap:14px;margin:0;padding:11px 14px;border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);font-size:12px;color:var(--sa-ink-faint)}
+      .fx-foot-text{flex:1 1 auto}
+      .fx-foot .link-btn{margin-left:0}
+
+      @media(max-width:1040px){
+        .fx-split{grid-template-columns:minmax(0,1fr)}
+      }
+
       /* Tables -------------------------------------------------------------- */
       .data-table{width:100%;border-collapse:collapse;font-size:13px;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);overflow:hidden}
       .data-table th{text-align:left;font-size:12px;font-weight:600;color:var(--sa-ink-faint);text-transform:none;letter-spacing:0;padding:10px 12px;border-bottom:1px solid var(--sa-line);background:var(--sa-subtle)}
@@ -1407,7 +1471,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .links-source-head{width:34%}
       .urls-table td:first-child{font-family:var(--sa-mono);font-size:12px}
       .toolbar input:focus-visible,.toolbar select:focus-visible,.field input:focus-visible,.field textarea:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px;border-color:var(--sa-primary)}
-      .quick-filters{display:flex;gap:8px;margin:0 0 14px;align-items:center;flex-wrap:wrap}
       .filter-state{font-size:12.5px;color:var(--sa-ink-faint);margin-left:auto;font-variant-numeric:tabular-nums}
       .hide-unconfirmed{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--sa-ink-soft);white-space:nowrap}
 
@@ -2006,26 +2069,76 @@ if (!globalThis.__WEB_QA_CONTENT__) {
           </div>
           <div class="tab-panel findings-panel" hidden>
             <p class="crumb">Site audit <span aria-hidden="true">/</span> Findings</p>
-            <h2 class="panel-title">Findings</h2>
+            <div class="page-head fx-head">
+              <div>
+                <h2 class="panel-title">Findings</h2>
+                <p class="fx-meta"></p>
+              </div>
+              <div class="run-actions">
+                <div class="columns-wrap">
+                  <button type="button" class="btn columns-btn" aria-expanded="false">Columns</button>
+                  <div class="columns-menu" hidden></div>
+                </div>
+                <button type="button" class="btn export-view-btn">Export view</button>
+              </div>
+            </div>
+
+            <dl class="stat-grid summary-stats fx-stats">
+              <div class="stat-tile"><dt>Observations</dt><dd class="fx-observations">0</dd><span class="stat-sub"></span></div>
+              <div class="stat-tile"><dt>Issue patterns</dt><dd class="fx-patterns">0</dd><span class="stat-sub"></span></div>
+              <div class="stat-tile"><dt>Need action</dt><dd class="fx-action">0</dd><span class="stat-sub">findings</span></div>
+              <div class="stat-tile"><dt>Pages represented</dt><dd class="fx-pages">0</dd><span class="stat-sub fx-pages-sub"></span></div>
+            </dl>
+
             <div class="toolbar">
-              <input type="search" class="findings-search" placeholder="Search findings…" />
-              <select class="findings-category" aria-label="Filter by category"><option value="">All categories</option><option value="fix">Fix</option><option value="review">Review</option><option value="context">Context</option></select>
-              <select class="findings-impact" aria-label="Filter by impact area"><option value="">All areas</option></select>
+              <input type="search" class="findings-search" placeholder="Search issue patterns, areas or evidence…" />
+              <select class="findings-category" aria-label="Filter by severity"><option value="">All severities</option><option value="fix">Fix</option><option value="review">Review</option><option value="context">Context</option></select>
+              <select class="findings-impact" aria-label="Filter by area"><option value="">All areas</option></select>
+              <select class="findings-evidence" aria-label="Filter by evidence"><option value="">Any evidence</option><option value="confirmed">Confirmed</option><option value="corroborated">Corroborated</option><option value="inferred">Inferred</option><option value="inconclusive">Inconclusive</option></select>
               <select class="findings-sort" aria-label="Sort findings">
                 <option value="severity">Sort: severity</option>
                 <option value="pages">Sort: pages affected</option>
                 <option value="instances">Sort: instances</option>
                 <option value="area">Sort: area</option>
               </select>
-              <label class="hide-unconfirmed"><input type="checkbox" class="findings-hide-unconfirmed" /> Hide unconfirmed</label>
             </div>
-            <div class="quick-filters">
-              <button type="button" class="chip chip-broken">Broken links</button>
-              <button type="button" class="chip chip-schema">Structured data</button>
-              <button type="button" class="chip chip-clear" hidden>Clear filters</button>
+
+            <div class="fx-lenses">
+              <nav class="lens-tabs" aria-label="Finding lenses">
+                <button type="button" class="lens active" data-lens="priority">Lumen priority</button>
+                <button type="button" class="lens" data-lens="all">All patterns</button>
+                <button type="button" class="lens" data-lens="sitewide">Sitewide</button>
+                <button type="button" class="lens" data-lens="unconfirmed">Needs confirmation</button>
+              </nav>
               <span class="filter-state" role="status"></span>
             </div>
-            <ul class="findings-list"></ul>
+
+            <!-- The ordering is a lens over the scanner's own labels, and says
+                 so rather than letting a rank be mistaken for a measurement. -->
+            <section class="lens-note">
+              <div class="lens-note-body">
+                <b>Lumen priority is a lens, not a replacement for evidence</b>
+                <span>Patterns are ordered by visitor impact, confidence and breadth. Severity and evidence labels stay exactly as the scanner recorded them.</span>
+              </div>
+              <span class="state-chip lens-state">Priority order active</span>
+            </section>
+
+            <div class="fx-split">
+              <section class="panel-card fx-list-card">
+                <div class="card-head">
+                  <h3 class="feed-heading">Issue patterns</h3>
+                  <span class="hint fx-select-hint">Select a row to inspect</span>
+                </div>
+                <table class="data-table fx-table">
+                  <thead><tr class="fx-head-row"></tr></thead>
+                  <tbody class="fx-body"></tbody>
+                </table>
+                <div class="pager"><button type="button" class="btn pager-prev fx-prev">Prev</button><span class="pager-label fx-label"></span><button type="button" class="btn pager-next fx-next">Next</button></div>
+              </section>
+              <section class="panel-card fx-detail"></section>
+            </div>
+
+            <p class="fx-foot"><span class="fx-foot-text"></span><button type="button" class="link-btn fx-raw">Raw findings</button><button type="button" class="link-btn debug-btn-2">Debug report</button></p>
           </div>
           <div class="tab-panel urls-panel" hidden>
             <p class="crumb">Site audit <span aria-hidden="true">/</span> Pages</p>
@@ -2147,7 +2260,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       siteAudit.expandedUrl = null;
       setSiteAuditView('setup');
     });
-    shadow.querySelector('.chip-clear').addEventListener('click', clearFindingFilters);
     // Every summary tile opens the rows behind its number. A count with no way
     // through to its evidence is the thing this product exists not to ship.
     for (const btn of shadow.querySelectorAll('.stat-open')) {
@@ -2174,27 +2286,32 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     shadow.querySelector('.debug-btn').addEventListener('click', downloadDebugReport);
     // Both quick filters now write their value into the visible control they
     // drive, so the operator can see (and undo) what was applied on their behalf.
-    shadow.querySelector('.chip-broken').addEventListener('click', () => {
-      siteAudit.linksStatus = 'broken';
-      shadow.querySelector('.links-status').value = 'broken';
-      switchSiteAuditTab('links');
-    });
-    shadow.querySelector('.chip-schema').addEventListener('click', () => {
-      siteAudit.findingsSearch = 'schema';
-      shadow.querySelector('.findings-search').value = 'schema';
-      switchSiteAuditTab('findings');
-    });
     for (const tab of shadow.querySelectorAll('.tab')) tab.addEventListener('click', () => switchSiteAuditTab(tab.dataset.tab));
     for (const item of shadow.querySelectorAll('.subnav-item')) {
       item.addEventListener('click', () => switchSiteAuditTab(item.dataset.tab, item.dataset.view));
     }
     for (const btn of shadow.querySelectorAll('.export-btn')) btn.addEventListener('click', () => exportSiteAudit(btn.dataset.dataset));
-    const onFindingsSearch = debounce((value) => { siteAudit.findingsSearch = value; renderFindingsList(); }, 150);
+    const onFindingsSearch = debounce((value) => { siteAudit.findingsSearch = value; siteAudit.fxOffset = 0; renderFindingsList(); }, 150);
     shadow.querySelector('.findings-search').addEventListener('input', (e) => onFindingsSearch(e.target.value));
-    shadow.querySelector('.findings-category').addEventListener('change', (e) => { siteAudit.findingsCategory = e.target.value; renderFindingsList(); });
-    shadow.querySelector('.findings-impact').addEventListener('change', (e) => { siteAudit.findingsImpactClass = e.target.value; renderFindingsList(); });
-    shadow.querySelector('.findings-hide-unconfirmed').addEventListener('change', (e) => { siteAudit.findingsHideUnconfirmed = e.target.checked; renderFindingsList(); });
-    shadow.querySelector('.findings-sort').addEventListener('change', (e) => { siteAudit.findingsSort = e.target.value; renderFindingsList(); });
+    shadow.querySelector('.findings-category').addEventListener('change', (e) => { siteAudit.findingsCategory = e.target.value; siteAudit.fxOffset = 0; renderFindingsList(); });
+    shadow.querySelector('.findings-impact').addEventListener('change', (e) => { siteAudit.findingsImpactClass = e.target.value; siteAudit.fxOffset = 0; renderFindingsList(); });
+    shadow.querySelector('.findings-evidence').addEventListener('change', (e) => { siteAudit.findingsEvidence = e.target.value; siteAudit.fxOffset = 0; renderFindingsList(); });
+    for (const lens of shadow.querySelectorAll('.lens')) {
+      lens.addEventListener('click', () => { siteAudit.fxLens = lens.dataset.lens; siteAudit.fxOffset = 0; renderFindingsList(); });
+    }
+    shadow.querySelector('.fx-prev').addEventListener('click', () => { siteAudit.fxOffset = Math.max(0, (siteAudit.fxOffset || 0) - SITE_AUDIT_FX_PAGE); renderFindingsList(); });
+    shadow.querySelector('.fx-next').addEventListener('click', () => { siteAudit.fxOffset = (siteAudit.fxOffset || 0) + SITE_AUDIT_FX_PAGE; renderFindingsList(); });
+    shadow.querySelector('.export-view-btn').addEventListener('click', exportCurrentView);
+    shadow.querySelector('.fx-raw').addEventListener('click', () => exportSiteAudit('findings'));
+    shadow.querySelector('.debug-btn-2').addEventListener('click', downloadDebugReport);
+    const columnsBtn = shadow.querySelector('.columns-btn');
+    columnsBtn.addEventListener('click', () => {
+      const menu = shadow.querySelector('.columns-menu');
+      const open = menu.hidden;
+      if (open) renderColumnsMenu();
+      menu.hidden = !open;
+      columnsBtn.setAttribute('aria-expanded', String(open));
+    });    shadow.querySelector('.findings-sort').addEventListener('change', (e) => { siteAudit.findingsSort = e.target.value; siteAudit.fxOffset = 0; renderFindingsList(); });
     const onUrlsSearch = debounce((value) => { siteAudit.urlsSearch = value; renderUrlsTable(); }, 150);
     shadow.querySelector('.urls-search').addEventListener('input', (e) => onUrlsSearch(e.target.value));
     for (const th of shadow.querySelectorAll('.urls-panel th[data-sort]')) th.addEventListener('click', () => sortUrlsBy(th.dataset.sort));
@@ -4929,32 +5046,427 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     renderNavStates();
   }
 
-  function renderFindingsList() {
-    const list = siteAudit.shadow.querySelector('.findings-list');
-    list.innerHTML = '';
+  /**
+   * The Findings screen: issue patterns on the left, one inspected pattern on
+   * the right.
+   *
+   * 343 observations do not become 343 rows. They group into the distinct
+   * patterns behind them, which is what an operator can actually act on — and
+   * the footer says so, because a view that silently reduces a number owes the
+   * reader an account of where the rest went.
+   */
+  const SITE_AUDIT_FX_COLUMNS = [
+    { id: 'issue', label: 'Issue', fixed: true },
+    { id: 'area', label: 'Area' },
+    { id: 'affected', label: 'Affected', fixed: true },
+    { id: 'evidence', label: 'Evidence', fixed: true },
+    { id: 'instances', label: 'Instances' },
+    { id: 'rule', label: 'Rule id' }
+  ];
+
+  const SITE_AUDIT_LENSES = {
+    priority: { label: 'Lumen priority', note: 'Priority order active' },
+    all: { label: 'All patterns', note: 'Scanner order' },
+    sitewide: { label: 'Sitewide', note: 'Repeated across the site' },
+    unconfirmed: { label: 'Needs confirmation', note: 'Not independently established' }
+  };
+
+  function fxColumns() {
+    const chosen = siteAudit.fxColumns || (siteAudit.fxColumns = ['issue', 'area', 'affected', 'evidence']);
+    return SITE_AUDIT_FX_COLUMNS.filter((c) => c.fixed || chosen.includes(c.id));
+  }
+
+  /** Patterns after the search box, the three selects and the active lens. */
+  function fxVisibleGroups() {
+    const all = siteAudit.rawFindingGroups || [];
     const search = String(siteAudit.findingsSearch || '').trim().toLowerCase();
     const category = siteAudit.findingsCategory;
-    const impactClass = siteAudit.findingsImpactClass;
-    const all = siteAudit.rawFindingGroups || [];
-    // Search now covers the human title too — the old placeholder promised
-    // "rule or text" while only ever matching the rule id.
-    const groups = all.filter((g) =>
-      (!search || g.rule_id.toLowerCase().includes(search) || findingLabel(g).toLowerCase().includes(search)) &&
+    const area = siteAudit.findingsImpactClass;
+    const evidence = siteAudit.findingsEvidence || '';
+    const fetched = Number(siteAudit.audit?.urlCounts?.fetched || 0);
+    const lens = siteAudit.fxLens || 'priority';
+
+    let rows = all.filter((g) =>
+      (!search || g.rule_id.toLowerCase().includes(search) || findingLabel(g).toLowerCase().includes(search) || (SITE_AUDIT_AREA_LABEL[disciplineOf(g.rule_id)] || '').toLowerCase().includes(search)) &&
       (!category || g.category === category) &&
-      (!impactClass || disciplineOf(g.rule_id) === impactClass) &&
-      (!siteAudit.findingsHideUnconfirmed || g.confidence === 'confirmed')
-    );
-    const SEV_RANK = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+      (!area || disciplineOf(g.rule_id) === area) &&
+      (!evidence || g.confidence === evidence) &&
+      (!siteAudit.findingsHideUnconfirmed || g.confidence === 'confirmed'));
+
+    if (lens === 'sitewide') rows = rows.filter((g) => fetched >= 3 && Number(g.affected_urls || 0) >= Math.ceil(fetched * 0.75));
+    if (lens === 'unconfirmed') rows = rows.filter((g) => g.confidence === 'inferred' || g.confidence === 'inconclusive');
+
+    const rank = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
     const sort = siteAudit.findingsSort || 'severity';
-    groups.sort((a, b) => {
-      if (sort === 'pages') return (b.affected_urls || 0) - (a.affected_urls || 0);
-      if (sort === 'instances') return (b.instances || 0) - (a.instances || 0);
-      if (sort === 'area') return String(a.impact_class || '').localeCompare(String(b.impact_class || '')) || (b.affected_urls || 0) - (a.affected_urls || 0);
-      // Severity first, then breadth — a high on forty pages outranks a high on one.
-      return (SEV_RANK[a.severity] ?? 9) - (SEV_RANK[b.severity] ?? 9) || (b.affected_urls || 0) - (a.affected_urls || 0);
-    });
-    renderFilterState(groups.length, all.length);
-    renderFindingRowsInto(list, groups, all.length ? 'No findings match these filters.' : 'No findings recorded yet.');
+    const byScanner = (a, b) =>
+      (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9) || (b.affected_urls || 0) - (a.affected_urls || 0);
+    if (lens === 'all') rows.sort((a, b) => (b.instances || 0) - (a.instances || 0));
+    else if (sort === 'pages') rows.sort((a, b) => (b.affected_urls || 0) - (a.affected_urls || 0));
+    else if (sort === 'instances') rows.sort((a, b) => (b.instances || 0) - (a.instances || 0));
+    else if (sort === 'area') rows.sort((a, b) => String(disciplineOf(a.rule_id)).localeCompare(String(disciplineOf(b.rule_id))) || byScanner(a, b));
+    else {
+      // Lumen priority: visitor impact first, then established evidence, then
+      // breadth. The scanner's own labels are untouched by this ordering.
+      rows.sort((a, b) =>
+        Number(disciplineOf(b.rule_id) === 'availability' && (b.confidence === 'confirmed' || b.confidence === 'corroborated')) -
+        Number(disciplineOf(a.rule_id) === 'availability' && (a.confidence === 'confirmed' || a.confidence === 'corroborated')) ||
+        byScanner(a, b) ||
+        Number(a.confidence === 'inconclusive') - Number(b.confidence === 'inconclusive'));
+    }
+    return rows;
+  }
+
+  function renderFindingsList() {
+    const shadow = siteAudit.shadow;
+    const all = siteAudit.rawFindingGroups || [];
+    const rows = fxVisibleGroups();
+    const audit = siteAudit.audit || {};
+    const counts = audit.urlCounts || {};
+    const fetched = Number(counts.fetched || 0);
+    const discovered = Object.values(counts).reduce((s, n) => s + Number(n || 0), 0);
+
+    let host = siteAudit.siteOrigin || '';
+    try { host = new URL(audit?.config?.startUrl || siteAudit.siteOrigin).hostname; } catch {}
+    shadow.querySelector('.fx-meta').textContent =
+      `${host} · ${auditProvenanceLine(audit).split(' · ').pop()} · evidence from ${fetched} fetched page${fetched === 1 ? '' : 's'}`;
+
+    const observations = all.reduce((n, g) => n + Number(g.instances || 0), 0);
+    const actionable = all.filter((g) => g.category === 'fix').reduce((n, g) => n + Number(g.instances || 0), 0);
+    shadow.querySelector('.fx-observations').textContent = fmtCount(observations);
+    shadow.querySelector('.fx-patterns').textContent = fmtCount(all.length);
+    shadow.querySelector('.fx-action').textContent = fmtCount(actionable);
+    shadow.querySelector('.fx-pages').textContent = String(fetched);
+    shadow.querySelector('.fx-pages-sub').textContent = discovered > fetched ? `of ${discovered}` : 'all discovered';
+
+    for (const btn of shadow.querySelectorAll('.lens')) btn.classList.toggle('active', btn.dataset.lens === (siteAudit.fxLens || 'priority'));
+    shadow.querySelector('.lens-state').textContent = SITE_AUDIT_LENSES[siteAudit.fxLens || 'priority'].note;
+    shadow.querySelector('.filter-state').textContent = `${rows.length} of ${all.length} pattern${all.length === 1 ? '' : 's'} shown`;
+    shadow.querySelector('.fx-foot-text').textContent =
+      `${observations} observation${observations === 1 ? '' : 's'} remain unchanged; this view groups them into ${all.length} inspectable issue pattern${all.length === 1 ? '' : 's'}.`;
+
+    renderFxTable(rows);
+    const selected = rows.find((g) => `${g.rule_id}::${g.confidence}` === siteAudit.fxSelected) || rows[0];
+    siteAudit.fxSelected = selected ? `${selected.rule_id}::${selected.confidence}` : null;
+    renderFxDetail(selected, rows.indexOf(selected));
+  }
+
+  function renderFxTable(rows) {
+    const shadow = siteAudit.shadow;
+    const head = shadow.querySelector('.fx-head-row');
+    const body = shadow.querySelector('.fx-body');
+    const cols = fxColumns();
+    head.innerHTML = '';
+    for (const col of cols) {
+      const th = document.createElement('th');
+      th.textContent = col.label;
+      if (col.id === 'evidence' || col.id === 'affected' || col.id === 'instances') th.className = 'col-status';
+      head.appendChild(th);
+    }
+    const page = rows.slice(siteAudit.fxOffset || 0, (siteAudit.fxOffset || 0) + SITE_AUDIT_FX_PAGE);
+    body.innerHTML = '';
+    if (!page.length) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = cols.length;
+      td.className = 'empty-row';
+      td.textContent = rows.length ? 'Nothing on this page.' : (siteAudit.rawFindingGroups || []).length ? 'No pattern matches these filters.' : 'No findings recorded yet.';
+      tr.appendChild(td);
+      body.appendChild(tr);
+    }
+    for (const g of page) {
+      const key = `${g.rule_id}::${g.confidence}`;
+      const tr = document.createElement('tr');
+      tr.className = `fx-row${key === siteAudit.fxSelected ? ' selected' : ''}`;
+      for (const col of cols) tr.appendChild(fxCell(col, g));
+      tr.addEventListener('click', () => { siteAudit.fxSelected = key; renderFindingsList(); });
+      body.appendChild(tr);
+    }
+    const total = rows.length;
+    const from = total ? (siteAudit.fxOffset || 0) + 1 : 0;
+    const to = Math.min(total, (siteAudit.fxOffset || 0) + SITE_AUDIT_FX_PAGE);
+    shadow.querySelector('.fx-label').textContent = total ? `Showing ${from}–${to} of ${total} issue pattern${total === 1 ? '' : 's'}` : '';
+    shadow.querySelector('.fx-prev').disabled = (siteAudit.fxOffset || 0) === 0;
+    shadow.querySelector('.fx-next').disabled = to >= total;
+  }
+
+  function fxCell(col, g) {
+    const td = document.createElement('td');
+    if (col.id === 'issue') {
+      const title = document.createElement('span');
+      title.className = 'fx-issue';
+      title.textContent = findingLabel(g);
+      const meta = document.createElement('span');
+      meta.className = 'fx-issue-meta';
+      const badge = document.createElement('span');
+      badge.className = `badge sev-${g.severity || 'info'}`;
+      badge.textContent = g.severity || 'info';
+      const where = document.createElement('span');
+      where.textContent = `${SITE_AUDIT_AREA_LABEL[disciplineOf(g.rule_id)] || ''} · ${g.instances} instance${g.instances === 1 ? '' : 's'}`;
+      meta.append(badge, where);
+      td.append(title, meta);
+      return td;
+    }
+    if (col.id === 'area') { td.textContent = SITE_AUDIT_AREA_LABEL[disciplineOf(g.rule_id)] || ''; return td; }
+    if (col.id === 'instances') { td.className = 'col-status'; td.textContent = String(g.instances); return td; }
+    if (col.id === 'rule') { td.className = 'mono'; td.textContent = g.rule_id; return td; }
+    if (col.id === 'affected') {
+      td.className = 'col-status';
+      const n = document.createElement('b');
+      n.textContent = String(g.affected_urls);
+      const word = document.createElement('span');
+      word.className = 'fx-pages-word';
+      word.textContent = g.affected_urls === 1 ? ' page' : ' pages';
+      td.append(n, word);
+      return td;
+    }
+    // Evidence
+    td.className = 'col-status';
+    const dot = document.createElement('span');
+    dot.className = `confidence-dot ${g.confidence || 'inferred'}`;
+    const label = document.createElement('span');
+    label.textContent = ` ${g.confidence || 'inferred'}`;
+    td.append(dot, label);
+    return td;
+  }
+
+  const SITE_AUDIT_FX_PAGE = 7;
+
+  /** The inspected pattern: what Lumen reads into it, what the scanner
+   * recorded, and the move it implies — each kept visibly separate. */
+  function renderFxDetail(group, index) {
+    const pane = siteAudit.shadow.querySelector('.fx-detail');
+    if (!pane) return;
+    pane.innerHTML = '';
+    if (!group) {
+      const empty = document.createElement('p');
+      empty.className = 'hint';
+      empty.textContent = 'Select an issue pattern to inspect its evidence.';
+      pane.appendChild(empty);
+      return;
+    }
+    const kicker = document.createElement('p');
+    kicker.className = 'fx-kicker';
+    kicker.textContent = (siteAudit.fxLens || 'priority') === 'priority' && index >= 0
+      ? `Lumen priority ${String(index + 1).padStart(2, '0')}`
+      : 'Issue pattern';
+    const h = document.createElement('h3');
+    h.className = 'fx-detail-title';
+    h.textContent = findingLabel(group);
+
+    const badges = document.createElement('div');
+    badges.className = 'brief-badges';
+    const sev = document.createElement('span');
+    sev.className = `badge sev-${group.severity || 'info'}`;
+    sev.textContent = group.severity || 'info';
+    const area = document.createElement('span');
+    area.className = 'state-chip';
+    area.textContent = SITE_AUDIT_AREA_LABEL[disciplineOf(group.rule_id)] || '';
+    const conf = document.createElement('span');
+    conf.className = 'signal-badge';
+    const established = group.confidence === 'confirmed' || group.confidence === 'corroborated';
+    conf.dataset.kind = established ? 'confirmed' : 'early';
+    conf.textContent = group.confidence || 'inferred';
+    badges.append(sev, area, conf);
+
+    const tabs = document.createElement('nav');
+    tabs.className = 'fx-tabs';
+    const active = siteAudit.fxTab || 'summary';
+    for (const [id, label] of [['summary', 'Summary'], ['instances', 'Instances'], ['guidance', 'Guidance']]) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `fx-tab${id === active ? ' active' : ''}`;
+      btn.textContent = label;
+      btn.addEventListener('click', () => { siteAudit.fxTab = id; renderFxDetail(group, index); });
+      tabs.appendChild(btn);
+    }
+    pane.append(kicker, h, badges, tabs);
+
+    const body = document.createElement('div');
+    body.className = 'fx-tab-body';
+    if (active === 'summary') fxSummaryTab(body, group);
+    else if (active === 'instances') fxInstancesTab(body, group);
+    else fxGuidanceTab(body, group);
+    pane.appendChild(body);
+  }
+
+  function fxSummaryTab(body, group) {
+    const label = document.createElement('span');
+    label.className = 'evidence-label';
+    label.textContent = 'Lumen interpretation';
+    const why = document.createElement('p');
+    why.className = 'brief-why';
+    const area = disciplineOf(group.rule_id);
+    const established = group.confidence === 'confirmed' || group.confidence === 'corroborated';
+    why.textContent = area === 'availability' && established
+      ? 'These are direct journey failures rather than optimisation warnings. A visitor following the link reaches a destination that independently returned an error, which is why this ranks ahead of metadata and hygiene.'
+      : established
+        ? `Independently established on ${group.affected_urls} page${group.affected_urls === 1 ? '' : 's'}. The evidence settles the question; what remains is the fix.`
+        : `Inferred from the static HTML on ${group.affected_urls} page${group.affected_urls === 1 ? '' : 's'}. JavaScript was not executed for this tier, so confirm on a rendered page before treating it as settled.`;
+
+    const box = document.createElement('div');
+    box.className = 'evidence-box';
+    const boxLabel = document.createElement('span');
+    boxLabel.className = 'evidence-label';
+    boxLabel.textContent = 'Scanner evidence';
+    const facts = document.createElement('dl');
+    facts.className = 'evidence-facts';
+    // Confidence is not repeated here: the badge states it two rows above, and
+    // breadth is the fact the badges cannot carry.
+    const fetched = fxFetchedPages();
+    for (const [k, v] of [['Findings', String(group.instances)], ['Pages', fetched ? `${group.affected_urls} of ${fetched}` : String(group.affected_urls)]]) {
+      const pair = document.createElement('div');
+      const dt = document.createElement('dt');
+      dt.textContent = k;
+      const dd = document.createElement('dd');
+      dd.textContent = v;
+      pair.append(dt, dd);
+      facts.appendChild(pair);
+    }
+    box.append(boxLabel, facts);
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    const view = document.createElement('button');
+    view.type = 'button';
+    view.className = 'btn primary';
+    view.textContent = `View ${group.instances} instance${group.instances === 1 ? '' : 's'}`;
+    view.addEventListener('click', () => { siteAudit.fxTab = 'instances'; renderFxDetail(group, -1); });
+    actions.appendChild(view);
+    body.append(label, why, box, actions);
+  }
+
+  function fxInstancesTab(body, group) {
+    const list = document.createElement('div');
+    list.className = 'fx-instances';
+    list.textContent = 'Loading affected pages…';
+    body.appendChild(list);
+    chrome.runtime.sendMessage({ type: 'SITE_AUDIT_FINDINGS', auditId: siteAudit.auditId, ruleId: group.rule_id, confidence: group.confidence, limit: 100 })
+      .then((r) => {
+        if (!siteAudit) return;
+        const rows = r?.findings || [];
+        list.innerHTML = '';
+        if (!rows.length) { list.textContent = 'No individual rows were returned for this pattern.'; return; }
+        const seen = new Set();
+        for (const row of rows) {
+          if (seen.has(row.url)) continue;
+          seen.add(row.url);
+          const a = document.createElement('a');
+          a.className = 'url-item';
+          a.href = row.url;
+          a.target = '_blank';
+          a.rel = 'noopener';
+          a.textContent = shortUrl(row.url);
+          a.title = row.url;
+          list.appendChild(a);
+        }
+        const note = document.createElement('p');
+        note.className = 'hint';
+        note.textContent = `${seen.size} page${seen.size === 1 ? '' : 's'} carry this pattern.`;
+        list.appendChild(note);
+      })
+      .catch(() => { list.textContent = 'Those rows could not be read just now.'; });
+  }
+
+  /** How many pages the audit actually fetched — the denominator every
+   * breadth statement in the detail pane is measured against. */
+  function fxFetchedPages() {
+    return Number((siteAudit.audit || {}).urlCounts?.fetched || 0);
+  }
+
+  function fxGuidanceTab(body, group) {
+    const label = document.createElement('span');
+    label.className = 'evidence-label';
+    label.textContent = 'Recommended next move';
+    const p = document.createElement('p');
+    p.className = 'brief-why';
+    // Composed by the gateway from one shared lookup, so this and the exported
+    // client report never recommend different things for the same rule.
+    p.textContent = group.guidance || 'Review the affected pages and apply the fix implied by the finding.';
+
+    // A fix instruction on its own does not tell an operator how large the job
+    // is. These three facts are the scanner's own, and they size the work.
+    const box = document.createElement('div');
+    box.className = 'evidence-box';
+    const boxLabel = document.createElement('span');
+    boxLabel.className = 'evidence-label';
+    boxLabel.textContent = 'Scope of this fix';
+    const facts = document.createElement('dl');
+    facts.className = 'evidence-facts';
+    const fetched = fxFetchedPages();
+    const pairs = [
+      ['Places to change', String(group.instances)],
+      ['Pages', fetched ? `${group.affected_urls} of ${fetched}` : String(group.affected_urls)],
+      ['Area', SITE_AUDIT_AREA_LABEL[disciplineOf(group.rule_id)] || 'Other']
+    ];
+    for (const [k, v] of pairs) {
+      const pair = document.createElement('div');
+      const dt = document.createElement('dt');
+      dt.textContent = k;
+      const dd = document.createElement('dd');
+      dd.textContent = v;
+      pair.append(dt, dd);
+      facts.appendChild(pair);
+    }
+    box.append(boxLabel, facts);
+
+    const checkLabel = document.createElement('span');
+    checkLabel.className = 'evidence-label';
+    checkLabel.textContent = 'Confirming the fix';
+    const check = document.createElement('p');
+    check.className = 'brief-why';
+    const established = group.confidence === 'confirmed' || group.confidence === 'corroborated';
+    check.textContent = established
+      ? 'Re-run the audit after the change ships. The pattern clears when the rule below stops matching on those pages.'
+      : 'Re-run the audit after the change ships. This pattern was not independently confirmed, so check one affected page directly as well.';
+
+    const ruleLabel = document.createElement('span');
+    ruleLabel.className = 'evidence-label';
+    ruleLabel.textContent = 'Technical evidence';
+    const rule = document.createElement('p');
+    rule.className = 'detail-rule';
+    const code = document.createElement('code');
+    code.textContent = group.rule_id;
+    rule.append(document.createTextNode('Rule '), code);
+    body.append(label, p, box, checkLabel, check, ruleLabel, rule);
+  }
+
+  /** The column chooser. Three columns are fixed because without them a row
+   * cannot be read at all. */
+  function renderColumnsMenu() {
+    const shadow = siteAudit.shadow;
+    const menu = shadow.querySelector('.columns-menu');
+    if (!menu) return;
+    menu.innerHTML = '';
+    const title = document.createElement('p');
+    title.className = 'columns-title';
+    title.textContent = 'Columns';
+    menu.appendChild(title);
+    for (const col of SITE_AUDIT_FX_COLUMNS) {
+      const row = document.createElement('label');
+      row.className = 'columns-row';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = col.fixed || (siteAudit.fxColumns || []).includes(col.id);
+      input.disabled = Boolean(col.fixed);
+      input.addEventListener('change', () => {
+        const chosen = new Set(siteAudit.fxColumns || []);
+        if (input.checked) chosen.add(col.id); else chosen.delete(col.id);
+        siteAudit.fxColumns = [...chosen];
+        renderFindingsList();
+      });
+      const text = document.createElement('span');
+      text.textContent = col.label + (col.fixed ? ' (always shown)' : '');
+      row.append(input, text);
+      menu.appendChild(row);
+    }
+  }
+
+  /** Export exactly the rows the filters left on screen. */
+  async function exportCurrentView() {
+    const rows = fxVisibleGroups();
+    if (!rows.length) return;
+    const ruleIds = [...new Set(rows.map((g) => g.rule_id))].slice(0, 200).join(',');
+    return exportSiteAudit('findings', ruleIds);
   }
 
   /**
@@ -5021,13 +5533,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     }
   }
 
-  function renderFilterState(shown, total) {
-    const shadow = siteAudit.shadow;
-    const active = Boolean(siteAudit.findingsSearch || siteAudit.findingsCategory || siteAudit.findingsImpactClass || siteAudit.findingsHideUnconfirmed);
-    shadow.querySelector('.chip-clear').hidden = !active;
-    shadow.querySelector('.filter-state').textContent = active ? `Showing ${shown} of ${total} issue types` : '';
-  }
-
   function clearFindingFilters() {
     siteAudit.findingsSearch = '';
     siteAudit.findingsCategory = '';
@@ -5037,7 +5542,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     shadow.querySelector('.findings-search').value = '';
     shadow.querySelector('.findings-category').value = '';
     shadow.querySelector('.findings-impact').value = '';
-    shadow.querySelector('.findings-hide-unconfirmed').checked = false;
+    shadow.querySelector('.findings-evidence').value = '';
     renderImpactFilter(siteAudit.rawFindingGroups || []);
     renderFindingsList();
   }
@@ -5590,8 +6095,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     }
   }
 
-  async function exportSiteAudit(dataset) {
-    const r = await chrome.runtime.sendMessage({ type: 'SITE_AUDIT_EXPORT', auditId: siteAudit.auditId, dataset }).catch((error) => ({ ok: false, error: error?.message }));
+  async function exportSiteAudit(dataset, ruleIds) {
+    const r = await chrome.runtime.sendMessage({ type: 'SITE_AUDIT_EXPORT', auditId: siteAudit.auditId, dataset, ...(ruleIds ? { ruleIds } : {}) }).catch((error) => ({ ok: false, error: error?.message }));
     if (!r?.ok) return;
     const blob = new Blob([r.text], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);

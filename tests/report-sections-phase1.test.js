@@ -75,8 +75,8 @@ test('the disciplines survive the nav change as the Findings area filter', () =>
   const filter = overlay.match(/function renderImpactFilter\(groups\)[\s\S]*?\n  \}/);
   assert.ok(filter, 'the area filter should exist');
   assert.match(filter[0], /disciplineOf\(g\.rule_id\)/, 'areas are disciplines, not impact classes');
-  // And the list it filters agrees with it.
-  assert.match(overlay, /!impactClass \|\| disciplineOf\(g\.rule_id\) === impactClass/);
+  // And the pattern list it filters agrees with it.
+  assert.match(overlay, /!area \|\| disciplineOf\(g\.rule_id\) === area/, 'the pattern list filters by the same map');
 });
 
 test('availability leads the areas and accessibility does not', () => {
@@ -411,10 +411,16 @@ test('a discipline section paints into its own container, not the Overview chart
   assert.doesNotMatch(render, /querySelector\('\.section-grid'\)/);
 });
 
-test('the findings row component is shared, so a section and the list agree', () => {
+test('the shared finding-row component still serves every list that uses rows', () => {
+  // Findings became a pattern table with its own detail pane, so it no longer
+  // uses the row component. Everything that still renders rows — each
+  // discipline section, and the browser-checks view — shares one, so an
+  // operator who has learned to read a finding row meets the same one.
   assert.match(overlay, /function renderFindingRowsInto\(list, groups, emptyText\)/);
-  const list = overlay.match(/  function renderFindingsList\(\)[\s\S]*?\n  \}/)[0];
-  assert.match(list, /renderFindingRowsInto\(list, groups/);
-  const section = overlay.match(/  function renderDisciplineSection\(id\)[\s\S]*?\n  \}/)[0];
-  assert.match(section, /renderFindingRowsInto\(/);
+  const section = overlay.match(/ {2}function renderDisciplineSection\(id\)[\s\S]*?\n {2}\}/);
+  assert.ok(section, 'renderDisciplineSection should exist');
+  assert.match(section[0], /renderFindingRowsInto\(/);
+  const browser = overlay.match(/ {2}function renderBrowserChecks\(\)[\s\S]*?\n {2}\}/);
+  assert.ok(browser, 'renderBrowserChecks should exist');
+  assert.match(browser[0], /renderFindingRowsInto\(/);
 });
