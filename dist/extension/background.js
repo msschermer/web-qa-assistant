@@ -148,7 +148,15 @@ function requestId(operation='REQ'){return `WQA-${operation}-${Date.now().toStri
 function failurePayload(error, operation='UNKNOWN'){
   const raw=String(error?.message||error||'Unknown extension error'),stack=typeof error?.stack==='string'?error.stack.slice(0,5000):'',id=`WQA-${diagnosticHash(`${operation}|${raw}|${stack.split('\n')[1]||''}`)}`;
   let message='The extension could not complete this action.';
-  if(/Page access expired|Cannot access|Missing host permission|activeTab/i.test(raw))message='Page access expired. Click the Lumen toolbar icon on this page, then try again.';
+  // gatewayRequest tries every candidate root and throws their failures joined
+  // together, so the two ways "no gateway" happens are both distinguishable
+  // here and were both collapsing into the generic message below. They need
+  // different actions from the operator, and the generic message named neither:
+  // a Site Audit against a gateway predating the feature reported only "The
+  // extension could not complete this action."
+  if(/Unknown API route|invalid JSON response \(HTTP 404\)/i.test(raw))message='A gateway answered but does not provide this feature — it is running an older version than this extension. Point Lumen at an up-to-date gateway in its settings.';
+  else if(/Failed to fetch|NetworkError|ERR_CONNECTION|No assistant gateway is available/i.test(raw))message='No assistant gateway could be reached. Start the gateway, or set its URL in Lumen\u2019s settings.';
+  else if(/Page access expired|Cannot access|Missing host permission|activeTab/i.test(raw))message='Page access expired. Click the Lumen toolbar icon on this page, then try again.';
   else if(/cannot be inspected|normal HTTP or HTTPS/i.test(raw))message='This browser page cannot be inspected. Open a normal HTTP or HTTPS page.';
   else if(/timed out|timeout/i.test(raw))message='The action timed out before it completed.';
   else if(/no longer available|No active browser tab/i.test(raw))message='The inspected browser tab is no longer available.';

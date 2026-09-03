@@ -331,3 +331,25 @@ test('a configured custom gateway is authoritative rather than silently falling 
   assert.match(bg,/if\(s\.apiBase\)return\[s\.apiBase\.replace/);
   assert.match(bg,/\[401,403\]\.includes/);
 });
+
+test('an unreachable or out-of-date gateway names its own cause, not a generic failure',()=>{
+  // Reported symptom: after reinstalling the extension (which clears the
+  // stored gateway URL), Start audit failed with only "The extension could not
+  // complete this action." The real condition was knowable and had a specific
+  // remedy — localhost was down and the fallback gateway predates /api/audits,
+  // answering "Unknown API route." Two conditions, two different actions, and
+  // the generic message named neither.
+  const bg=read('apps/extension/background.js');
+  const payload=bg.match(/function failurePayload\([\s\S]*?\n\}/);
+  assert.ok(payload,'failurePayload should exist');
+  const body=payload[0];
+  // A gateway that answers but lacks the route is a version problem.
+  assert.match(body,/Unknown API route/);
+  assert.match(body,/older version/);
+  // Nothing answering at all is a "start it or configure it" problem.
+  assert.match(body,/Failed to fetch/);
+  assert.match(body,/No assistant gateway could be reached/);
+  // Both branches must be tested before the generic fallback can win.
+  const generic=body.indexOf('could not complete this action');
+  assert.ok(generic>0&&generic<body.indexOf('Unknown API route'),'the generic message stays the default, overridden by the specific branches');
+});
