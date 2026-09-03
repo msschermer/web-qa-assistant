@@ -498,6 +498,13 @@ if (!/local-ai\.js/.test(fs.readFileSync('scripts/build-extension.mjs','utf8')))
     bad++;
     console.error('build regression: the Lumen palette must be injected into the Site Audit overlay');
   }
+  // The discipline taxonomy has one definition for the same reason the palette
+  // does: the overlay and the exported client report must file a finding under
+  // the same discipline, or the document contradicts the screen.
+  if (!/disciplines\.js/.test(extBuild) || !/function lumenDisciplineRules\(\) \{/.test(fs.readFileSync('apps/extension/content.js','utf8'))) {
+    bad++;
+    console.error('build regression: the discipline taxonomy must be injected into the Site Audit overlay from packages/findings/disciplines.js');
+  }
   // No surface may name a colour tokens.css already names. Only the overlay is
   // checked by value here because it is the one that cannot link the sheet.
   const overlay = fs.readFileSync('apps/extension/content.js','utf8');

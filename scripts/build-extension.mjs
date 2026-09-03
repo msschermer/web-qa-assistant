@@ -44,6 +44,17 @@ buildLumenCss({
   if(next===content)throw new Error('Failed to inject the Lumen palette into content.js');
   fs.writeFileSync(contentPath,next);
 }
+{
+  // Same reason as the palette: the overlay and the exported client report
+  // must file a finding under the same discipline, and a second copy of the
+  // taxonomy is how they started disagreeing.
+  const {DISCIPLINE_RULES}=await import('../packages/findings/disciplines.js');
+  const contentPath=path.join(out,'content.js');
+  const content=fs.readFileSync(contentPath,'utf8');
+  const next=content.replace(/function lumenDisciplineRules\(\) \{[\s\S]*?\n  \}/,`function lumenDisciplineRules() {\n    return ${JSON.stringify(DISCIPLINE_RULES)};\n  }`);
+  if(next===content)throw new Error('Failed to inject the Lumen discipline taxonomy into content.js');
+  fs.writeFileSync(contentPath,next);
+}
 const localAiSource=fs.readFileSync(path.join(src,'local-ai.js'),'utf8')
   .replaceAll('../../packages/findings/evidence-ledger.js','./evidence-ledger.js')
   .replaceAll('../../packages/findings/guidance-composition.js','./guidance-composition.js');

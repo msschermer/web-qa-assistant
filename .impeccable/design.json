@@ -1,0 +1,657 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-02T23:15:18.420Z",
+  "title": "Design System: Lumen",
+  "extensions": {
+    "colorMeta": {
+      "canvas": {
+        "role": "neutral",
+        "displayName": "App Canvas",
+        "canonical": "#F6F7F9",
+        "tonalRamp": [
+          "#16181C",
+          "#25282D",
+          "#3A3E45",
+          "#585D66",
+          "#868C96",
+          "#B4B9C1",
+          "#F6F7F9",
+          "#FCFCFD"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Card White",
+        "canonical": "#FFFFFF",
+        "tonalRamp": [
+          "#171717",
+          "#262626",
+          "#3D3D3D",
+          "#5C5C5C",
+          "#8A8A8A",
+          "#B8B8B8",
+          "#EDEDED",
+          "#FFFFFF"
+        ]
+      },
+      "sunken": {
+        "role": "neutral",
+        "displayName": "Sunken",
+        "canonical": "#F9FAFB",
+        "tonalRamp": [
+          "#17181A",
+          "#26282B",
+          "#3E4045",
+          "#5D6067",
+          "#8B8F98",
+          "#B9BDC5",
+          "#F9FAFB",
+          "#FDFDFE"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#101828",
+        "tonalRamp": [
+          "#050810",
+          "#0A0F1B",
+          "#101828",
+          "#1E2B45",
+          "#33456A",
+          "#5A6C93",
+          "#93A1BF",
+          "#D3DAE8"
+        ]
+      },
+      "ink-soft": {
+        "role": "neutral",
+        "displayName": "Ink Soft",
+        "canonical": "#475467",
+        "tonalRamp": [
+          "#0D1015",
+          "#171C24",
+          "#252D3A",
+          "#354152",
+          "#475467",
+          "#6E7C90",
+          "#A2ADBD",
+          "#D8DEE6"
+        ]
+      },
+      "ink-faint": {
+        "role": "neutral",
+        "displayName": "Ink Faint",
+        "canonical": "#667085",
+        "tonalRamp": [
+          "#12141A",
+          "#1E222B",
+          "#2F3540",
+          "#454C5B",
+          "#5A6274",
+          "#667085",
+          "#9AA2B2",
+          "#D5D9E1"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#EAECF0",
+        "tonalRamp": [
+          "#171819",
+          "#26282B",
+          "#3D4046",
+          "#5C6068",
+          "#8A8F99",
+          "#B8BDC6",
+          "#EAECF0",
+          "#F8F9FB"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Hairline Strong",
+        "canonical": "#D0D5DD",
+        "tonalRamp": [
+          "#15171A",
+          "#23262C",
+          "#383D46",
+          "#565D69",
+          "#828A99",
+          "#AFB7C4",
+          "#D0D5DD",
+          "#F0F2F5"
+        ]
+      },
+      "brand": {
+        "role": "primary",
+        "displayName": "Indigo",
+        "canonical": "#4F46E5",
+        "tonalRamp": [
+          "#1B1650",
+          "#241D6B",
+          "#2F2690",
+          "#3B31B5",
+          "#4338CA",
+          "#4F46E5",
+          "#A5A0F2",
+          "#EEF2FF"
+        ]
+      },
+      "brand-strong": {
+        "role": "primary",
+        "displayName": "Indigo Deep",
+        "canonical": "#4338CA",
+        "tonalRamp": [
+          "#171247",
+          "#1F1861",
+          "#282083",
+          "#3229A5",
+          "#4338CA",
+          "#6A5FE0",
+          "#A79FEE",
+          "#E6E3FB"
+        ]
+      },
+      "brand-soft": {
+        "role": "primary",
+        "displayName": "Indigo Wash",
+        "canonical": "#EEF2FF",
+        "tonalRamp": [
+          "#181A2B",
+          "#262A46",
+          "#3B4169",
+          "#59618F",
+          "#8890BC",
+          "#B7BDDD",
+          "#EEF2FF",
+          "#F8FAFF"
+        ]
+      },
+      "brand-line": {
+        "role": "primary",
+        "displayName": "Indigo Hairline",
+        "canonical": "#C7D2FE",
+        "tonalRamp": [
+          "#161A33",
+          "#232A52",
+          "#354078",
+          "#4F5EA0",
+          "#7D8AC4",
+          "#A5B0E2",
+          "#C7D2FE",
+          "#EBEFFE"
+        ]
+      },
+      "critical": {
+        "role": "tertiary",
+        "displayName": "Critical Text",
+        "canonical": "#B42318",
+        "tonalRamp": [
+          "#2E0906",
+          "#4A0F0A",
+          "#6C1710",
+          "#912018",
+          "#B42318",
+          "#DA4A3D",
+          "#EE8B82",
+          "#FEF3F2"
+        ]
+      },
+      "warn": {
+        "role": "tertiary",
+        "displayName": "Warn Text",
+        "canonical": "#B54708",
+        "tonalRamp": [
+          "#2C1102",
+          "#471B04",
+          "#6B2905",
+          "#933907",
+          "#B54708",
+          "#DC6803",
+          "#F79009",
+          "#FFFAEB"
+        ]
+      },
+      "ok": {
+        "role": "tertiary",
+        "displayName": "OK Text",
+        "canonical": "#067647",
+        "tonalRamp": [
+          "#02180F",
+          "#03281A",
+          "#044026",
+          "#055B34",
+          "#067647",
+          "#22A06A",
+          "#6FCFA1",
+          "#ECFDF3"
+        ]
+      },
+      "sev-critical": {
+        "role": "tertiary",
+        "displayName": "Severity Critical",
+        "canonical": "#912018",
+        "tonalRamp": [
+          "#260806",
+          "#3D0D0A",
+          "#5A140F",
+          "#761A13",
+          "#912018",
+          "#B93A30",
+          "#DC7F78",
+          "#F8DCDA"
+        ]
+      },
+      "sev-high": {
+        "role": "tertiary",
+        "displayName": "Severity High",
+        "canonical": "#D92D20",
+        "tonalRamp": [
+          "#320A07",
+          "#50100B",
+          "#761811",
+          "#A82219",
+          "#D92D20",
+          "#E96257",
+          "#F29A93",
+          "#FDE0DD"
+        ]
+      },
+      "sev-medium": {
+        "role": "tertiary",
+        "displayName": "Severity Medium",
+        "canonical": "#DC6803",
+        "tonalRamp": [
+          "#331802",
+          "#512603",
+          "#783804",
+          "#AA4F05",
+          "#DC6803",
+          "#F08B22",
+          "#F6B472",
+          "#FDE7CC"
+        ]
+      },
+      "sev-low": {
+        "role": "tertiary",
+        "displayName": "Severity Low",
+        "canonical": "#F79009",
+        "tonalRamp": [
+          "#3A2102",
+          "#5B3403",
+          "#864C04",
+          "#B96905",
+          "#E68407",
+          "#F79009",
+          "#FAB759",
+          "#FEEBCB"
+        ]
+      },
+      "sev-info": {
+        "role": "neutral",
+        "displayName": "Severity Info",
+        "canonical": "#667085",
+        "tonalRamp": [
+          "#12141A",
+          "#1E222B",
+          "#2F3540",
+          "#454C5B",
+          "#5A6274",
+          "#667085",
+          "#9AA2B2",
+          "#F2F4F7"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Stat-tile figures. The largest type in the product is a number; always tabular."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The page title in the main column; drops to 19px below 900px."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card heads, section headings, finding titles, button labels."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Lede and descriptive copy, capped at 76-84ch."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Counts, hints, table heads, deliver labels, foot notes."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "The only uppercase role: 11px navigation and section micro-labels."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "URLs, selectors, coverage detail, evidence values."
+      }
+    },
+    "shadows": [
+      {
+        "name": "ambient",
+        "value": "0 1px 2px rgba(16,24,40,.06)",
+        "purpose": "Default lift for cards, stat tiles, buttons, chips, inputs, panels."
+      },
+      {
+        "name": "raised",
+        "value": "0 1px 3px rgba(16,24,40,.10),0 1px 2px rgba(16,24,40,.06)",
+        "purpose": "The marginally lifted step above ambient."
+      },
+      {
+        "name": "floating",
+        "value": "0 24px 48px -12px rgba(16,24,40,.18)",
+        "purpose": "Fixed overlay workspace and modal shells only."
+      },
+      {
+        "name": "coach-card",
+        "value": "0 22px 56px rgba(16,33,51,.28),0 3px 10px rgba(16,33,51,.1)",
+        "purpose": "The injected walkthrough card, which must read above an unknown host page."
+      },
+      {
+        "name": "spotlight",
+        "value": "0 0 0 99999px rgba(16,24,40,.62),0 0 0 5px rgba(79,70,229,.34)",
+        "purpose": "Coach element spotlight: full-viewport scrim punched by a white ring and a 5px indigo ring. The ring is meaning; there is no wide bloom behind it."
+      },
+      {
+        "name": "severity-rail",
+        "value": "inset 3px 0 0 var(--wqa-sev-high),0 1px 2px rgba(16,24,40,.06)",
+        "purpose": "Severity carried as a 3px inset rail on the leading edge of a finding card."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control",
+        "value": "background .12s ease, border-color .12s ease",
+        "purpose": "Button, chip and ledger-cell state changes."
+      },
+      {
+        "name": "disclosure",
+        "value": "transform .15s ease",
+        "purpose": "Chevron and details-marker rotation on expand."
+      },
+      {
+        "name": "progress",
+        "value": "width .3s ease",
+        "purpose": "Crawl progress fill; .18s in the coach and panel rails."
+      },
+      {
+        "name": "spotlight",
+        "value": "top .16s ease, left .16s ease, width .16s ease, height .16s ease",
+        "purpose": "Coach spotlight travelling between elements."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "@media(prefers-reduced-motion:reduce){transition:none}",
+        "purpose": "Every animated surface disables its transition; honoured in overlay, panel, coach and web."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "panel-tight",
+        "value": "340px"
+      },
+      {
+        "name": "panel-narrow",
+        "value": "360px"
+      },
+      {
+        "name": "web-stack",
+        "value": "640px"
+      },
+      {
+        "name": "web-single",
+        "value": "860px"
+      },
+      {
+        "name": "overlay-fold",
+        "value": "900px"
+      }
+    ],
+    "surfaceTargets": [
+      {
+        "name": "Site Audit overlay",
+        "source": "apps/extension/content.js siteAuditCss()",
+        "note": "Fullest expression: 216px left nav, scrolling main, stat tiles, conditions readout, findings, tables, coverage, deliver."
+      },
+      {
+        "name": "Side panel",
+        "source": "apps/extension/sidepanel.css",
+        "note": "Same system at 300-420px: 14px gutters, 12-14.5px type."
+      },
+      {
+        "name": "Public scanner",
+        "source": "packages/ui/web.css",
+        "note": "1440px sheet, 230px left title block, single column at 860px. Being a first-party page, it fetches Inter from Google Fonts with preconnect and display=swap."
+      },
+      {
+        "name": "Walkthrough coach",
+        "source": "packages/ui/coach.css and frankCss()",
+        "note": "Injected 468px card plus spotlight; same Inter and mono stacks as tokens.css, never fetched - it must render under a host page CSP we do not control."
+      },
+      {
+        "name": "Exported client report",
+        "source": "packages/crawl/report.js",
+        "note": "Tokens and the Inter/mono stacks written longhand on purpose so the file survives email and file:// - do not replace with an import of tokens.css. Underline tabs, stat tiles, sentence-case conditions table, plain hairlined priority list."
+      }
+    ],
+    "knownGaps": [
+      "Only three of the four confidence levels have a drawn dot: confirmed, inferred and inconclusive. corroborated has none.",
+      "--wqa-violet and --wqa-violet-soft are aliases of the primary and carry no distinct role.",
+      "--wqa-surface-raised duplicates --wqa-surface and is unused; it is deliberately omitted from the token table.",
+      "A 'Lumen Draw' @font-face is still declared by the overlay and panel, but --wqa-draw is aliased to --wqa-sans and nothing uses the face."
+    ],
+    "sanctioned": [
+      "The 3px inset severity rail on finding cards. Automated craft detectors read it as a side tab; that reading is wrong here - the rail is how severity stays legible without colour-coding the whole card.",
+      "The 45-degree coverage hatch (repeating stripes gradient). It is how 'not surveyed' stays visually distinct from 'broken'."
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single primary action on a surface; indigo fill, never used for a destructive action.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Start audit</button>",
+      "css": ".ds-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:8px 14px;border:1px solid #D0D5DD;border-radius:6px;background:#FFFFFF;color:#101828;font:600 13.5px/1.2 'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.06);transition:background .12s ease,border-color .12s ease}.ds-btn-primary{background:#4F46E5;border-color:#4F46E5;color:#fff}.ds-btn-primary:hover{background:#4338CA;border-color:#4338CA}.ds-btn-primary:focus-visible{outline:2px solid #4F46E5;outline-offset:1px}.ds-btn-primary:active{background:#3C32B8}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The default control: white on canvas with a hairline-strong border.",
+      "html": "<button class=\"ds-btn-secondary\">Export report</button>",
+      "css": ".ds-btn-secondary{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:8px 14px;border:1px solid #D0D5DD;border-radius:6px;background:#FFFFFF;color:#101828;font:600 13.5px/1.2 'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.06);transition:background .12s ease,border-color .12s ease}.ds-btn-secondary:hover{background:#F9FAFB}.ds-btn-secondary:focus-visible{outline:2px solid #4F46E5;outline-offset:1px}.ds-btn-secondary:disabled{opacity:.5;cursor:default}"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Toolbar search and form fields; focus adds the indigo ring and shifts the border.",
+      "html": "<input class=\"ds-input\" type=\"search\" placeholder=\"Filter findings\" />",
+      "css": ".ds-input{width:260px;padding:9px 12px;border:1px solid #D0D5DD;border-radius:6px;background:#FFFFFF;color:#101828;font:400 13.5px/1.5 'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;box-shadow:0 1px 2px rgba(16,24,40,.06)}.ds-input::placeholder{color:#667085}.ds-input:hover{border-color:#B9BFC9}.ds-input:focus-visible{outline:2px solid #4F46E5;outline-offset:1px;border-color:#4F46E5}"
+    },
+    {
+      "name": "Side Navigation",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "The 216px left navigation of the Site Audit overlay: section label, tabs with counts, active tab on the indigo wash.",
+      "html": "<nav class=\"ds-sidenav\"><p class=\"ds-nav-label\">Sections</p><div class=\"ds-tabs\"><button class=\"ds-tab is-active\">Overview<span class=\"ds-tab-count\">12</span></button><button class=\"ds-tab\">Links<span class=\"ds-tab-count\">37</span></button><button class=\"ds-tab\">SEO<span class=\"ds-tab-count\">8</span></button></div></nav>",
+      "css": ".ds-sidenav{width:216px;padding:14px 12px;background:#FFFFFF;border-right:1px solid #EAECF0;font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}.ds-nav-label{margin:0 0 8px;padding:0 8px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#667085}.ds-tabs{display:flex;flex-direction:column;gap:2px}.ds-tab{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;padding:8px 10px;border-radius:6px;font-size:13.5px;font-weight:500;color:#475467;text-align:left;cursor:pointer}.ds-tab:hover{background:#F9FAFB;color:#101828}.ds-tab:focus-visible{outline:2px solid #4F46E5;outline-offset:1px}.ds-tab.is-active{background:#EEF2FF;color:#4F46E5;font-weight:600}.ds-tab-count{margin-left:auto;padding:1px 7px;border-radius:999px;background:#F9FAFB;font-size:11.5px;font-weight:600;color:#667085;font-variant-numeric:tabular-nums}.ds-tab.is-active .ds-tab-count{background:#fff;color:#4F46E5}"
+    },
+    {
+      "name": "Severity Badge",
+      "kind": "chip",
+      "refersTo": "badge-severity-high",
+      "description": "Severity as a pill. Critical is the only solid fill; the rest are semantic wash plus a tinted border.",
+      "html": "<span class=\"ds-badge ds-badge-critical\">Critical</span> <span class=\"ds-badge ds-badge-high\">High</span> <span class=\"ds-badge ds-badge-medium\">Medium</span> <span class=\"ds-badge ds-badge-info\">Info</span>",
+      "css": ".ds-badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;border:1px solid transparent;font:600 11.5px/1.6 'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;text-transform:capitalize}.ds-badge-critical{background:#912018;color:#fff}.ds-badge-high{background:#FEF3F2;color:#D92D20;border-color:#FECDCA}.ds-badge-medium{background:#FFFAEB;color:#DC6803;border-color:#FEDF89}.ds-badge-info{background:#F2F4F7;color:#667085;border-color:#D0D5DD}"
+    },
+    {
+      "name": "Finding Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The core result unit: severity as a 3px inset leading rail, a toggle header with title, meta and confidence dot.",
+      "html": "<article class=\"ds-finding ds-finding-high\"><button class=\"ds-finding-toggle\"><span class=\"ds-finding-top\"><b class=\"ds-finding-title\">37 links return 404</b><span class=\"ds-finding-conf\"><i class=\"ds-dot ds-dot-confirmed\"></i>Confirmed</span></span><span class=\"ds-finding-meta\">Links &middot; 12 pages affected<span class=\"ds-chev\">&#8250;</span></span></button></article>",
+      "css": ".ds-finding{background:#FFFFFF;border:1px solid #EAECF0;border-radius:8px;overflow:hidden;font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}.ds-finding-high{box-shadow:inset 3px 0 0 #D92D20,0 1px 2px rgba(16,24,40,.06)}.ds-finding:hover{border-color:#D0D5DD}.ds-finding-toggle{display:block;width:100%;text-align:left;background:transparent;border:0;padding:12px 14px;font:inherit;color:inherit;cursor:pointer}.ds-finding-toggle:hover{background:#F9FAFB}.ds-finding-toggle:focus-visible{outline:2px solid #4F46E5;outline-offset:-2px}.ds-finding-top{display:flex;align-items:center;gap:10px;margin-bottom:4px}.ds-finding-title{font-size:14px;font-weight:600;color:#101828}.ds-finding-conf{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:#667085}.ds-dot{display:inline-block;width:8px;height:8px;border-radius:50%}.ds-dot-confirmed{background:#067647}.ds-finding-meta{display:flex;align-items:center;gap:10px;font-size:12.5px;color:#667085}.ds-chev{margin-left:auto;color:#667085;font-size:15px;transition:transform .15s ease}"
+    },
+    {
+      "name": "Stat Tile",
+      "kind": "card",
+      "refersTo": "stat-tile",
+      "description": "Overview metric: faint label over a 26px tabular figure with an optional sub-line.",
+      "html": "<dl class=\"ds-stat\"><dt>Pages crawled</dt><dd>142<span class=\"ds-stat-sub\">of 300 permitted</span></dd></dl>",
+      "css": ".ds-stat{margin:0;padding:14px 16px;background:#FFFFFF;border:1px solid #EAECF0;border-radius:8px;box-shadow:0 1px 2px rgba(16,24,40,.06);font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}.ds-stat dt{margin:0 0 6px;font-size:12.5px;font-weight:500;color:#667085}.ds-stat dd{margin:0;font-size:26px;font-weight:650;letter-spacing:-.02em;line-height:1.1;color:#101828;font-variant-numeric:tabular-nums}.ds-stat-sub{display:block;margin-top:5px;font-size:12px;line-height:1.4;font-weight:400;letter-spacing:0;color:#667085}"
+    },
+    {
+      "name": "Site Conditions Row",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "The no-score readout: state mark, item, what was observed, and a state pill. 'Not established' is a dashed ring, never a failure colour.",
+      "html": "<ul class=\"ds-conditions\"><li class=\"ds-cond\" data-state=\"ok\"><span class=\"ds-cond-mark\"></span><span class=\"ds-cond-label\">Indexability</span><span class=\"ds-cond-headline\">No noindex found on any crawled page</span><span class=\"ds-cond-state\">Observed</span></li><li class=\"ds-cond\" data-state=\"unknown\"><span class=\"ds-cond-mark\"></span><span class=\"ds-cond-label\">Accessibility</span><span class=\"ds-cond-headline\">Not surveyed &mdash; render pass not run</span><span class=\"ds-cond-state\">Not established</span></li></ul>",
+      "css": ".ds-conditions{list-style:none;margin:0;padding:0;background:#FFFFFF;border:1px solid #EAECF0;border-radius:8px;box-shadow:0 1px 2px rgba(16,24,40,.06);overflow:hidden;font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}.ds-cond{display:grid;grid-template-columns:22px 150px minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px 16px;border-top:1px solid #EAECF0}.ds-cond:first-child{border-top:0}.ds-cond:hover{background:#F9FAFB}.ds-cond-mark{position:relative;width:18px;height:18px;border-radius:50%;background:#F2F4F7;border:1px solid #D0D5DD}.ds-cond-mark::after{content:\"\";position:absolute;inset:5px;border-radius:50%;background:#667085}.ds-cond[data-state=\"ok\"] .ds-cond-mark{background:#ECFDF3;border-color:#ABEFC6}.ds-cond[data-state=\"ok\"] .ds-cond-mark::after{background:#067647}.ds-cond[data-state=\"unknown\"] .ds-cond-mark::after{inset:3px;background:transparent;border:2px dashed #667085}.ds-cond-label{font-size:13px;font-weight:600;color:#101828}.ds-cond-headline{font-size:13px;color:#475467}.ds-cond-state{padding:3px 10px;border-radius:999px;background:#F9FAFB;font-size:11.5px;font-weight:600;color:#667085;white-space:nowrap}.ds-cond[data-state=\"ok\"] .ds-cond-state{background:#ECFDF3;color:#067647}"
+    },
+    {
+      "name": "Coverage Plan Bar",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Surveyed as a solid indigo fill, unsurveyed as the 45-degree hatch. Not knowing is not the same as being broken.",
+      "html": "<div class=\"ds-cov\"><span class=\"ds-cov-surveyed\" style=\"width:64%\"></span><span class=\"ds-cov-unsurveyed\"></span></div><p class=\"ds-cov-note\"><b>142 of 221</b> discovered pages surveyed. The hatched remainder was not checked.</p>",
+      "css": ".ds-cov{display:flex;height:10px;border-radius:999px;overflow:hidden;background:#F2F4F7;margin:0 0 12px}.ds-cov-surveyed{background:#4F46E5}.ds-cov-unsurveyed{flex:1 1 auto;background-image:repeating-linear-gradient(45deg,transparent 0 6px,rgba(16,24,40,.06) 6px 7px)}.ds-cov-note{margin:0;font:400 13px/1.55 'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#475467}.ds-cov-note b{color:#101828;font-variant-numeric:tabular-nums}"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Section index and quick filters; the active state is the only place a chip takes indigo.",
+      "html": "<button class=\"ds-chip\">All findings<span class=\"ds-chip-count\">57</span></button> <button class=\"ds-chip is-active\">Links<span class=\"ds-chip-count\">37</span></button>",
+      "css": ".ds-chip{display:inline-flex;align-items:baseline;gap:8px;min-height:32px;padding:6px 13px;border:1px solid #D0D5DD;border-radius:999px;background:#FFFFFF;color:#475467;font:500 12.5px/1.4 'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.06)}.ds-chip:hover{background:#F9FAFB;color:#101828}.ds-chip:focus-visible{outline:2px solid #4F46E5;outline-offset:1px}.ds-chip.is-active{background:#EEF2FF;border-color:#C7D2FE;color:#4F46E5;box-shadow:none}.ds-chip-count{font-weight:600;color:#667085;font-variant-numeric:tabular-nums}.ds-chip.is-active .ds-chip-count{color:#4F46E5}"
+    },
+    {
+      "name": "Data Table",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Dense audit table: sunken head, hairline rows, tabular cells, hover fill, no zebra striping.",
+      "html": "<table class=\"ds-table\"><thead><tr><th>URL</th><th>Status</th><th>Links</th></tr></thead><tbody><tr><td class=\"ds-mono\">/pricing</td><td><span class=\"ds-status ds-status-broken\">Broken</span></td><td>14</td></tr><tr><td class=\"ds-mono\">/about</td><td><span class=\"ds-status ds-status-healthy\">Healthy</span></td><td>9</td></tr></tbody></table>",
+      "css": ".ds-table{width:100%;border-collapse:collapse;font:13px/1.5 'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#FFFFFF;border:1px solid #EAECF0;border-radius:8px;overflow:hidden}.ds-table th{text-align:left;padding:10px 12px;font-size:12px;font-weight:600;color:#667085;background:#F9FAFB;border-bottom:1px solid #EAECF0}.ds-table td{padding:10px 12px;border-bottom:1px solid #EAECF0;vertical-align:top;color:#475467;font-variant-numeric:tabular-nums}.ds-table tbody tr:hover{background:#F9FAFB}.ds-mono{font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;font-size:12px;color:#101828}.ds-status{display:inline-flex;padding:2px 9px;border-radius:999px;border:1px solid transparent;font-size:11.5px;font-weight:600}.ds-status-healthy{background:#ECFDF3;color:#067647;border-color:#ABEFC6}.ds-status-broken{background:#FEF3F2;color:#D92D20;border-color:#FECDCA}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Category Standard, Played Straight",
+    "overview": "Lumen looks like the professional site-audit tool a consultant already trusts. In an Impeccable direction round the operator took the standing exit and named the bar: Sitebulb for density and severity discipline, Semrush for polish and colour confidence. PRODUCT.md records that as a brand commitment - the convention is executed at full fidelity, without irony and without smuggled quirk. This document describes the world as it actually shipped.\n\nThe surface is a light application canvas (#F6F7F9) with white cards on it, hairline borders doing most of the structural work, and one indigo primary carrying the product's own voice. Density is high and deliberate: 13-13.5px body text, 10-12px table cells, 8px and 14px gaps, tabular figures everywhere a number can be compared to another number. Nothing decorative competes with the data. The Site Audit overlay is the fullest expression - a 216px left navigation, a scrolling main column, stat tiles, the site-conditions readout, severity-railed finding cards, sortable data tables - and the side panel is the same system compressed to a 300-420px column.\n\nLight theme only, by decision. html{color-scheme:light} is declared; there is no dark variant anywhere in the build.",
+    "keyCharacteristics": [
+      "One indigo primary (#4F46E5) that never means severity",
+      "A sealed five-step severity ramp used only for severity",
+      "Contrast computed, not eyeballed: every text token clears 4.5:1 on all three grounds",
+      "One sans and one mono across every surface, fetched on first-party pages and falling back on injected ones",
+      "Hairline structure with a 1px ambient shadow; deep shadow reserved for elements that actually float",
+      "Left navigation, scrolling main column, a 900px fold to a horizontal nav strip",
+      "Tabular figures, and hatching for what was not surveyed",
+      "No composite score, anywhere"
+    ],
+    "rules": [
+      {
+        "name": "The One Voice Rule",
+        "body": "Indigo is the product speaking - navigation, primary actions, focus, selection, progress. It never means severity. A red button that is not destructive is a bug; an indigo element that encodes an audit result is the same bug in the other direction.",
+        "section": "colors"
+      },
+      {
+        "name": "The Sealed Ramp Rule",
+        "body": "--wqa-sev-* exists for severity and nothing else. Nothing outside a severity bar, rail, dot or legend swatch may take a value from it, and severity may not be expressed in any colour outside it.",
+        "section": "colors"
+      },
+      {
+        "name": "The Computed Contrast Rule",
+        "body": "Every text token clears 4.5:1 on canvas, surface and sunken. --wqa-ink-faint (#667085) sits at 4.97:1 on white and is the floor - it must not be lightened, and no new text token may land above it. Each semantic text colour clears 4.5:1 on its own wash, which is why critical text is #B42318 and warn text is #B54708 rather than the brighter ramp values.",
+        "section": "colors"
+      },
+      {
+        "name": "The Hatch Rule",
+        "body": "What was not surveyed is drawn with the 45 degree hatch, not greyed out and not coloured as a failure. Not knowing is not the same as being broken, and that distinction stays visual.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Face Rule",
+        "body": "One sans and one mono, declared identically in packages/ui/tokens.css, packages/ui/lumen.css, packages/ui/coach.css, frankCss() and packages/crawl/report.js. There is no second family anywhere in the product.",
+        "section": "typography"
+      },
+      {
+        "name": "The Two Delivery Paths Rule",
+        "body": "Same face, two ways of getting it. The public scanner is an ordinary page and fetches Inter from Google Fonts with preconnect and display=swap. The overlay and coach are injected into third-party documents whose CSP we do not control, so they never fetch: Inter if the host already has it, platform UI face otherwise. An injected surface may never depend on a webfont; a first-party page may.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Figures Rule",
+        "body": "Any number a reader might compare against another number carries font-variant-numeric: tabular-nums - stat tiles, counts, table cells, pager labels, history rows.",
+        "section": "typography"
+      },
+      {
+        "name": "The Sentence Case Rule",
+        "body": "Headings, badges and buttons are sentence case or capitalised, never letterspaced uppercase. Uppercase at 0.04-0.06em tracking is reserved for the 11px micro-label.",
+        "section": "typography"
+      },
+      {
+        "name": "The 900px Fold Rule",
+        "body": "At max-width:900px the overlay's side navigation becomes a horizontal scrolling strip above the content: tabs go inline, the section label hides, the nav foot moves to the row end, and the site-conditions row drops from a four-column grid to label-over-detail. The fold changes arrangement, never content.",
+        "section": "layout"
+      },
+      {
+        "name": "The Hairline-First Rule",
+        "body": "Structure comes from 1px #EAECF0 borders and the canvas/surface tonal step. A shadow never substitutes for a border, and no surface takes a second border where a hairline divider will do.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Ring, Not the Bloom Rule",
+        "body": "The spotlight's indigo ring carries meaning: this is the element. A soft wide glow behind it carries none and is not drawn.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Floating-Means-Floating Rule",
+        "body": "The deep shadow is reserved for elements actually detached from the document - the fixed workspace, the coach, dialogs. A card in the flow never takes it.",
+        "section": "elevation"
+      },
+      {
+        "name": "The No Score Rule",
+        "body": "The conditions readout carries no score, grade or index - in the overlay or in the exported report. Each row states what was observed plus the confidence that observation supports. A single number would hide the evidence behind it.",
+        "section": "components"
+      },
+      {
+        "name": "The Closed Vocabulary Rule",
+        "body": "Confidence is rendered only as one of the four levels defined in packages/findings/confidence.js. Never invent a fifth word to soften a finding, and never express 'unavailable' or 'not applicable' as confidence - that is coverage.",
+        "section": "components"
+      }
+    ],
+    "dos": [
+      "Do use indigo (#4F46E5) for navigation, primary action, focus, selection and progress - and only for those.",
+      "Do take severity colour from --wqa-sev-* and semantic text colour from --wqa-critical / --wqa-warn / --wqa-ok, which are contrast-cleared on their own washes.",
+      "Do treat --wqa-ink-faint (#667085, 4.97:1 on white) as the lightest text in the product.",
+      "Do hatch what was not surveyed, and state coverage limits in words next to it. The hatch is a sanctioned gradient: it is how \"not surveyed\" stays visually distinct from \"broken\".",
+      "Do give every comparable number font-variant-numeric: tabular-nums.",
+      "Do carry severity as the 3px inset leading rail on finding cards, and confidence as a dot plus a word from the closed vocabulary.",
+      "Do keep the 4 / 8 / 12 / 16 / 24 spacing rhythm and the 8px-card / 6px-control / 999px-token radius split.",
+      "Do put a 2px solid #4F46E5 focus ring on every interactive element.",
+      "Do duplicate palette values longhand in packages/crawl/report.js and keep them in sync by hand."
+    ],
+    "donts": [
+      "Don't lighten --wqa-ink-faint or introduce a text token below 4.5:1 on canvas, surface or sunken.",
+      "Don't set a bright severity ramp value as text on a tint - the ramp is fills only.",
+      "Don't use red, amber or green for anything that is not a statement about the audited site; and don't use indigo to encode an audit result.",
+      "Don't add a score, grade, index or single health number to the conditions readout or the report.",
+      "Don't invent a confidence word outside confirmed / corroborated / inferred / inconclusive.",
+      "Don't let an injected surface depend on a fetched webfont; the overlay and coach must render under a hostile CSP. First-party pages may fetch Inter.",
+      "Don't add a dark theme or a prefers-color-scheme branch. Light theme only, by decision.",
+      "Don't reintroduce a violet role: --wqa-violet and --wqa-violet-soft are aliases of the primary and carry no distinct meaning.",
+      "Don't add kickers or eyebrow labels above headings. The rule holds on every surface: .section-kicker, .eyebrow and .env-kicker are all display:none, and .launch-cat is sentence case at 12px/600 with no letterspacing.",
+      "Don't ship hard offset shadows, glyph or emoji icons, or a system display face; icons are inline SVG stroked in currentColor.",
+      "Don't revive The Drawing Set (diazo paper #DDE3E7 / #F7F9FA, blueprint navy #16283D, condensed uppercase drawing type, 2-3px radii, keynote numbering, title-block rails) or The Control Room before it (cool blue-grey, engineering blue #143E63, instrument teal #087C89, pill chips). Both are retired."
+    ]
+  }
+}

@@ -1696,25 +1696,29 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     ]
   };
 
-  /** Discipline metadata still drives the Findings area filter, so the map
-   * from rule id to discipline stays exactly as it was. */
-  /** Rule id to discipline, first match wins. Order is load-bearing:
-   * `a11y.lang-*` is an International fact before it is an accessibility one,
-   * `web.meta-refresh` is an indexability fact, and `quality` is last because
-   * it is the catch-all. Every finding lands in exactly one section — a
-   * taxonomy with holes would quietly drop rows out of the report. */
-  const SITE_AUDIT_DISCIPLINE_RULES = [
-    ['availability', [/^navigation\.link-/, /^runtime\.(resource-failed|resource-status|visible-error)/, /^navigation\.(fragment-missing|skip-link-target-missing)/, /^ux\.(inert-link|form-no-submit|controls-target-missing|disclosure-target-missing|disclosure-toggle-failed|menu-toggle-failed|interaction-restoration-unproven)/]],
-    ['duplicates', [/^seo\.duplicate-/, /^structure\.duplicate-h1/]],
-    ['sitemaps', [/^seo\.sitemap-/]],
-    ['international', [/^seo\.hreflang-/, /^a11y\.lang-/]],
-    ['indexability', [/^seo\.(canonical|noindex|robots|soft-404)/, /^structure\.orphan-page/, /^navigation\.redirect-chain-long/, /^web\.meta-refresh/]],
-    ['security', [/^security\./]],
-    ['performance', [/^performance\./]],
-    ['accessibility', [/^(axe|a11y)\./]],
-    ['content', [/^seo\.(title|description|thin-content)/, /^structure\.(h1-|heading-skip|image-alt-missing)/, /^content\./, /^social\./]],
-    ['quality', [/./]]
-  ];
+  /** Rule id to discipline. The list itself lives in
+   * packages/findings/disciplines.js and is injected here at build time, the
+   * same way the palette is: the overlay groups findings by discipline and so
+   * does the exported client report, and while each kept its own copy they
+   * disagreed about what a finding *was*. Patterns arrive as strings because
+   * that is what survives the injection. */
+  function lumenDisciplineRules() {
+    return [
+      ['availability', ['^navigation\\.link-', '^runtime\\.(resource-failed|resource-status|visible-error)', '^navigation\\.(fragment-missing|skip-link-target-missing)', '^ux\\.(inert-link|form-no-submit|controls-target-missing|disclosure-target-missing|disclosure-toggle-failed|menu-toggle-failed|interaction-restoration-unproven)']],
+      ['duplicates', ['^seo\\.duplicate-', '^structure\\.duplicate-h1']],
+      ['sitemaps', ['^seo\\.sitemap-']],
+      ['international', ['^seo\\.hreflang-', '^a11y\\.lang-']],
+      ['indexability', ['^seo\\.(canonical|noindex|robots|soft-404)', '^structure\\.orphan-page', '^navigation\\.redirect-chain-long', '^web\\.meta-refresh']],
+      ['security', ['^security\\.']],
+      ['performance', ['^performance\\.']],
+      ['accessibility', ['^(axe|a11y)\\.']],
+      ['content', ['^seo\\.(title|description|thin-content)', '^structure\\.(h1-|heading-skip|image-alt-missing)', '^content\\.', '^social\\.']],
+      ['quality', ['.']]
+    ];
+  }
+
+  const SITE_AUDIT_DISCIPLINE_RULES = lumenDisciplineRules()
+    .map(([discipline, patterns]) => [discipline, patterns.map((p) => new RegExp(p))]);
 
   function disciplineOf(ruleId) {
     const id = String(ruleId || '');

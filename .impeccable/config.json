@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "tests/crawl-report.test.js"
+        ],
+        "createdAt": "2026-09-03T23:24:31.022Z",
+        "reason": "Claude: the <img onerror=...> strings are the XSS-escaping fixture in a test, not shipped markup"
+      }
+    ]
+  }
+}

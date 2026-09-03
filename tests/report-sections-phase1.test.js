@@ -119,7 +119,7 @@ function everyRuleId() {
 
 test('every rule id any scanner can emit lands in exactly one discipline', () => {
   const { SITE_AUDIT_DISCIPLINE_RULES, disciplineOf, SITE_AUDIT_DISCIPLINE_META } =
-    lift(['SITE_AUDIT_DISCIPLINE_RULES', 'disciplineOf', 'SITE_AUDIT_DISCIPLINE_META']);
+    lift(['lumenDisciplineRules', 'SITE_AUDIT_DISCIPLINE_RULES', 'disciplineOf', 'SITE_AUDIT_DISCIPLINE_META']);
   const ids = everyRuleId();
   assert.ok(ids.length > 40, `expected the real rule inventory, got ${ids.length}`);
   for (const id of ids) {
@@ -139,7 +139,7 @@ test('every rule id any scanner can emit lands in exactly one discipline', () =>
 });
 
 test('order-sensitive rule mappings resolve to the discipline that owns the fact', () => {
-  const { disciplineOf } = lift(['SITE_AUDIT_DISCIPLINE_RULES', 'disciplineOf']);
+  const { disciplineOf } = lift(['lumenDisciplineRules', 'SITE_AUDIT_DISCIPLINE_RULES', 'disciplineOf']);
   // a11y.lang-* is an International fact before it is an accessibility one.
   assert.equal(disciplineOf('a11y.lang-missing'), 'international');
   assert.equal(disciplineOf('seo.hreflang-invalid'), 'international');
@@ -164,7 +164,7 @@ test('order-sensitive rule mappings resolve to the discipline that owns the fact
 // --- 3. A section ranks by severity, not by volume -------------------------
 
 test('a discipline section ranks confirmed severity above instance count', () => {
-  const { disciplineGroups } = lift(['SITE_AUDIT_DISCIPLINE_RULES', 'disciplineOf', 'disciplineGroups']);
+  const { disciplineGroups } = lift(['lumenDisciplineRules', 'SITE_AUDIT_DISCIPLINE_RULES', 'disciplineOf', 'disciplineGroups']);
   // The real shape of the defect this replaced: on a site that rate-limits
   // automated requests, one unverifiable group carried 3,519 instances and led
   // Availability while 38 confirmed 404s sat underneath it.
@@ -423,4 +423,26 @@ test('the shared finding-row component still serves every list that uses rows', 
   const browser = overlay.match(/ {2}function renderBrowserChecks\(\)[\s\S]*?\n {2}\}/);
   assert.ok(browser, 'renderBrowserChecks should exist');
   assert.match(browser[0], /renderFindingRowsInto\(/);
+});
+
+test('the overlay and the exported report share one discipline taxonomy', async () => {
+  // Two copies is how the overlay came to call a broken link an availability
+  // failure while the report filed it under "SEO" — a document that
+  // contradicts the screen the client was just shown.
+  const shared = await import('../packages/findings/disciplines.js');
+  const { lumenDisciplineRules } = lift(['lumenDisciplineRules']);
+  assert.deepEqual(lumenDisciplineRules(), shared.DISCIPLINE_RULES,
+    'the overlay copy must match packages/findings/disciplines.js — the build injects it');
+  const built = 'dist/extension/content.js';
+  if (fs.existsSync(built)) {
+    const m = fs.readFileSync(built, 'utf8').match(/function lumenDisciplineRules\(\) \{\s*return (\[[\s\S]*?\]);\s*\}/);
+    assert.ok(m, 'the build should inject the taxonomy into the overlay');
+    assert.deepEqual(JSON.parse(m[1]), shared.DISCIPLINE_RULES);
+  }
+  for (const [id] of shared.DISCIPLINE_RULES) {
+    assert.ok(shared.DISCIPLINE_LABEL[id], `${id} needs a label`);
+    assert.ok(shared.DISCIPLINE_ORDER.includes(id), `${id} needs a place in the reading order`);
+  }
+  assert.equal(shared.DISCIPLINE_ORDER[0], 'availability',
+    'a confirmed functional failure leads the report; no discipline is promoted for being easy to detect');
 });
