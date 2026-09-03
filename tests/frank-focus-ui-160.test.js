@@ -59,10 +59,47 @@ test('Lumen visual identity compiles Tailwind from component classes rather than
   assert.match(tokens, /--wqa-brand:#4F46E5/);
   assert.doesNotMatch(panelCss, /linear-gradient/);
   assert.match(content, /linear-gradient/);
-  const packageJson = fs.readFileSync('package.json', 'utf8');
-  assert.match(packageJson, /tailwindcss/);
-  const lumen = fs.readFileSync('packages/ui/lumen.css', 'utf8');
-  assert.match(lumen, /@theme/);
-  assert.match(lumen, /tailwindcss/);
+  // No utility soup — the reason Tailwind was removed rather than adopted. It
+  // emitted 87 utility classes of which none appeared in any markup; the
+  // styling has always been semantic component classes over these tokens.
   assert.doesNotMatch(panelHtml, /class="[^"]*\bflex\s+(?:flex-col|items-|justify-|px-|py-)/);
+  const packageJson = fs.readFileSync('package.json', 'utf8');
+  assert.doesNotMatch(packageJson, /tailwind/i, 'the CSS build is plain concatenation; nothing should reintroduce a CSS toolchain unnoticed');
+  assert.equal(fs.existsSync('packages/ui/lumen.css'), false, 'the Tailwind entry point is gone');
+});
+
+test('one palette reaches every surface, including the ones that cannot link a stylesheet', () => {
+  // Four token systems used to carry the same values: the Tailwind @theme
+  // block, tokens.css, the overlay's private copy and the coach's. Two of the
+  // five severity steps had already drifted apart.
+  const palette = new Set((tokens.match(/#[0-9A-Fa-f]{6}/g) || []).map((h) => h.toUpperCase()));
+  assert.ok(palette.size > 15, 'tokens.css should carry the palette');
+
+  // The injected surfaces get it at build time, since :host{all:initial} on a
+  // third-party page can never reach a compiled sheet.
+  const build = fs.readFileSync('scripts/build-extension.mjs', 'utf8');
+  assert.match(build, /lumenTokenBlock\(\)/);
+  assert.match(content, /function lumenTokens\(\) \{/);
+  const coach = fs.readFileSync('packages/ui/coach.css', 'utf8');
+  assert.match(coach, /@lumen-tokens/, 'the coach receives the palette rather than restating it');
+
+  // And neither injected surface names a colour the palette already names.
+  const saStart = content.indexOf('function siteAuditCss()');
+  const overlayTokens = content.slice(saStart, content.indexOf('--sa-grain', saStart));
+  for (const source of [['the Site Audit overlay', overlayTokens], ['the Frank coach', coach]]) {
+    const repeats = [...new Set((source[1].match(/#[0-9A-Fa-f]{6}/g) || []).map((h) => h.toUpperCase()))]
+      .filter((hex) => palette.has(hex));
+    assert.deepEqual(repeats, [], `${source[0]} redeclares palette values instead of aliasing them`);
+  }
+});
+
+test('the severity ramp stays fills-only once it reaches the overlay', () => {
+  // DESIGN.md seals the ramp: bright values for bars, rails and dots, never
+  // text on a tint. The overlay had collapsed the two into one variable, so
+  // badges and pills were painting #D92D20 text on a #FEF3F2 wash.
+  assert.doesNotMatch(content, /color:var\(--sa-sev-[a-z]+\)/, 'the ramp is never a text colour');
+  assert.match(content, /--sa-critical:var\(--wqa-critical\)/, 'text uses the semantic pair');
+  assert.match(content, /--sa-warn:var\(--wqa-warn\)/);
+  assert.match(content, /--sa-sev-critical:var\(--wqa-sev-critical\)/, 'fills use the ramp');
+  assert.match(content, /\.badge\.sev-low\{background:var\(--sa-warn-soft\);color:var\(--sa-warn\)/);
 });

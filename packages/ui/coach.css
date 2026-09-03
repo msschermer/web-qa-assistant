@@ -1,24 +1,28 @@
 :host{
   all:initial;
-  --f-brand:#101828;
-  --f-brand-ink:#4338CA;
-  --f-accent:#4F46E5;
-  --f-accent-soft:#EEF2FF;
-  --f-ink:#101828;
-  --f-ink-soft:#475467;
-  --f-ink-faint:#667085;
-  --f-line:#EAECF0;
-  --f-line-strong:#D0D5DD;
-  --f-surface:#FFFFFF;
-  --f-sunken:#F9FAFB;
-  --f-ok:#067647;
-  --f-ok-soft:#ECFDF3;
-  --f-warn:#B54708;
-  --f-warn-soft:#FFFAEB;
-  --f-critical:#B42318;
-  --f-critical-soft:#FEF3F2;
-  --f-sans:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;
-  --f-mono:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;
+  /* @lumen-tokens — packages/ui/tokens.css is injected here by
+     scripts/build-extension.mjs. The aliases below name nothing of their
+     own, so this sheet cannot drift from the palette. */
+
+  --f-brand:var(--wqa-ink);
+  --f-brand-ink:var(--wqa-brand-strong);
+  --f-accent:var(--wqa-brand);
+  --f-accent-soft:var(--wqa-brand-soft);
+  --f-ink:var(--wqa-ink);
+  --f-ink-soft:var(--wqa-ink-soft);
+  --f-ink-faint:var(--wqa-ink-faint);
+  --f-line:var(--wqa-line);
+  --f-line-strong:var(--wqa-line-strong);
+  --f-surface:var(--wqa-surface);
+  --f-sunken:var(--wqa-sunken);
+  --f-ok:var(--wqa-ok);
+  --f-ok-soft:var(--wqa-ok-soft);
+  --f-warn:var(--wqa-warn);
+  --f-warn-soft:var(--wqa-warn-soft);
+  --f-critical:var(--wqa-critical);
+  --f-critical-soft:var(--wqa-critical-soft);
+  --f-sans:var(--wqa-sans);
+  --f-mono:var(--wqa-mono);
 }
 *{box-sizing:border-box}
 .backdrop{position:fixed;inset:0;background:rgba(16,24,40,.62);z-index:2147483644;pointer-events:none;transition:opacity .18s ease,background .18s ease}

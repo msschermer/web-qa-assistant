@@ -110,9 +110,9 @@ if (JSON.stringify(manifest.host_permissions) !== JSON.stringify(requiredHosts))
   bad++;
   console.error('extension host permissions should be limited to the assistant gateway and localhost development endpoints');
 }
-if (!fs.existsSync('packages/ui/tokens.css') || !fs.existsSync('packages/ui/lumen.css')) {
+if (!fs.existsSync('packages/ui/tokens.css')) {
   bad++;
-  console.error('shared UI design tokens or Lumen Tailwind source are missing');
+  console.error('packages/ui/tokens.css is missing — it is the single source of the Lumen palette');
 }
 if (!fs.existsSync('.github/workflows/ci.yml') || !fs.existsSync('.github/workflows/release.yml')) {
   bad++;
@@ -483,9 +483,42 @@ if (!/local-ai\.js/.test(fs.readFileSync('scripts/build-extension.mjs','utf8')))
   bad++;
   console.error('build regression: local-ai.js is not copied into the extension distribution');
 }
-if (!/buildLumenCss|build-css/.test(fs.readFileSync('scripts/build-extension.mjs','utf8')) || !/tailwindcss/.test(fs.readFileSync('package.json','utf8'))) {
-  bad++;
-  console.error('build regression: Lumen Tailwind compile must run as part of the extension build');
+{
+  // The palette has one definition. packages/ui/tokens.css is it, the compiled
+  // sheets inline it, and the extension build injects it into the overlay's
+  // shadow root — which is the only way an injected surface can have it, and
+  // the absence of which is how the overlay's private copy drifted two of the
+  // five severity steps away from the sealed ramp.
+  const extBuild = fs.readFileSync('scripts/build-extension.mjs','utf8');
+  if (!/buildLumenCss|build-css/.test(extBuild)) {
+    bad++;
+    console.error('build regression: the Lumen CSS compile must run as part of the extension build');
+  }
+  if (!/lumenTokenBlock\(\)/.test(extBuild) || !/function lumenTokens\(\) \{/.test(fs.readFileSync('apps/extension/content.js','utf8'))) {
+    bad++;
+    console.error('build regression: the Lumen palette must be injected into the Site Audit overlay');
+  }
+  // No surface may name a colour tokens.css already names. Only the overlay is
+  // checked by value here because it is the one that cannot link the sheet.
+  const overlay = fs.readFileSync('apps/extension/content.js','utf8');
+  const saHostStart = overlay.indexOf('function siteAuditCss()');
+  const hostBlock = overlay.slice(saHostStart, overlay.indexOf('--sa-grain', saHostStart));
+  const palette = new Set(
+    (fs.readFileSync('packages/ui/tokens.css','utf8').match(/#[0-9A-Fa-f]{6}/g) || []).map((h) => h.toUpperCase())
+  );
+  const redeclared = [...new Set((hostBlock.match(/#[0-9A-Fa-f]{6}/g) || []).map((h) => h.toUpperCase()))]
+    .filter((hex) => palette.has(hex));
+  if (redeclared.length) {
+    bad++;
+    console.error(`design regression: the Site Audit overlay redeclares ${redeclared.join(', ')} — alias packages/ui/tokens.css instead of copying its values`);
+  }
+  // The severity ramp is fills only (DESIGN.md, the Sealed Ramp Rule). A ramp
+  // value used as `color:` is the conflation that put #D92D20 text on a tint.
+  const rampAsText = overlay.match(/color:var\(--sa-sev-[a-z]+\)/g) || [];
+  if (rampAsText.length) {
+    bad++;
+    console.error(`design regression: severity ramp used as text (${rampAsText.join(', ')}) — the ramp is fills only; use --sa-critical / --sa-warn`);
+  }
 }
 const extensionBuildSource = fs.readFileSync('scripts/build-extension.mjs','utf8');
 const axeCacheIndex = extensionBuildSource.indexOf('const axeBytes=');

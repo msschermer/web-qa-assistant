@@ -53,7 +53,10 @@ test('extension ships immersive Frank runtime without debugger permission',()=>{
   const build=fs.readFileSync('scripts/build-extension.mjs','utf8');
   assert.equal(manifest.permissions.includes('debugger'),false);
   assert.match(content,/FRANK_START/);
-  assert.match(content,/box-shadow:0 0 0 99999px/);
+  // The coach's spotlight rule lives in packages/ui/coach.css, which the build
+  // injects into content.js. content.js used to hold a stale second copy of
+  // that whole sheet; this asserts the one the build actually reads.
+  assert.match(fs.readFileSync('packages/ui/coach.css','utf8'),/box-shadow:0 0 0 99999px/);
   assert.match(content,/Shadow/iu);
   assert.match(panel,/PREPARE_FRANK/);
   assert.match(panel,/localFrankRuntime\.activateFromGesture/);

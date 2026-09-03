@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import { buildLumenCss } from './build-css.mjs';
+import { buildLumenCss, lumenTokenBlock } from './build-css.mjs';
 const root=process.cwd(),src=path.join(root,'apps/extension'),out=path.join(root,'dist/extension');
 function shortBuildRevision(){
   try{
@@ -21,11 +21,27 @@ buildLumenCss({
   webCss: path.join(root,'apps/web/public/styles.css')
 });
 {
-  const coachCss=fs.readFileSync(path.join(root,'packages/ui/coach.css'),'utf8');
+  // The coach is a shadow root on a third-party page too, so its palette is
+  // injected rather than linked, exactly like the overlay's.
+  const coachCss=fs.readFileSync(path.join(root,'packages/ui/coach.css'),'utf8')
+    .replace(/\/\* @lumen-tokens[\s\S]*?\*\//, lumenTokenBlock());
+  if(coachCss.includes('@lumen-tokens'))throw new Error('Failed to inject the Lumen palette into coach.css');
   const contentPath=path.join(out,'content.js');
   let content=fs.readFileSync(contentPath,'utf8');
   const next=content.replace(/function frankCss\(\) \{[\s\S]*?\n  \}/,`function frankCss() {\n    return ${JSON.stringify(coachCss)};\n  }`);
   if(next===content)throw new Error('Failed to inject Lumen coach CSS into content.js');
+  fs.writeFileSync(contentPath,next);
+}
+{
+  // The overlay injects into third-party pages under `:host{all:initial}` and
+  // can never link the compiled stylesheet, so the palette is handed to it
+  // here instead. Without this it kept a private copy that drifted from
+  // tokens.css — two of the five severity steps had already diverged.
+  const tokens=lumenTokenBlock();
+  const contentPath=path.join(out,'content.js');
+  const content=fs.readFileSync(contentPath,'utf8');
+  const next=content.replace(/function lumenTokens\(\) \{[\s\S]*?\n  \}/,`function lumenTokens() {\n    return ${JSON.stringify(tokens)};\n  }`);
+  if(next===content)throw new Error('Failed to inject the Lumen palette into content.js');
   fs.writeFileSync(contentPath,next);
 }
 const localAiSource=fs.readFileSync(path.join(src,'local-ai.js'),'utf8')
@@ -57,6 +73,18 @@ function buildIntegrityBrowserBundle(root, outDir) {
   const bundle = `(() => {\n${src}\nglobalThis.WebQATargetIntegrity = { TARGET_STATES, collectDomSignals, assessTargetIntegrity, targetIntegrityReached, targetIntegrityBlocksAudit, suppressFindingsForTargetIntegrity, adjustCoverageForTargetIntegrity, targetIntegrityBrief, isPageDerivedFinding };\n})();\n`;
   fs.writeFileSync(path.join(root, 'packages/integrity/target-integrity.browser.js'), bundle);
   fs.writeFileSync(path.join(outDir, 'target-integrity.browser.js'), bundle);
+}
+
+// The two injections above rewrite content.js by string replacement, and the
+// CSS they splice in is spliced into a template literal — a stray backtick in
+// a comment is enough to end the string and take the whole content script with
+// it. A content script that fails to parse registers no message listener, so
+// the only symptom is "Receiving end does not exist" from somewhere else
+// entirely. Parse what we just wrote.
+{
+  const built=path.join(out,'content.js');
+  try{new Function(fs.readFileSync(built,'utf8'))}
+  catch(error){throw new Error(`dist/extension/content.js does not parse after CSS injection: ${error.message}`)}
 }
 
 buildIntegrityBrowserBundle(root, out);
