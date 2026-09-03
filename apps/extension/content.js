@@ -959,6 +959,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
          The screen an operator watches, so it answers "what is happening right
          now" before it answers anything else: phase, rate, and the URL in
          flight. Nothing here is a summary; summaries are the results view. */
+      .panel-title{margin:0 0 14px;font-size:26px;font-weight:650;letter-spacing:-.025em}
       .crumb{margin:0 0 6px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--sa-ink-faint)}
       .crumb span{margin:0 6px;opacity:.55}
       .run-identity h2{margin:0}
@@ -1207,6 +1208,73 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
       .panel-card{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);padding:14px 16px 16px}
 
+      /* Overview -------------------------------------------------------------
+         Identity, then one instrument strip, then the brief. The brief is the
+         only element on this screen allowed to interpret, and it is fenced off
+         visually for exactly that reason. */
+      .ov-identity h2{margin:0;font-size:26px;font-weight:650;letter-spacing:-.025em}
+      .ov-head{align-items:flex-start}
+
+      /* One bordered strip with dividers rather than four floating cards:
+         these are four readings of one run. */
+      .summary-stats{grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0;border:1px solid var(--sa-line);border-radius:var(--sa-radius);overflow:hidden;background:var(--sa-surface)}
+      .summary-stats>div{border:0;border-right:1px solid var(--sa-line);border-radius:0;box-shadow:none;background:transparent;padding:13px 16px 14px}
+      .summary-stats>div:last-child{border-right:0}
+      .summary-stats dt{font-size:10.5px;font-weight:650;letter-spacing:.07em;text-transform:uppercase}
+      .summary-stats dd{font-size:24px}
+      .tile-track{height:4px;margin-top:9px;border-radius:999px;background:var(--sa-subtle);overflow:hidden}
+      .tile-fill{display:block;height:100%;border-radius:999px;background:var(--sa-primary)}
+
+      /* The brief. A violet rail and a tinted ground mark the one region that
+         reads the evidence rather than reporting it. */
+      .brief{margin:0 0 16px;border:1px solid var(--sa-primary-line);border-left:3px solid var(--sa-primary);border-radius:var(--sa-radius);background:linear-gradient(180deg,var(--sa-primary-soft),transparent 70%),var(--sa-surface);overflow:hidden}
+      .brief-kicker{margin:0;padding:12px 16px 0;font-size:10.5px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--sa-primary-text)}
+      .brief-kicker span{margin:0 5px;opacity:.6}
+      .brief-body{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:0;align-items:stretch}
+      .brief-lead{padding:10px 16px 16px;min-width:0}
+      .brief-lead h3{margin:0 0 7px;font-size:17px;font-weight:650;color:var(--sa-ink)}
+      .brief-summary{margin:0 0 10px;font-size:13.5px;line-height:1.6;color:var(--sa-ink-soft);max-width:64ch}
+      .brief-scope{margin:0 0 12px;font-size:12px;color:var(--sa-ink-faint)}
+      .brief-list{list-style:none;margin:0;padding:0;display:grid;gap:4px;counter-reset:brief}
+      .brief-item{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:11px;align-items:center;width:100%;padding:9px 10px;border:1px solid transparent;border-radius:var(--sa-radius-sm);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+      .brief-item:hover{background:var(--sa-subtle)}
+      .brief-item.active{background:var(--sa-primary-soft);border-color:var(--sa-primary-line)}
+      .brief-item:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
+      .brief-rank{display:grid;place-items:center;width:26px;height:26px;border-radius:var(--sa-radius-sm);background:var(--sa-subtle);color:var(--sa-ink-faint);font-size:11px;font-weight:650;font-variant-numeric:tabular-nums}
+      .brief-item.active .brief-rank{background:var(--sa-primary);color:#fff}
+      .brief-item-body{min-width:0}
+      .brief-item-title{display:block;font-size:13.5px;font-weight:600;color:var(--sa-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .brief-item-meta{display:flex;align-items:center;gap:8px;margin-top:3px;font-size:11.5px;color:var(--sa-ink-faint)}
+      .brief-item-pages{display:grid;justify-items:end;font-size:11.5px;color:var(--sa-ink-faint);white-space:nowrap}
+      .brief-item-pages b{font-size:14px;color:var(--sa-ink);font-variant-numeric:tabular-nums}
+
+      .brief-detail{padding:16px;border-left:1px solid var(--sa-line);background:var(--sa-surface);min-width:0}
+      .brief-badges{display:flex;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+      .brief-detail h4{margin:0 0 8px;font-size:16px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
+      .brief-why{margin:0 0 13px;font-size:13px;line-height:1.6;color:var(--sa-ink-soft)}
+      .evidence-box{padding:11px 13px;border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);background:var(--sa-subtle);margin:0 0 13px}
+      .evidence-label{display:block;margin-bottom:8px;font-size:10px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--sa-ink-faint)}
+      .evidence-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0}
+      .evidence-facts dt{font-size:10.5px;color:var(--sa-ink-faint);margin:0 0 2px}
+      .evidence-facts dd{margin:0;font-size:14px;font-weight:600;color:var(--sa-ink);font-variant-numeric:tabular-nums}
+      .brief-detail .actions{margin-top:0}
+
+      .ov-columns{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:14px;margin:0 0 16px;align-items:start}
+      .ov-columns .conditions{margin:0}
+      .ov-columns .conditions-list{margin:11px -16px 0}
+      .ov-columns .conditions-note{padding:12px 0 0;margin:0;border-top:1px solid var(--sa-line)}
+      .card-head .link-btn{margin-left:auto;padding:0}
+
+      .deliver-main{flex-wrap:wrap}
+      .deliver-main .deliver-data{padding:0;background:transparent;border:0;margin-left:auto}
+      .deliver-more{border-top:1px solid var(--sa-line)}
+
+      @media(max-width:1040px){
+        .brief-body{grid-template-columns:minmax(0,1fr)}
+        .brief-detail{border-left:0;border-top:1px solid var(--sa-line)}
+        .ov-columns{grid-template-columns:minmax(0,1fr)}
+      }
+
       /* Site conditions ----------------------------------------------------- */
       .conditions{margin:0 0 18px;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);overflow:hidden}
       .conditions>.feed-heading{padding:14px 16px 0;margin:0}
@@ -1246,11 +1314,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       /* Severity and the ranked issues, one card. The legend sits on the
          heading line so the bar reads as a caption to the list beneath it
          rather than as a chart in its own panel. */
-      .attention-card{margin:0 0 18px}
-      .attention-head{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin:0 0 10px}
-      .attention-head .feed-heading{margin:0}
-      .attention-card .severity-bar{margin:0 0 12px}
-      .attention-card .severity-legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin-left:auto;font-size:12.5px}
+      .mix-card .severity-bar{margin:0 0 11px}
+      .mix-card .severity-legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin:0 0 12px;font-size:12.5px}
+      .mix-card .top-issues{margin-top:2px}
 
       /* Findings ------------------------------------------------------------ */
       .findings-list{list-style:none;margin:0;padding:0;display:grid;gap:10px;counter-reset:keynote}
@@ -1835,15 +1901,49 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             </div>
           </aside>
           <div class="main">
-          <div class="page-head"><div><h2>Audit results</h2><p class="results-summary"></p></div></div>
+          <!-- Each panel carries its own crumb and title, so the shared header
+               that used to sit here said the same thing a second time. The
+               provenance line stays, hidden, because loadAndPaintResults still
+               writes the "could not be read" notice into it. -->
+          <p class="results-summary sr-only"></p>
           <div class="scope-banner" role="status" hidden><p class="scope-text"></p></div>
           <div class="tab-panel overview-panel">
+          <p class="crumb">Site audit <span aria-hidden="true">/</span> Overview</p>
+          <div class="page-head ov-head">
+            <div class="ov-identity">
+              <h2 class="ov-title">&mdash;</h2>
+              <div class="chip-row ov-chips"></div>
+            </div>
+            <div class="run-actions">
+              <button type="button" class="btn ov-settings-btn">Crawl settings</button>
+              <button type="button" class="btn primary ov-continue-btn" hidden>Continue crawl</button>
+            </div>
+          </div>
+
+          <!-- One strip, not four cards: these are four readings of the same
+               run and belong on one instrument. -->
           <dl class="stat-grid summary-stats">
-            <div class="stat-tile"><dt>Pages crawled</dt><dd class="sh-pages">0</dd><span class="stat-sub sh-pages-sub"></span><button type="button" class="stat-open" data-open="crawled"><span class="sr-only">View the pages that were crawled</span></button></div>
+            <div class="stat-tile"><dt>Pages analysed</dt><dd class="sh-pages">0</dd><span class="stat-sub sh-pages-sub"></span><div class="tile-track"><span class="tile-fill"></span></div><button type="button" class="stat-open" data-open="crawled"><span class="sr-only">View the pages that were crawled</span></button></div>
             <div class="stat-tile"><dt>Findings</dt><dd class="sh-findings">0</dd><span class="stat-sub sh-findings-sub"></span><button type="button" class="stat-open" data-open="findings"><span class="sr-only">View all findings</span></button></div>
-            <div class="stat-tile"><dt>Needs fixing</dt><dd class="sh-fix">0</dd><span class="stat-sub sh-fix-sub"></span><button type="button" class="stat-open" data-open="fix"><span class="sr-only">View the findings that need fixing</span></button></div>
+            <div class="stat-tile"><dt>Actionable</dt><dd class="sh-fix">0</dd><span class="stat-sub sh-fix-sub"></span><button type="button" class="stat-open" data-open="fix"><span class="sr-only">View the findings that need fixing</span></button></div>
             <div class="stat-tile"><dt>Coverage gaps</dt><dd class="sh-gaps">0</dd><span class="stat-sub sh-gaps-sub"></span><button type="button" class="stat-open" data-open="gaps"><span class="sr-only">View the pages that were not fully checked</span></button></div>
           </dl>
+
+          <!-- The brief. Composed deterministically from the findings, which is
+               why the label says what it is grounded in. -->
+          <section class="brief" hidden>
+            <p class="brief-kicker">Lumen brief <span aria-hidden="true">·</span> grounded in scan evidence</p>
+            <div class="brief-body">
+              <div class="brief-lead">
+                <h3>What needs attention</h3>
+                <p class="brief-summary"></p>
+                <p class="brief-scope"></p>
+                <ol class="brief-list"></ol>
+              </div>
+              <div class="brief-detail"></div>
+            </div>
+          </section>
+
           <section class="render-section" data-state="idle" hidden>
             <div class="render-head">
               <h3 class="render-title">Deeper checks in your browser</h3>
@@ -1857,40 +1957,46 @@ if (!globalThis.__WEB_QA_CONTENT__) {
               <button type="button" class="btn danger render-stop-btn" hidden>Stop rendering</button>
             </div>
           </section>
-          <!-- One readout for the site's own state. The three documents it
-               publishes (robots.txt, sitemap, llms.txt) are rows in here with a
-               link to open them — they used to be a second block restating the
-               same three facts in different words. -->
-          <section class="conditions" hidden>
-            <h3 class="feed-heading">Site conditions</h3>
-            <ul class="conditions-list"></ul>
-            <p class="conditions-note">Each line states what this audit observed and the confidence that observation supports. There is no score: a single number would hide the evidence a client is entitled to see.</p>
-          </section>
-          <!-- Severity and the ranked issues in one card. They were two cards
-               slicing the same findings, beside a third ("Findings by area")
-               that restated the counts already on every nav row. -->
-          <section class="panel-card attention-card" hidden>
-            <div class="attention-head">
-              <h3 class="feed-heading">What needs attention</h3>
+
+          <div class="ov-columns">
+            <section class="panel-card conditions" hidden>
+              <div class="card-head">
+                <h3 class="feed-heading">Site systems</h3>
+                <button type="button" class="link-btn conditions-all">View all conditions</button>
+              </div>
+              <p class="hint">Foundational conditions observed by the scanner. Each carries the evidence behind it.</p>
+              <ul class="conditions-list"></ul>
+              <p class="conditions-note">There is no score: a single number would hide the evidence a client is entitled to see.</p>
+            </section>
+            <section class="panel-card mix-card" hidden>
+              <div class="card-head">
+                <h3 class="feed-heading">Finding mix</h3>
+                <button type="button" class="link-btn mix-open">Open findings</button>
+              </div>
+              <p class="hint mix-scope"></p>
+              <div class="severity-bar" aria-hidden="true"></div>
               <ul class="severity-legend"></ul>
-            </div>
-            <div class="severity-bar" aria-hidden="true"></div>
-            <ul class="top-issues"></ul>
-          </section>
-          <!-- What the crawl covered: how deep it went, what the site answered,
-               and what it could not establish. -->
+              <ul class="top-issues"></ul>
+            </section>
+          </div>
+
           <div class="section-grid crawl-shape"></div>
+
           <section class="deliver">
             <div class="deliver-main">
               <div class="deliver-copy">
-                <h3>Share this audit</h3>
-                <p class="hint">A self-contained HTML report with findings, evidence and coverage &mdash; the version to send a client.</p>
+                <h3>Share or continue the investigation</h3>
+                <p class="hint">Export the evidence, or open a focused data view for deeper analysis.</p>
               </div>
-              <button type="button" class="btn primary report-btn-2">Download report</button>
+              <div class="deliver-data">
+                <button type="button" class="btn deliver-pages">Pages</button>
+                <button type="button" class="btn deliver-links">Links</button>
+                <button type="button" class="btn export-btn" data-dataset="findings">CSV</button>
+                <button type="button" class="btn primary report-btn-2">Client report</button>
+              </div>
             </div>
-            <div class="deliver-data">
+            <div class="deliver-data deliver-more">
               <span class="deliver-label">Raw data (CSV)</span>
-              <button type="button" class="btn export-btn" data-dataset="findings">Findings</button>
               <button type="button" class="btn export-btn" data-dataset="urls-summary">Per-page summary</button>
               <button type="button" class="btn export-btn" data-dataset="urls">URLs</button>
               <button type="button" class="btn export-btn" data-dataset="links">Links</button>
@@ -1899,6 +2005,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
           </section>
           </div>
           <div class="tab-panel findings-panel" hidden>
+            <p class="crumb">Site audit <span aria-hidden="true">/</span> Findings</p>
+            <h2 class="panel-title">Findings</h2>
             <div class="toolbar">
               <input type="search" class="findings-search" placeholder="Search findings…" />
               <select class="findings-category" aria-label="Filter by category"><option value="">All categories</option><option value="fix">Fix</option><option value="review">Review</option><option value="context">Context</option></select>
@@ -1920,6 +2028,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             <ul class="findings-list"></ul>
           </div>
           <div class="tab-panel urls-panel" hidden>
+            <p class="crumb">Site audit <span aria-hidden="true">/</span> Pages</p>
+            <h2 class="panel-title">Pages</h2>
             <div class="toolbar">
               <input type="search" class="urls-search" placeholder="Filter by URL or title…" />
             </div>
@@ -1929,6 +2039,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             <div class="pager"><button type="button" class="btn pager-prev urls-prev">Prev</button><span class="pager-label urls-label"></span><button type="button" class="btn pager-next urls-next">Next</button></div>
           </div>
           <div class="tab-panel links-panel" hidden>
+            <p class="crumb">Site audit <span aria-hidden="true">/</span> Links</p>
+            <h2 class="panel-title">Links</h2>
             <div class="toolbar">
               <input type="search" class="links-search" placeholder="Filter by source or target…" />
               <select class="links-status" hidden><option value="">All statuses</option><option value="broken">Broken</option><option value="blocked">Blocked</option><option value="inconclusive">Inconclusive</option><option value="healthy">Healthy</option></select>
@@ -2054,6 +2166,11 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     shadow.querySelector('.render-stop-btn').addEventListener('click', stopRenderPass);
     shadow.querySelector('.report-btn').addEventListener('click', downloadFullReport);
     shadow.querySelector('.report-btn-2')?.addEventListener('click', downloadFullReport);
+    shadow.querySelector('.ov-settings-btn')?.addEventListener('click', () => setSiteAuditView('setup'));
+    shadow.querySelector('.deliver-pages')?.addEventListener('click', () => switchSiteAuditTab('urls'));
+    shadow.querySelector('.deliver-links')?.addEventListener('click', () => switchSiteAuditTab('links'));
+    shadow.querySelector('.conditions-all')?.addEventListener('click', () => switchSiteAuditTab('browser'));
+    shadow.querySelector('.mix-open')?.addEventListener('click', () => switchSiteAuditTab('findings'));
     shadow.querySelector('.debug-btn').addEventListener('click', downloadDebugReport);
     // Both quick filters now write their value into the visible control they
     // drive, so the operator can see (and undo) what was applied on their behalf.
@@ -3149,7 +3266,10 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const gaps = Number(counts.queued || 0) + Number(counts.error || 0) + Number(counts.skipped || 0);
 
     shadow.querySelector('.sh-pages').textContent = String(fetched);
+    shadow.querySelector('.sh-pages').textContent = discovered > fetched ? `${fetched} / ${discovered}` : String(fetched);
     shadow.querySelector('.sh-pages-sub').textContent = discovered > fetched ? `of ${discovered} discovered` : 'all discovered pages';
+    const fill = shadow.querySelector('.tile-fill');
+    if (fill) fill.style.width = `${discovered ? Math.max(3, Math.round((fetched / discovered) * 100)) : 0}%`;
     shadow.querySelector('.sh-findings').textContent = String(findings);
     shadow.querySelector('.sh-findings-sub').textContent = `${groups.length} distinct issue type${groups.length === 1 ? '' : 's'}`;
     shadow.querySelector('.sh-fix').textContent = String(fix);
@@ -3163,12 +3283,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     for (const btn of shadow.querySelectorAll('.stat-open')) {
       btn.disabled = !tileCounts[btn.dataset.open];
     }
-    // Nothing to attend to means no card, rather than a card saying so — the
-    // conditions readout above already states the site's state, and an empty
-    // panel holding one sentence was most of what made this screen feel sparse.
-    const attention = shadow.querySelector('.attention-card');
-    if (attention) attention.hidden = !groups.length;
-    renderSeverityBar(groups);
+    renderOverviewHead(audit);
+    renderLumenBrief(groups, audit);
+    renderFindingMix(groups, audit);
     renderImpactFilter(groups);
 
     const top = [...groups]
@@ -3295,6 +3412,322 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     return rows;
   }
 
+  /**
+   * The Lumen brief: the audit's findings composed into a short ranked list of
+   * things to do, with the evidence for each kept attached.
+   *
+   * This is deterministic composition, never a model's reading. It groups
+   * findings that share a fix, ranks those groups, and writes each one's
+   * sentence from counts the scanners produced. No finding is created,
+   * promoted, demoted or reworded here — severity and confidence stay exactly
+   * as the scanner recorded them, which is why the panel says so on its face.
+   *
+   * The ranking is the standing prioritization rule made executable:
+   *   1. a confirmed functional failure outranks everything
+   *   2. then severity
+   *   3. then how many pages share one cause, because one shared component is
+   *      one fix and forty separate defects are forty
+   * A discipline cannot buy the top of this list with volume.
+   */
+  const SITE_AUDIT_BRIEF_ACTIONS = {
+    availability: { verb: 'Repair', subject: 'confirmed broken destinations', sitewide: 'Repair the broken destinations repeated across the site' },
+    indexability: { verb: 'Resolve', subject: 'indexability blockers', sitewide: 'Resolve the sitewide indexability pattern' },
+    duplicates: { verb: 'Differentiate', subject: 'duplicated pages', sitewide: 'Differentiate the duplicated pages' },
+    sitemaps: { verb: 'Reconcile', subject: 'the sitemap with the crawl', sitewide: 'Reconcile the sitemap with the crawl' },
+    security: { verb: 'Add', subject: 'the missing response headers', sitewide: 'Add the missing response headers consistently' },
+    international: { verb: 'Correct', subject: 'language targeting', sitewide: 'Correct the sitewide language targeting' },
+    content: { verb: 'Restore', subject: 'on-page content signals', sitewide: 'Restore the on-page signals missing across the site' },
+    quality: { verb: 'Fix', subject: 'markup and structured data', sitewide: 'Fix the shared markup defect' },
+    performance: { verb: 'Improve', subject: 'measured loading behaviour', sitewide: 'Improve the loading behaviour shared across pages' },
+    accessibility: { verb: 'Remove', subject: 'accessibility barriers', sitewide: 'Remove the accessibility barrier repeated across the site' }
+  };
+
+  const SEV_RANK_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+
+  function composeLumenBrief(groups, audit) {
+    const fetched = Number(audit?.urlCounts?.fetched || 0);
+    const established = (groups || []).filter((g) => g.confidence !== 'inconclusive' && g.category !== 'context');
+    const byArea = new Map();
+    for (const g of established) {
+      const area = disciplineOf(g.rule_id);
+      if (!byArea.has(area)) byArea.set(area, []);
+      byArea.get(area).push(g);
+    }
+
+    const composed = [];
+    for (const [area, rows] of byArea) {
+      const instances = rows.reduce((n, r) => n + Number(r.instances || 0), 0);
+      const pages = Math.max(...rows.map((r) => Number(r.affected_urls || 0)));
+      const severity = rows.map((r) => String(r.severity || 'info')).sort((a, b) => (SEV_RANK_ORDER[a] ?? 9) - (SEV_RANK_ORDER[b] ?? 9))[0];
+      const confirmed = rows.some((r) => r.confidence === 'confirmed' || r.confidence === 'corroborated');
+      // One rule on most of the crawled pages is one shared cause, not N
+      // independent defects. That changes both the wording and the ranking.
+      // The lead is the rule this group is described by, so it decides both
+      // the wording and the claim. Established evidence leads: describing a
+      // group by an inferred rule while the sentence beside it says
+      // "independently confirmed" is manufactured certainty, and it is exactly
+      // what happened when the lead was picked on severity alone.
+      const lead = [...rows].sort((a, b) =>
+        Number(!(a.confidence === 'confirmed' || a.confidence === 'corroborated')) -
+        Number(!(b.confidence === 'confirmed' || b.confidence === 'corroborated')) ||
+        (SEV_RANK_ORDER[a.severity] ?? 9) - (SEV_RANK_ORDER[b.severity] ?? 9) ||
+        (b.affected_urls || 0) - (a.affected_urls || 0))[0];
+      const leadConfirmed = lead?.confidence === 'confirmed' || lead?.confidence === 'corroborated';
+      // Sitewide describes the rule being named, not any rule in the area. A
+      // fragment defect on every page must not retitle two broken links as a
+      // sitewide pattern.
+      const sitewide = fetched >= 3 && Number(lead?.affected_urls || 0) >= Math.ceil(fetched * 0.75);
+      const action = SITE_AUDIT_BRIEF_ACTIONS[area] || { verb: 'Review', subject: area, sitewide: `Review the ${area} pattern` };
+      const journeyFailure = area === 'availability' && leadConfirmed;
+      composed.push({
+        area,
+        rules: rows,
+        title: sitewide ? action.sitewide : `${action.verb} ${action.subject}`,
+        severity,
+        confirmed,
+        leadConfirmed,
+        sitewide,
+        instances,
+        pages,
+        leadPages: Number(lead?.affected_urls || 0),
+        journeyFailure,
+        lead
+      });
+    }
+
+    composed.sort((a, b) =>
+      Number(b.journeyFailure) - Number(a.journeyFailure) ||
+      (SEV_RANK_ORDER[a.severity] ?? 9) - (SEV_RANK_ORDER[b.severity] ?? 9) ||
+      Number(b.sitewide) - Number(a.sitewide) ||
+      b.pages - a.pages);
+
+    const top = composed.slice(0, 4);
+    const totalInstances = (groups || []).reduce((n, g) => n + Number(g.instances || 0), 0);
+    return {
+      groups: top,
+      totalInstances,
+      fetched,
+      // The opening sentence names the order and the reason for it, so the
+      // ranking can be argued with rather than merely trusted.
+      summary: composeBriefSummary(top, fetched)
+    };
+  }
+
+  function composeBriefSummary(top, fetched) {
+    if (!top.length) return `Nothing established needs attention across the ${fetched} page${fetched === 1 ? '' : 's'} analysed. Coverage limits are stated separately below.`;
+    const first = top[0];
+    const parts = [];
+    if (first.journeyFailure) {
+      parts.push(`Start with the ${first.pages === 1 ? 'destination' : 'destinations'} that fail for a visitor — those are confirmed journey failures, not stylistic warnings.`);
+    } else {
+      parts.push(`Start with ${first.title.toLowerCase()}, the highest-severity established evidence in this audit.`);
+    }
+    const shared = top.slice(1).find((g) => g.sitewide);
+    if (shared) parts.push(`Then repair the pattern repeated across the site: one shared cause is one fix, not ${shared.pages}.`);
+    const rest = top.filter((g) => g !== first && g !== shared);
+    if (rest.length) parts.push(`${rest.map((g) => SITE_AUDIT_AREA_LABEL[g.area] || g.area).join(' and ')} affect many pages, but come after those.`);
+    return parts.join(' ');
+  }
+
+  /** Why this group sits where it sits, in the product's own words and only
+   * from what the scanners recorded. */
+  function briefRationale(group) {
+    // Every sentence here is written from the LEAD rule's own confidence. A
+    // claim of independent confirmation may only appear when the rule being
+    // described actually carries it.
+    const pages = group.leadPages || group.pages;
+    if (group.journeyFailure) {
+      return `These are direct journey failures rather than optimisation warnings. A visitor following the link reaches a destination that independently returned a missing-page or server-error response, so Lumen ranks them ahead of broader metadata and security hygiene.`;
+    }
+    if (group.sitewide && group.leadConfirmed) {
+      return `Independently confirmed on ${pages} of the pages analysed, which usually means one shared component rather than ${pages} separate defects. Fixing the component fixes every instance.`;
+    }
+    if (group.sitewide) {
+      return `The same finding appears on ${pages} of the pages analysed, which usually means one shared component rather than ${pages} separate defects. It is inferred from the static HTML rather than independently confirmed, so verify the component before treating the count as settled.`;
+    }
+    return `${group.instances} observation${group.instances === 1 ? '' : 's'} across ${group.pages} page${group.pages === 1 ? '' : 's'}, at ${group.severity} severity and ${group.lead?.confidence || 'inferred'} confidence. It sits here because higher-severity or confirmed journey evidence ranks above it.`;
+  }
+  /** The identity block: what was audited, in what state, from where. */
+  function renderOverviewHead(audit) {
+    const shadow = siteAudit.shadow;
+    let host = siteAudit.siteOrigin || '';
+    try { host = new URL(audit?.config?.startUrl || audit?.startUrl || siteAudit.siteOrigin).hostname; } catch {}
+    shadow.querySelector('.ov-title').textContent = host || '—';
+    const counts = audit?.urlCounts || {};
+    const queued = Number(counts.queued || 0);
+    const running = audit?.status === 'running';
+    const chips = [];
+    if (running) chips.push({ text: 'Crawl in progress', tone: 'live' });
+    else if (queued > 0) chips.push({ text: 'Partial crawl', tone: 'provisional' });
+    else chips.push({ text: 'Full crawl', tone: 'ok' });
+    chips.push({ text: auditProvenanceLine(audit).split(' · ').pop() });
+    const start = audit?.config?.startUrl || audit?.startUrl || '';
+    if (start) chips.push({ text: `Started from ${start}`, mono: true });
+    const row = shadow.querySelector('.ov-chips');
+    row.innerHTML = '';
+    for (const chip of chips) {
+      const el = document.createElement('span');
+      el.className = `state-chip${chip.tone ? ` ${chip.tone}` : ''}`;
+      if (chip.tone === 'live') {
+        const dot = document.createElement('span');
+        dot.className = 'pulse-dot';
+        dot.setAttribute('aria-hidden', 'true');
+        el.appendChild(dot);
+      }
+      const text = document.createElement('span');
+      if (chip.mono) text.style.fontFamily = 'var(--sa-mono)';
+      text.textContent = chip.text;
+      el.appendChild(text);
+      row.appendChild(el);
+    }
+    // Continuing is only offered when there is a frontier left to continue on.
+    const ceiling = Number(audit?.budgetCeiling || 300);
+    const budget = Number(audit?.config?.maxPages || 0);
+    const canContinue = !running && queued > 0 && budget < ceiling;
+    const btn = shadow.querySelector('.ov-continue-btn');
+    btn.hidden = !canContinue;
+    if (canContinue) {
+      const target = Math.min(ceiling, Math.max(budget + 20, Math.min(budget + queued, budget * 2)));
+      btn.textContent = `Continue crawl to ${target} pages`;
+      btn.onclick = () => raiseBudget(target);
+    }
+  }
+
+  /** The brief, and the detail pane beside it. */
+  function renderLumenBrief(groups, audit) {
+    const shadow = siteAudit.shadow;
+    const section = shadow.querySelector('.brief');
+    if (!section) return;
+    const brief = composeLumenBrief(groups, audit);
+    siteAudit.brief = brief;
+    if (!brief.groups.length) { section.hidden = true; return; }
+    section.hidden = false;
+    shadow.querySelector('.brief-summary').textContent = brief.summary;
+    shadow.querySelector('.brief-scope').textContent =
+      `${brief.groups.length} priority group${brief.groups.length === 1 ? '' : 's'}, ranked from ${brief.totalInstances} finding${brief.totalInstances === 1 ? '' : 's'} across the ${brief.fetched} page${brief.fetched === 1 ? '' : 's'} actually analysed.`;
+
+    const list = shadow.querySelector('.brief-list');
+    list.innerHTML = '';
+    if (siteAudit.briefSelected == null || siteAudit.briefSelected >= brief.groups.length) siteAudit.briefSelected = 0;
+    brief.groups.forEach((group, i) => {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `brief-item${i === siteAudit.briefSelected ? ' active' : ''}`;
+      const rank = document.createElement('span');
+      rank.className = 'brief-rank';
+      rank.textContent = String(i + 1).padStart(2, '0');
+      const body = document.createElement('span');
+      body.className = 'brief-item-body';
+      const title = document.createElement('span');
+      title.className = 'brief-item-title';
+      title.textContent = group.title;
+      const meta = document.createElement('span');
+      meta.className = 'brief-item-meta';
+      const sev = document.createElement('span');
+      sev.className = `badge sev-${group.severity}`;
+      sev.textContent = group.severity;
+      const where = document.createElement('span');
+      where.textContent = `${SITE_AUDIT_AREA_LABEL[group.area] || group.area} · ${group.leadConfirmed ? 'confirmed' : group.sitewide ? 'repeated pattern' : `${group.rules.length} pattern${group.rules.length === 1 ? '' : 's'}`}`;
+      meta.append(sev, where);
+      body.append(title, meta);
+      const pages = document.createElement('span');
+      pages.className = 'brief-item-pages';
+      pages.innerHTML = '';
+      // The count describes the rule the row is titled by, not the widest rule
+      // in the area — "Repair confirmed broken destinations · 14 pages" beside
+      // two confirmed broken links is a number nobody can act on.
+      const shown = group.leadPages || group.pages;
+      const n = document.createElement('b');
+      n.textContent = String(shown);
+      const word = document.createElement('span');
+      word.textContent = shown === 1 ? 'page' : 'pages';
+      pages.append(n, word);
+      btn.append(rank, body, pages);
+      btn.addEventListener('click', () => { siteAudit.briefSelected = i; renderLumenBrief(groups, audit); });
+      li.appendChild(btn);
+      list.appendChild(li);
+    });
+    renderBriefDetail(brief.groups[siteAudit.briefSelected]);
+  }
+
+  function renderBriefDetail(group) {
+    const pane = siteAudit.shadow.querySelector('.brief-detail');
+    if (!pane || !group) return;
+    pane.innerHTML = '';
+    const badges = document.createElement('div');
+    badges.className = 'brief-badges';
+    const priority = document.createElement('span');
+    priority.className = `badge sev-${group.severity}`;
+    priority.textContent = `${group.severity} priority`;
+    const evidence = document.createElement('span');
+    evidence.className = 'signal-badge';
+    evidence.dataset.kind = group.leadConfirmed ? 'confirmed' : 'early';
+    evidence.textContent = String(group.lead?.confidence || 'inferred');
+    badges.append(priority, evidence);
+
+    const h = document.createElement('h4');
+    h.textContent = findingLabel(group.lead);
+    const why = document.createElement('p');
+    why.className = 'brief-why';
+    why.textContent = briefRationale(group);
+
+    const box = document.createElement('div');
+    box.className = 'evidence-box';
+    const label = document.createElement('span');
+    label.className = 'evidence-label';
+    label.textContent = 'Scanner evidence';
+    const facts = document.createElement('dl');
+    facts.className = 'evidence-facts';
+    // The evidence box describes the rule this pane is titled by. Group totals
+    // belong to the action below it, which says which scope it opens.
+    const rows = [
+      ['Findings', String(Number(group.lead?.instances || 0))],
+      ['Pages', String(group.leadPages || 0)],
+      ['Confidence', String(group.lead?.confidence || 'inferred')]
+    ];
+    for (const [k, v] of rows) {
+      const pair = document.createElement('div');
+      const dt = document.createElement('dt');
+      dt.textContent = k;
+      const dd = document.createElement('dd');
+      dd.textContent = v;
+      pair.append(dt, dd);
+      facts.appendChild(pair);
+    }
+    box.append(label, facts);
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'btn primary';
+    open.textContent = `Open all ${group.instances} in ${SITE_AUDIT_AREA_LABEL[group.area] || group.area}`;
+    open.addEventListener('click', () => {
+      // Narrow Findings to this group's area and show the control doing it.
+      siteAudit.findingsSearch = '';
+      siteAudit.findingsCategory = '';
+      siteAudit.findingsImpactClass = group.area;
+      const search = siteAudit.shadow.querySelector('.findings-search');
+      if (search) search.value = '';
+      switchSiteAuditTab('findings');
+    });
+    actions.appendChild(open);
+    pane.append(badges, h, why, box, actions);
+  }
+
+  /** Finding mix: the severity split and the patterns behind it. */
+  function renderFindingMix(groups, audit) {
+    const shadow = siteAudit.shadow;
+    const card = shadow.querySelector('.mix-card');
+    if (!card) return;
+    const total = groups.reduce((n, g) => n + Number(g.instances || 0), 0);
+    card.hidden = !groups.length;
+    if (!groups.length) return;
+    shadow.querySelector('.mix-scope').textContent =
+      `${total} observation${total === 1 ? '' : 's'} across ${groups.length} distinct pattern${groups.length === 1 ? '' : 's'}.`;
+    renderSeverityBar(groups);
+  }
   const SITE_AUDIT_HTTP_CLASSES = [
     { id: '2xx', label: '2xx Success', tone: 'ok', min: 200, max: 299 },
     { id: '3xx', label: '3xx Redirect', tone: 'warn', min: 300, max: 399 },
