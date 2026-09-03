@@ -41,41 +41,64 @@ function lift(names) {
 
 // --- 1. The nav ------------------------------------------------------------
 
-test('the report nav carries the planned discipline sections, grouped', () => {
+test('the report nav is two destinations, then Explore, then Validate', () => {
   const { SITE_AUDIT_NAV_GROUPS, SITE_AUDIT_TAB_LABEL } = lift(['SITE_AUDIT_NAV_GROUPS', 'SITE_AUDIT_TAB_LABEL']);
-  const groups = SITE_AUDIT_NAV_GROUPS.map((g) => g.label);
-  assert.deepEqual(groups, ['Report', 'Disciplines', 'Browser checks', 'Crawl data']);
+  assert.deepEqual(SITE_AUDIT_NAV_GROUPS.map((g) => g.label), ['', 'Explore', 'Validate']);
+  assert.deepEqual(SITE_AUDIT_NAV_GROUPS[0].items, ['overview', 'findings'], 'the audit is read here');
+  assert.deepEqual(SITE_AUDIT_NAV_GROUPS[1].items, ['urls', 'links'], 'the rows are interrogated here');
+  assert.deepEqual(SITE_AUDIT_NAV_GROUPS[2].items, ['browser'], 'the evidence that must be asked for');
+  for (const id of SITE_AUDIT_NAV_GROUPS.flatMap((g) => g.items)) assert.ok(SITE_AUDIT_TAB_LABEL[id], id + ' needs a label');
+});
 
-  const items = SITE_AUDIT_NAV_GROUPS.flatMap((g) => g.items);
-  // The four sections the report had before Phase 1 all survive.
-  for (const kept of ['overview', 'findings', 'urls', 'links']) assert.ok(items.includes(kept), `${kept} must survive`);
-  // Every section named in the plan's Phase 1 list is present.
-  for (const added of ['availability', 'indexability', 'content', 'duplicates', 'sitemaps', 'security', 'international', 'performance', 'accessibility']) {
-    assert.ok(items.includes(added), `${added} should be a report section`);
+test('Pages and Links carry sub-views, and every one is a scope the store can answer', () => {
+  const { SITE_AUDIT_SUBVIEWS } = lift(['SITE_AUDIT_SUBVIEWS']);
+  assert.deepEqual(Object.keys(SITE_AUDIT_SUBVIEWS), ['urls', 'links']);
+  // A sub-view that cannot narrow the query behind it is a bookmark wearing
+  // navigation's clothes. Each one names a real store filter.
+  for (const v of SITE_AUDIT_SUBVIEWS.urls) {
+    assert.ok(v.id && v.label, 'a sub-view needs an id and a label');
+    if (v.id === 'all') continue;
+    const keys = Object.keys(v.scope || {});
+    assert.ok(keys.length, v.id + ' must carry a scope');
+    for (const k of keys) assert.ok(['statuses', 'indexable', 'depth', 'httpClass'].includes(k), k + ' is not a listUrls filter');
   }
-  assert.ok(items.length >= 12, `Phase 1 asks for at least 12 sections, found ${items.length}`);
-  for (const id of items) assert.ok(SITE_AUDIT_TAB_LABEL[id], `${id} needs a label`);
+  for (const v of SITE_AUDIT_SUBVIEWS.links) assert.ok('status' in v, v.id + ' must name a link status');
 });
 
-test('availability leads the disciplines and accessibility does not', () => {
-  const { SITE_AUDIT_NAV_GROUPS } = lift(['SITE_AUDIT_NAV_GROUPS']);
-  const disciplines = SITE_AUDIT_NAV_GROUPS.find((g) => g.label === 'Disciplines').items;
-  assert.equal(disciplines[0], 'availability', 'a confirmed functional failure leads the report');
-
-  const order = SITE_AUDIT_NAV_GROUPS.flatMap((g) => g.items);
-  assert.ok(
-    order.indexOf('availability') < order.indexOf('accessibility'),
-    'accessibility is the cheapest discipline to detect in volume, which is not a claim to precedence'
-  );
+test('the disciplines survive the nav change as the Findings area filter', () => {
+  // The ten discipline sections are gone from the nav. The taxonomy is not:
+  // it moved to the filter on the list it narrows, which is where a lens
+  // belongs. Losing it would have dropped the rule-to-area map entirely.
+  const { SITE_AUDIT_AREA_LABEL, SITE_AUDIT_DISCIPLINE_META } = lift(['SITE_AUDIT_AREA_LABEL', 'SITE_AUDIT_DISCIPLINE_META']);
+  assert.deepEqual(Object.keys(SITE_AUDIT_AREA_LABEL), Object.keys(SITE_AUDIT_DISCIPLINE_META), 'every discipline is an area');
+  assert.match(overlay, /<select class="findings-impact"/, 'the filter is on Findings');
+  const filter = overlay.match(/function renderImpactFilter\(groups\)[\s\S]*?\n  \}/);
+  assert.ok(filter, 'the area filter should exist');
+  assert.match(filter[0], /disciplineOf\(g\.rule_id\)/, 'areas are disciplines, not impact classes');
+  // And the list it filters agrees with it.
+  assert.match(overlay, /!impactClass \|\| disciplineOf\(g\.rule_id\) === impactClass/);
 });
 
-test('the render-pass disciplines are grouped apart from the static ones', () => {
-  const { SITE_AUDIT_NAV_GROUPS, SITE_AUDIT_DISCIPLINE_META } = lift(['SITE_AUDIT_NAV_GROUPS', 'SITE_AUDIT_DISCIPLINE_META']);
-  const browserChecks = SITE_AUDIT_NAV_GROUPS.find((g) => g.label === 'Browser checks').items;
-  assert.deepEqual(browserChecks, ['performance', 'accessibility']);
-  // Those two are exactly the sections that can honestly be empty, so their
-  // evidence tier has to say so.
-  for (const id of browserChecks) assert.equal(SITE_AUDIT_DISCIPLINE_META[id].evidence, 'render');
+test('availability leads the areas and accessibility does not', () => {
+  const { SITE_AUDIT_AREA_LABEL } = lift(['SITE_AUDIT_AREA_LABEL']);
+  const order = Object.keys(SITE_AUDIT_AREA_LABEL);
+  assert.equal(order[0], 'availability', 'a confirmed functional failure leads');
+  assert.ok(order.indexOf('availability') < order.indexOf('accessibility'),
+    'accessibility is the cheapest discipline to detect in volume, which is not a claim to precedence');
+});
+
+test('the evidence that must be asked for is separated, and says so', () => {
+  // Performance and accessibility are the two areas that can legitimately
+  // hold nothing, because their evidence comes from a pass that has to be
+  // started. They sit under Validate, and the nav row carries a state rather
+  // than a count — a count of zero would read as a clean result.
+  const { SITE_AUDIT_DISCIPLINE_META } = lift(['SITE_AUDIT_DISCIPLINE_META']);
+  for (const id of ['performance', 'accessibility']) assert.equal(SITE_AUDIT_DISCIPLINE_META[id].evidence, 'render');
+  const nav = overlay.match(/function renderNavStates\(\)[\s\S]*?\n  \}/);
+  assert.ok(nav, 'renderNavStates should exist');
+  assert.match(nav[0], /id === 'browser'/);
+  assert.match(nav[0], /'Not run'/, 'an unrun pass says so rather than showing zero');
+  assert.match(overlay, /class="tab-panel browser-panel"/);
 });
 
 // --- 2. No finding can fall out of the report ------------------------------

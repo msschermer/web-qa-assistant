@@ -1099,9 +1099,23 @@ if (!globalThis.__WEB_QA_CONTENT__) {
          before trusting a section: where its evidence comes from. "Browser
          checks" is a separate group precisely because those two sections are
          the ones that can honestly be empty. */
-      .nav-group{margin:0 0 12px}
+      .nav-group{margin:0 0 14px}
       .nav-group:last-of-type{margin-bottom:0}
-      .nav-group-label{font-size:10.5px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--sa-ink-faint);padding:0 10px;margin:0 0 5px}
+      .nav-group-label{font-size:10.5px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--sa-ink-faint);padding:0 10px;margin:0 0 6px}
+      .nav-block{display:grid;gap:2px}
+
+      /* A parent's scopes, revealed in place beneath it. The rail is what says
+         these belong to the row above rather than being siblings of it. */
+      .subnav{display:grid;gap:1px;margin:1px 0 5px 15px;padding-left:11px;border-left:1px solid var(--sa-line)}
+      .subnav[hidden]{display:none}
+      .subnav-item{display:flex;align-items:center;gap:8px;width:100%;min-height:28px;padding:0 8px;border:0;background:transparent;border-radius:var(--sa-radius-sm);color:var(--sa-ink-faint);font:inherit;font-size:12.5px;text-align:left;cursor:pointer}
+      .subnav-item>span:first-child{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .subnav-count{flex:0 0 auto;font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--sa-ink-faint)}
+      .subnav-item:hover:not(:disabled){background:var(--sa-subtle);color:var(--sa-ink)}
+      .subnav-item.active{color:var(--sa-primary-text);font-weight:600}
+      .subnav-item.active .subnav-count{color:var(--sa-primary-text)}
+      .subnav-item:disabled{opacity:.45;cursor:default}
+      .subnav-item:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
 
       /* The state chip is the answer to Sitebulb's score dial: the same
          glanceable per-section signal without inventing a number. Three
@@ -1507,24 +1521,54 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   // availability — a confirmed functional failure — leads, and accessibility
   // takes its turn alongside the rest rather than at the front, because being
   // the cheapest discipline to detect in volume is not a claim to precedence.
+  /**
+   * The report's navigation.
+   *
+   * Two top-level destinations, then two labelled groups. Overview and
+   * Findings are where the audit is read; Explore is where the underlying
+   * rows are interrogated; Validate is the one section whose evidence has to
+   * be asked for, which is why it is separated and why it carries a state
+   * rather than a count.
+   *
+   * The ten discipline sections this replaces are not lost: they became the
+   * area filter on Findings, where a filter belongs, and their coverage
+   * statements moved to Overview's site-systems readout. A discipline is a
+   * lens on the findings, not a place.
+   */
   const SITE_AUDIT_NAV_GROUPS = [
-    { label: 'Report', items: ['overview', 'findings'] },
-    { label: 'Disciplines', items: ['availability', 'indexability', 'content', 'duplicates', 'sitemaps', 'security', 'international', 'quality'] },
-    // Separated because these two are the sections that can legitimately hold
-    // nothing: their evidence comes from the optional render pass, and an
-    // empty Accessibility section means "not measured", never "clean".
-    { label: 'Browser checks', items: ['performance', 'accessibility'] },
-    { label: 'Crawl data', items: ['urls', 'links'] }
+    { label: '', items: ['overview', 'findings'] },
+    { label: 'Explore', items: ['urls', 'links'] },
+    { label: 'Validate', items: ['browser'] }
   ];
 
   const SITE_AUDIT_TAB_LABEL = {
-    overview: 'Overview', findings: 'Findings', urls: 'Pages', links: 'Links',
-    availability: 'Availability', indexability: 'Indexability', content: 'Content',
-    duplicates: 'Duplicates', sitemaps: 'Sitemaps', security: 'Security',
-    international: 'International', quality: 'Web quality',
-    performance: 'Performance', accessibility: 'Accessibility'
+    overview: 'Overview', findings: 'Findings', urls: 'Pages', links: 'Links', browser: 'Browser checks'
   };
 
+  /**
+   * Sub-views, shown indented under whichever parent is open.
+   *
+   * Each one is a scope the store can actually answer, never a saved search:
+   * a sub-view that cannot narrow the query behind it is a bookmark wearing
+   * navigation's clothes.
+   */
+  const SITE_AUDIT_SUBVIEWS = {
+    urls: [
+      { id: 'all', label: 'All pages', scope: {} },
+      { id: 'gaps', label: 'Not fully checked', scope: { statuses: 'queued,error,skipped' } },
+      { id: 'noindex', label: 'noindex', scope: { indexable: 'no' } },
+      { id: 'errors', label: 'Failed to fetch', scope: { statuses: 'error' } }
+    ],
+    links: [
+      { id: 'all', label: 'All links', status: '' },
+      { id: 'broken', label: 'Broken', status: 'broken' },
+      { id: 'blocked', label: 'Blocked', status: 'blocked' },
+      { id: 'inconclusive', label: 'Unverified', status: 'inconclusive' }
+    ]
+  };
+
+  /** Discipline metadata still drives the Findings area filter, so the map
+   * from rule id to discipline stays exactly as it was. */
   /** Rule id to discipline, first match wins. Order is load-bearing:
    * `a11y.lang-*` is an International fact before it is an accessibility one,
    * `web.meta-refresh` is an indexability fact, and `quality` is last because
@@ -1614,12 +1658,31 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
   const SITE_AUDIT_DISCIPLINE_IDS = Object.keys(SITE_AUDIT_DISCIPLINE_META);
 
+  /** Area names as the Findings filter shows them. Availability first, by the
+   * standing rule that a confirmed functional failure outranks the discipline
+   * that is cheapest to detect in volume. */
+  const SITE_AUDIT_AREA_LABEL = {
+    availability: 'Availability', indexability: 'Indexability', content: 'Content',
+    duplicates: 'Duplicates', sitemaps: 'Sitemaps', security: 'Security',
+    international: 'International', quality: 'Web quality',
+    performance: 'Performance', accessibility: 'Accessibility'
+  };
+
+  /** Each parent carries its own sub-nav, rendered but hidden until that
+   * parent is the open one — so opening Pages reveals its scopes in place
+   * rather than replacing the navigation the operator was reading. */
   function siteAuditNavMarkup() {
     return SITE_AUDIT_NAV_GROUPS.map((group) => `
             <div class="nav-group">
-              <p class="nav-group-label">${group.label}</p>
-              <nav class="tabs" aria-label="${group.label}">
-                ${group.items.map((id) => `<button type="button" class="tab${id === 'overview' ? ' active' : ''}" data-tab="${id}"><span class="tab-label">${SITE_AUDIT_TAB_LABEL[id]}</span><span class="tab-state" hidden><span class="tab-dot" aria-hidden="true"></span><span class="tab-num"></span></span></button>`).join('')}
+              ${group.label ? `<p class="nav-group-label">${group.label}</p>` : ''}
+              <nav class="tabs"${group.label ? ` aria-label="${group.label}"` : ''}>
+                ${group.items.map((id) => `<div class="nav-block">
+                  <button type="button" class="tab${id === 'overview' ? ' active' : ''}" data-tab="${id}">
+                    <span class="tab-label">${SITE_AUDIT_TAB_LABEL[id]}</span>
+                    <span class="tab-state" hidden><span class="tab-dot" aria-hidden="true"></span><span class="tab-num"></span></span>
+                  </button>
+                  ${(SITE_AUDIT_SUBVIEWS[id] || []).length ? `<div class="subnav" data-for="${id}" hidden>${SITE_AUDIT_SUBVIEWS[id].map((v) => `<button type="button" class="subnav-item" data-tab="${id}" data-view="${v.id}">${v.label}</button>`).join('')}</div>` : ''}
+                </div>`).join('')}
               </nav>
             </div>`).join('');
   }
@@ -1878,6 +1941,18 @@ if (!globalThis.__WEB_QA_CONTENT__) {
                identical by design — heading, coverage statement, figures,
                distributions, then the findings scoped to that discipline — so
                an operator who has read one knows how to read the rest. -->
+          <!-- The one section whose evidence has to be asked for. It carries a
+               state rather than a count in the nav for the same reason. -->
+          <div class="tab-panel browser-panel" hidden>
+            <div class="section-head"><h2>Browser checks</h2><p class="section-lede">Accessibility, JavaScript behaviour and measured performance. This evidence exists only for pages opened in a real browser, which is a separate pass from the crawl and runs on this machine.</p></div>
+            <div class="browser-host"></div>
+            <div class="section-grid section-blocks browser-blocks"></div>
+            <div class="section-findings">
+              <h3 class="section-findings-title">Findings from the browser pass</h3>
+              <p class="hint section-findings-note"></p>
+              <ul class="findings-list browser-findings-list"></ul>
+            </div>
+          </div>
           <div class="tab-panel section-panel" hidden>
             <div class="section-head"><h2 class="section-title"></h2><p class="section-lede"></p></div>
             <div class="coverage-line" data-state="unknown"><span class="cl-mark" aria-hidden="true"></span><span class="cl-text"></span><button type="button" class="btn cl-action" hidden>Run browser checks</button></div>
@@ -1993,6 +2068,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       switchSiteAuditTab('findings');
     });
     for (const tab of shadow.querySelectorAll('.tab')) tab.addEventListener('click', () => switchSiteAuditTab(tab.dataset.tab));
+    for (const item of shadow.querySelectorAll('.subnav-item')) {
+      item.addEventListener('click', () => switchSiteAuditTab(item.dataset.tab, item.dataset.view));
+    }
     for (const btn of shadow.querySelectorAll('.export-btn')) btn.addEventListener('click', () => exportSiteAudit(btn.dataset.dataset));
     const onFindingsSearch = debounce((value) => { siteAudit.findingsSearch = value; renderFindingsList(); }, 150);
     shadow.querySelector('.findings-search').addEventListener('input', (e) => onFindingsSearch(e.target.value));
@@ -2899,24 +2977,36 @@ if (!globalThis.__WEB_QA_CONTENT__) {
    * findings it narrowed. The counts were redundant; the filter was not, so
    * the filter moved to the Findings toolbar and the card went away.
    */
+  /**
+   * The area filter on Findings.
+   *
+   * Areas are the ten disciplines, not the seven impact classes: every rule id
+   * either scanner tier can emit maps to exactly one discipline, and that map
+   * is what the nav's discipline sections used to expose. Removing those
+   * sections moved the taxonomy here rather than deleting it — a discipline is
+   * a lens on the findings, and a lens belongs on the list it narrows.
+   *
+   * Ordered by the standing prioritization rule, so availability heads the
+   * list and accessibility takes its turn rather than leading on volume.
+   */
   function renderImpactFilter(groups) {
     const select = siteAudit.shadow.querySelector('.findings-impact');
     if (!select) return;
     const counts = {};
     for (const g of groups) {
-      const cls = g.impact_class || 'implementation';
-      counts[cls] = (counts[cls] || 0) + g.instances;
+      const area = disciplineOf(g.rule_id);
+      counts[area] = (counts[area] || 0) + g.instances;
     }
-    const present = SITE_AUDIT_IMPACT_ORDER.filter((cls) => counts[cls]);
+    const present = SITE_AUDIT_DISCIPLINE_IDS.filter((id) => counts[id]);
     select.innerHTML = '';
     const all = document.createElement('option');
     all.value = '';
     all.textContent = 'All areas';
     select.appendChild(all);
-    for (const cls of present) {
+    for (const id of present) {
       const option = document.createElement('option');
-      option.value = cls;
-      option.textContent = `${SITE_AUDIT_IMPACT_LABEL[cls] || cls} (${counts[cls]})`;
+      option.value = id;
+      option.textContent = `${SITE_AUDIT_AREA_LABEL[id] || id} (${counts[id]})`;
       select.appendChild(option);
     }
     select.value = siteAudit.findingsImpactClass || '';
@@ -3374,32 +3464,38 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   const SITE_AUDIT_STATE_WORD = { ok: 'Observed', attention: 'Needs attention', unknown: 'Not established' };
   const fmtCount = (n) => (n > 999 ? `${Math.round(n / 100) / 10}k` : String(n));
 
-  /** Every nav row carries its own state and count. This is the answer to
-   * Sitebulb's score dials: the same at-a-glance section triage, with no
-   * invented number to be quoted back without its caveats. */
+  /**
+   * Every nav row carries what it can say about itself.
+   *
+   * Overview says nothing — it is the summary of everything else. Findings,
+   * Pages and Links carry counts, because they are inventories. Browser checks
+   * carries a state, because the honest answer there is usually "not run", and
+   * a count of zero would read as a clean result.
+   */
   function renderNavStates() {
     const shadow = siteAudit.shadow;
     const audit = siteAudit.audit || {};
     const counts = audit.urlCounts || {};
     const linkTotal = Object.values(audit.linkCounts || {}).reduce((s, n) => s + Number(n || 0), 0);
+    const rp = audit.renderProgress || {};
+    const rendered = Number(rp.rendered || 0);
+    const renderTotal = Number(rp.total || 0);
     for (const btn of shadow.querySelectorAll('.tab')) {
       const id = btn.dataset.tab;
       const chip = btn.querySelector('.tab-state');
       if (!chip) continue;
       const dot = chip.querySelector('.tab-dot');
       const num = chip.querySelector('.tab-num');
-      if (SITE_AUDIT_DISCIPLINE_META[id]) {
-        const { state, count } = disciplineState(id);
+      if (id === 'browser') {
         chip.hidden = false;
-        chip.dataset.state = state;
         dot.hidden = false;
-        num.textContent = state === 'unknown' ? '—' : fmtCount(count);
-        btn.title = `${SITE_AUDIT_TAB_LABEL[id]} — ${SITE_AUDIT_STATE_WORD[state]}${state === 'unknown' ? '' : `, ${count} established finding${count === 1 ? '' : 's'}`}`;
+        chip.dataset.state = !renderTotal ? 'unknown' : rendered === 0 ? 'unknown' : rendered < renderTotal ? 'attention' : 'ok';
+        num.textContent = !renderTotal ? '—' : rendered === 0 ? 'Not run' : rendered < renderTotal ? `${rendered}/${renderTotal}` : 'Done';
+        btn.title = rendered === 0
+          ? 'Accessibility, JavaScript and performance have not been measured on this site'
+          : `${rendered} of ${renderTotal} pages checked in this browser`;
         continue;
       }
-      // Findings, Pages and Links are inventories, not judgements: they carry
-      // a count and no state dot, because there is nothing to be "attentive"
-      // about in a complete list of what was crawled.
       const plain = { findings: Number(audit.findingsCount || 0), urls: Number(counts.fetched || 0), links: linkTotal }[id];
       if (plain === undefined) { chip.hidden = true; continue; }
       chip.hidden = false;
@@ -3408,6 +3504,92 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       num.textContent = fmtCount(plain);
       btn.removeAttribute('title');
     }
+    renderSubnavCounts();
+  }
+
+  /** Sub-view rows carry the size of the scope behind them, so an operator can
+   * see there are 40 broken links without opening the view to find out. */
+  function renderSubnavCounts() {
+    const shadow = siteAudit.shadow;
+    const audit = siteAudit.audit || {};
+    const counts = audit.urlCounts || {};
+    const links = audit.linkCounts || {};
+    const pages = siteAudit.distributions?.pages || {};
+    const sizes = {
+      'urls:all': Number(counts.fetched || 0),
+      'urls:gaps': ['queued', 'error', 'skipped'].reduce((n, k) => n + Number(counts[k] || 0), 0),
+      'urls:noindex': Number(pages.noindex || 0),
+      'urls:errors': Number(counts.error || 0),
+      'links:all': Object.values(links).reduce((s, n) => s + Number(n || 0), 0),
+      'links:broken': Number(links.broken || 0),
+      'links:blocked': Number(links.blocked || 0),
+      'links:inconclusive': Number(links.inconclusive || 0)
+    };
+    for (const btn of shadow.querySelectorAll('.subnav-item')) {
+      const size = sizes[`${btn.dataset.tab}:${btn.dataset.view}`];
+      const label = (SITE_AUDIT_SUBVIEWS[btn.dataset.tab] || []).find((v) => v.id === btn.dataset.view)?.label || '';
+      btn.textContent = '';
+      const name = document.createElement('span');
+      name.textContent = label;
+      const count = document.createElement('span');
+      count.className = 'subnav-count';
+      count.textContent = size === undefined ? '' : fmtCount(size);
+      btn.append(name, count);
+      // A scope with nothing behind it stays visible but stops inviting a
+      // click into an empty table.
+      btn.disabled = size === 0 && btn.dataset.view !== 'all';
+    }
+  }
+
+  /**
+   * Browser checks: the render pass and the two disciplines that depend on it.
+   *
+   * Zero rendered pages is not a clean accessibility result, so this view
+   * leads with the pass itself and states the gap before it shows anything.
+   */
+  function renderBrowserChecks() {
+    const shadow = siteAudit.shadow;
+    const host = shadow.querySelector('.browser-host');
+    const blocks = shadow.querySelector('.browser-blocks');
+    if (!host || !blocks) return;
+    // The render panel is one element and lives on the Overview; it is moved
+    // here rather than duplicated, so there is one of it in the DOM.
+    const panel = shadow.querySelector('.render-section');
+    if (panel && panel.parentElement !== host) host.appendChild(panel);
+    if (panel) renderSiteAuditRenderSection(siteAudit.audit || {});
+
+    const groups = [...disciplineGroups('performance'), ...disciplineGroups('accessibility')];
+    const rp = siteAudit.audit?.renderProgress || {};
+    const rendered = Number(rp.rendered || 0);
+    blocks.innerHTML = '';
+    for (const id of ['performance', 'accessibility']) {
+      const built = SITE_AUDIT_SECTION_BUILDERS[id] ? SITE_AUDIT_SECTION_BUILDERS[id]() : null;
+      if (!built) continue;
+      const card = document.createElement('section');
+      card.className = 'dist';
+      const head = document.createElement('div');
+      head.className = 'dist-head';
+      const h3 = document.createElement('h3');
+      h3.textContent = SITE_AUDIT_DISCIPLINE_META[id] ? (id === 'performance' ? 'Performance' : 'Accessibility') : id;
+      head.appendChild(h3);
+      card.appendChild(head);
+      const note = document.createElement('p');
+      note.className = 'dist-note';
+      note.textContent = String(built.coverage?.text || '').replace(/<[^>]*>/g, '');
+      card.appendChild(note);
+      const stats = document.createElement('dl');
+      stats.className = 'section-stats';
+      for (const tile of built.tiles || []) stats.appendChild(sectionTile(tile));
+      if ((built.tiles || []).length) card.appendChild(stats);
+      blocks.appendChild(card);
+    }
+    shadow.querySelector('.browser-panel .section-findings-note').textContent =
+      rendered ? `From the ${rendered} page${rendered === 1 ? '' : 's'} opened in this browser.` : 'None yet — the pass has not run.';
+    renderFindingRowsInto(
+      shadow.querySelector('.browser-findings-list'),
+      groups,
+      rendered ? 'Nothing was flagged on the pages checked in this browser.' : 'Nothing here has been measured yet, so there is nothing to report either way.'
+    );
   }
 
   // --- Small presentational builders ---------------------------------------
@@ -4256,29 +4438,52 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     return box;
   }
 
-  async function switchSiteAuditTab(tab) {
+  async function switchSiteAuditTab(tab, view) {
     siteAudit.tab = tab;
     const shadow = siteAudit.shadow;
     const discipline = Boolean(SITE_AUDIT_DISCIPLINE_META[tab]);
     for (const btn of shadow.querySelectorAll('.tab')) btn.classList.toggle('active', btn.dataset.tab === tab);
+    // A parent's scopes are revealed in place, so the navigation the operator
+    // was reading stays on screen.
+    for (const nav of shadow.querySelectorAll('.subnav')) nav.hidden = nav.dataset.for !== tab;
+    if (view !== undefined) siteAudit.subview = { ...(siteAudit.subview || {}), [tab]: view };
+    const openView = (siteAudit.subview || {})[tab] || 'all';
+    for (const btn of shadow.querySelectorAll('.subnav-item')) {
+      btn.classList.toggle('active', btn.dataset.tab === tab && btn.dataset.view === openView);
+    }
+    const panelFor = tab === 'browser' ? 'browser' : tab;
     for (const panel of shadow.querySelectorAll('.tab-panel')) {
-      panel.hidden = discipline ? !panel.classList.contains('section-panel') : !panel.classList.contains(`${tab}-panel`);
+      panel.hidden = discipline ? !panel.classList.contains('section-panel') : !panel.classList.contains(`${panelFor}-panel`);
     }
     // A section can be several screens tall. Arriving at one already scrolled
     // to where the previous section happened to be is disorienting.
     const main = shadow.querySelector('.view-results .main');
     if (main) main.scrollTop = 0;
     if (discipline) {
-      // The groups are the section's contents, so a section opened before the
-      // first findings read lands fetches them rather than rendering empty.
       if (!siteAudit.rawFindingGroups) await loadSiteAuditFindings({ silent: true });
       if (!siteAudit) return;
       return renderDisciplineSection(tab);
     }
     if (tab === 'findings') { shadow.querySelector('.findings-search').value = siteAudit.findingsSearch; return loadSiteAuditFindings(); }
-    if (tab === 'urls') return loadSiteAuditUrls();
-    if (tab === 'links') { shadow.querySelector('.links-status').value = siteAudit.linksStatus; return loadSiteAuditLinks(); }
+    if (tab === 'urls') {
+      const scope = (SITE_AUDIT_SUBVIEWS.urls.find((v) => v.id === openView) || {}).scope || {};
+      siteAudit.urlsStatus = scope.statuses || '';
+      siteAudit.urlsIndexable = scope.indexable || '';
+      siteAudit.urlsDepth = null;
+      siteAudit.urlsHttpClass = '';
+      siteAudit.urlsOffset = 0;
+      return loadSiteAuditUrls();
+    }
+    if (tab === 'links') {
+      const scope = SITE_AUDIT_SUBVIEWS.links.find((v) => v.id === openView) || {};
+      siteAudit.linksStatus = scope.status || '';
+      siteAudit.linksOffset = 0;
+      shadow.querySelector('.links-status').value = siteAudit.linksStatus;
+      return loadSiteAuditLinks();
+    }
+    if (tab === 'browser') return renderBrowserChecks();
   }
+
 
   async function loadSiteAuditFindings({ silent = false } = {}) {
     const r = await chrome.runtime.sendMessage({ type: 'SITE_AUDIT_FINDINGS', auditId: siteAudit.auditId, groupByRule: true }).catch(() => null);
@@ -4303,7 +4508,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const groups = all.filter((g) =>
       (!search || g.rule_id.toLowerCase().includes(search) || findingLabel(g).toLowerCase().includes(search)) &&
       (!category || g.category === category) &&
-      (!impactClass || (g.impact_class || 'implementation') === impactClass) &&
+      (!impactClass || disciplineOf(g.rule_id) === impactClass) &&
       (!siteAudit.findingsHideUnconfirmed || g.confidence === 'confirmed')
     );
     const SEV_RANK = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
