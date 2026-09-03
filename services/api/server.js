@@ -20,7 +20,7 @@ import { targetIntegrityLimitsAudit, targetIntegrityBlocksAudit } from '../../pa
 import { issueInstallationToken, verifyInstallationToken } from '../../packages/auth/install-access.js';
 import { probeExternalCandidates, mapExternalProbeRows } from '../../packages/security/safe-probe.js';
 import { openAuditStore, newAuditId, normalizeAuditUrl } from '../../packages/crawl/store.js';
-import { runAudit, isCrawlableStartUrl, planCrawlConfig } from '../../packages/crawl/crawler.js';
+import { runAudit, isCrawlableStartUrl, planCrawlConfig, CRAWL_LIMITS } from '../../packages/crawl/crawler.js';
 import { renderAuditReportHtml } from '../../packages/crawl/report.js';
 import { buildAuditDebugBundle } from '../../packages/crawl/debug-report.js';
 
@@ -420,8 +420,45 @@ function auditProgressPayload(audit) {
     // to show "crawl done, N pages still need a deeper render" as two facts,
     // not collapse them into one progress bar.
     renderProgress: auditStore.renderProgress(audit.id),
-    recentUrls: auditStore.recentUrls(audit.id, 6)
+    // Paused is a live fact about the worker, not a stored one: an audit whose
+    // worker died is not paused, it is interrupted, and the two must not read
+    // alike on the progress screen.
+    paused: Boolean(runningAudits.get(audit.id)?.paused),
+    budgetCeiling: CRAWL_LIMITS.hardMaxPages,
+    recentUrls: auditStore.recentUrls(audit.id, 12)
   };
+}
+
+/**
+ * Starts the crawl worker for an audit row that already exists.
+ *
+ * Shared by the first run and by "continue crawl": raising the page budget on
+ * an audit whose workers already stopped needs them started again against the
+ * frontier still sitting in the store, not a fresh audit. runAudit re-enqueues
+ * nothing and claims only queued rows, so completed work is never repeated.
+ *
+ * `config` rides on the control record so the pause and budget endpoints can
+ * reach the object the running crawl is actually reading.
+ */
+function launchAudit(id, startUrl, config) {
+  const control = { cancelled: false, paused: false, config };
+  runningAudits.set(id, control);
+  auditStore.markRunning(id);
+  (async () => {
+    try {
+      const result = await runAudit({
+        auditId: id, startUrl, config, store: auditStore,
+        isCancelled: () => control.cancelled,
+        isPaused: () => control.paused
+      });
+      auditStore.finishAudit(id, { status: result.cancelled ? 'cancelled' : 'complete', stats: result.stats });
+    } catch (error) {
+      auditStore.finishAudit(id, { status: 'failed', error: String(error?.message || error).slice(0, 500) });
+    } finally {
+      runningAudits.delete(id);
+    }
+  })();
+  return control;
 }
 
 app.post('/api/audits', requireExtensionKey, async (req, res) => {
@@ -443,22 +480,7 @@ app.post('/api/audits', requireExtensionKey, async (req, res) => {
   const config = planCrawlConfig(req.body || {});
   const siteOrigin = new URL(gate.url).origin;
   const id = auditStore.createAudit({ siteOrigin, startUrl: gate.url, config, owner });
-  const control = { cancelled: false };
-  runningAudits.set(id, control);
-  auditStore.markRunning(id);
-  (async () => {
-    try {
-      const result = await runAudit({
-        auditId: id, startUrl: gate.url, config, store: auditStore,
-        isCancelled: () => control.cancelled
-      });
-      auditStore.finishAudit(id, { status: result.cancelled ? 'cancelled' : 'complete', stats: result.stats });
-    } catch (error) {
-      auditStore.finishAudit(id, { status: 'failed', error: String(error?.message || error).slice(0, 500) });
-    } finally {
-      runningAudits.delete(id);
-    }
-  })();
+  launchAudit(id, gate.url, config);
   res.json({ ok: true, requestId: req.webQaRequestId, auditId: id, config });
 });
 
@@ -482,6 +504,61 @@ app.post('/api/audits/:id/cancel', requireExtensionKey, (req, res) => {
   if (control) control.cancelled = true;
   else if (audit.status === 'running') auditStore.finishAudit(req.params.id, { status: 'cancelled', error: 'Cancelled (no active worker found).' });
   res.json({ ok: true, requestId: req.webQaRequestId, cancelling: Boolean(control) });
+});
+
+/**
+ * Pause and resume. A paused crawl keeps its workers parked rather than
+ * settling, so nothing already fetched is lost and no page is fetched twice —
+ * which is the whole difference between this and cancel.
+ */
+app.post('/api/audits/:id/pause', requireExtensionKey, (req, res) => {
+  const audit = getOwnedAudit(req, res);
+  if (!audit) return;
+  const control = runningAudits.get(req.params.id);
+  if (!control) return res.status(409).json({ ok: false, error: 'That audit is not running.', requestId: req.webQaRequestId });
+  const paused = req.body?.paused !== false;
+  control.paused = paused;
+  auditStore.setPhase(req.params.id, paused ? 'paused' : 'crawling');
+  res.json({ ok: true, requestId: req.webQaRequestId, paused });
+});
+
+/**
+ * Raise the page budget without restarting completed work.
+ *
+ * Only upward: lowering it below what has already been fetched would make the
+ * audit describe fewer pages than it holds evidence for. The crawl reads
+ * config.maxPages live and respawns its workers when the budget grows, so a
+ * crawl that already stopped at the old budget picks the frontier back up.
+ */
+app.post('/api/audits/:id/budget', requireExtensionKey, (req, res) => {
+  const audit = getOwnedAudit(req, res);
+  if (!audit) return;
+  const requested = Math.trunc(Number(req.body?.maxPages));
+  if (!Number.isFinite(requested) || requested < 1) {
+    return res.status(400).json({ ok: false, error: 'maxPages must be a positive whole number.', requestId: req.webQaRequestId });
+  }
+  const ceiling = CRAWL_LIMITS.hardMaxPages;
+  const current = Number(audit.config?.maxPages || 0);
+  const maxPages = Math.min(ceiling, requested);
+  if (maxPages <= current) {
+    return res.status(400).json({ ok: false, error: `The page budget can only be raised. It is already ${current}.`, requestId: req.webQaRequestId });
+  }
+  const control = runningAudits.get(req.params.id);
+  const config = { ...(control?.config || audit.config || {}), maxPages };
+  if (control) control.config.maxPages = maxPages;
+  auditStore.updateAuditConfig(req.params.id, config);
+  // A finished audit whose budget just went up has its workers started again
+  // against the frontier already in the store. This is "continue crawl": the
+  // pages it already fetched stay fetched.
+  let resumed = false;
+  if (!control && Number(auditStore.urlCountsByStatus(req.params.id).queued || 0) > 0) {
+    if (runningAudits.size >= MAX_CONCURRENT_AUDITS) {
+      return res.status(429).json({ ok: false, code: 'AUDIT_CAPACITY', error: 'Too many audits are running right now. Try again shortly.', requestId: req.webQaRequestId });
+    }
+    launchAudit(req.params.id, audit.start_url, config);
+    resumed = true;
+  }
+  res.json({ ok: true, requestId: req.webQaRequestId, maxPages, ceiling, resumed });
 });
 
 function paginationOf(req) {

@@ -361,3 +361,113 @@ test('cancellation stops workers promptly without corrupting already-recorded re
   assert.ok(processed <= 3, 'cancellation must stop new work quickly rather than draining the whole frontier');
   store.close();
 });
+
+/** A ten-page ring, so a budget always leaves a frontier behind it. */
+function ringSite(origin, count) {
+  const url = (i) => `${origin}/p${i}`;
+  const pages = {};
+  for (let i = 0; i < count; i++) {
+    pages[url(i)] = page({ url: url(i), title: `Page ${i}`, links: [{ url: url((i + 1) % count), text: 'Next' }, { url: url((i + 2) % count), text: 'Skip' }] });
+  }
+  return { pages, url };
+}
+
+test('the page budget counts the audit, not the worker run', async () => {
+  // Raising the budget on a finished crawl restarts its workers against the
+  // frontier still in the store. pagesAttempted is a local, so a resumed run
+  // used to start it at zero: continuing a 5-page crawl at a budget of 10
+  // fetched ten MORE pages and finished with fifteen. A budget that means
+  // something different on the second run than the first is not a budget.
+  const store = openAuditStore(':memory:');
+  const origin = 'https://ring.example.com';
+  const { pages, url } = ringSite(origin, 12);
+  const config = { ...planCrawlConfig({ maxPages: 5, concurrency: 2 }), respectRobots: false };
+  const id = store.createAudit({ siteOrigin: origin, startUrl: url(0), config });
+  const run = () => runAudit({
+    auditId: id, startUrl: url(0), config, store,
+    collectPage: async (u) => pages[u] || page({ url: u, isHtml: false }),
+    checkLink: fakeLinkChecker({})
+  });
+
+  await run();
+  assert.equal(store.urlCountsByStatus(id).fetched, 5, 'first run stops at its budget');
+  assert.ok(Number(store.urlCountsByStatus(id).queued || 0) > 0, 'and leaves a frontier');
+
+  config.maxPages = 9;
+  await run();
+  assert.equal(store.urlCountsByStatus(id).fetched, 9, 'continuing reaches the new budget, not the new budget again');
+
+  config.maxPages = 11;
+  await run();
+  assert.equal(store.urlCountsByStatus(id).fetched, 11);
+  store.close();
+});
+
+test('a raised budget reopens a frontier the workers had already closed', async () => {
+  // Every worker returns when the budget is reached, so Promise.all settles and
+  // the crawl moves to analysis. Raising the budget after that point needs them
+  // spawned again, which is why runAudit loops rather than awaiting once.
+  const store = openAuditStore(':memory:');
+  const origin = 'https://ring.example.com';
+  const { pages, url } = ringSite(origin, 12);
+  const config = { ...planCrawlConfig({ maxPages: 3, concurrency: 3 }), respectRobots: false };
+  const id = store.createAudit({ siteOrigin: origin, startUrl: url(0), config });
+  let fetched = 0;
+  await runAudit({
+    auditId: id, startUrl: url(0), config, store,
+    collectPage: async (u) => {
+      fetched++;
+      // Raise the budget from underneath the running workers, once.
+      if (fetched === 2) config.maxPages = 8;
+      return pages[u] || page({ url: u, isHtml: false });
+    },
+    checkLink: fakeLinkChecker({})
+  });
+  assert.equal(store.urlCountsByStatus(id).fetched, 8, 'the crawl honoured a budget raised mid-run');
+  store.close();
+});
+
+test('a paused crawl parks its workers instead of settling', async () => {
+  // Pause must not look like cancel: nothing already fetched is lost, no page
+  // is fetched twice, and the crawl does not advance to analysis.
+  const store = openAuditStore(':memory:');
+  const origin = 'https://ring.example.com';
+  const { pages, url } = ringSite(origin, 12);
+  const config = { ...planCrawlConfig({ maxPages: 8, concurrency: 2 }), respectRobots: false };
+  const id = store.createAudit({ siteOrigin: origin, startUrl: url(0), config });
+  let paused = false;
+  // A one-shot latch. A condition that stays true re-pauses the crawl the
+  // instant it is released, which looks exactly like a hang.
+  let pausedOnce = false;
+  const fetchedNow = () => Number(store.urlCountsByStatus(id).fetched || 0);
+  const run = runAudit({
+    auditId: id, startUrl: url(0), config, store,
+    isPaused: () => paused,
+    collectPage: async (u) => {
+      if (!pausedOnce && fetchedNow() >= 2) { paused = true; pausedOnce = true; }
+      return pages[u] || page({ url: u, isHtml: false });
+    },
+    checkLink: fakeLinkChecker({})
+  });
+
+  // Observations are gathered first and asserted after the crawl is released:
+  // an assertion thrown while workers are parked leaves runAudit pending
+  // forever and hangs the runner rather than failing it.
+  let held = 0; let stillHeld = 0;
+  let result;
+  try {
+    await new Promise((r) => setTimeout(r, 400));
+    held = fetchedNow();
+    await new Promise((r) => setTimeout(r, 400));
+    stillHeld = fetchedNow();
+  } finally {
+    paused = false;
+    result = await run;
+  }
+
+  assert.ok(held > 0 && held < 8, `paused part-way, got ${held} of 8`);
+  assert.equal(stillHeld, held, 'a paused crawl fetches nothing further');
+  assert.equal(result.cancelled, false, 'pausing is not cancelling');
+  assert.equal(fetchedNow(), 8, 'and it resumes to the budget');
+  store.close();
+});

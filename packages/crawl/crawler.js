@@ -211,7 +211,7 @@ export async function runAudit({
   auditId, startUrl, config, store,
   collectPage = (url) => collectStaticPage(url, { userAgent: config.userAgent }),
   checkLink = (url) => probeExternalDestination(url, { timeoutMs: 8000 }),
-  onProgress = () => {}, isCancelled = () => false, log = () => {}
+  onProgress = () => {}, isCancelled = () => false, isPaused = () => false, log = () => {}
 }) {
   const origin = new URL(startUrl).origin;
   const stats = { pagesProcessed: 0, pagesErrored: 0, pagesSkippedRobots: 0, findingsTotal: 0, linksTotal: 0, linksChecked: 0 };
@@ -269,7 +269,14 @@ export async function runAudit({
   // maxPages must bound total render ATTEMPTS, not just successes — otherwise
   // a target with a high error rate (flaky pages, timeouts) never converges
   // and the crawl silently costs far more time than the user asked for.
-  let pagesAttempted = 0;
+  // Seeded from work already off the frontier, so the page budget counts the
+  // audit's total rather than this worker run's. Without it, continuing a
+  // 6-page crawl at a 12-page budget fetched twelve MORE pages and finished
+  // with eighteen — a budget that means something different on the second run
+  // than the first is not a budget.
+  let pagesAttempted = Object.entries(store.urlCountsByStatus(auditId))
+    .filter(([status]) => status !== 'queued')
+    .reduce((total, [, count]) => total + Number(count || 0), 0);
   // Every discovered link is checked at most once per audit no matter how
   // many pages reference it — this is what keeps link-checking cheap on a
   // site with a shared nav/footer — but a finding is still recorded against
@@ -307,6 +314,11 @@ export async function runAudit({
 
   async function worker() {
     while (true) {
+      if (isCancelled()) { cancelledEarly = true; return; }
+      // Paused workers park rather than exit. Exiting would settle the whole
+      // crawl and move it to analysis, which is a different thing entirely
+      // from what the operator asked for when they pressed Pause.
+      while (isPaused() && !isCancelled()) await new Promise((r) => setTimeout(r, 200));
       if (isCancelled()) { cancelledEarly = true; return; }
       if (pagesAttempted >= config.maxPages) return;
       const job = store.claimNextQueuedUrl(auditId);
@@ -394,8 +406,27 @@ export async function runAudit({
     }
   }
 
-  const workerCount = Math.min(config.concurrency, config.maxPages);
-  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  /**
+   * `config.maxPages` is deliberately read live rather than captured: the
+   * operator can raise the page budget while the crawl runs, or after the
+   * workers have already stopped at the old one, and the frontier reopens
+   * instead of the whole audit having to be run again. Every worker returns
+   * when the budget is reached, so raising it after that point needs them
+   * spawned again — hence the loop rather than a single Promise.all.
+   */
+  const runWorkers = async () => {
+    const remaining = Math.max(1, config.maxPages - pagesAttempted);
+    const workerCount = Math.max(1, Math.min(config.concurrency, remaining));
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  };
+  await runWorkers();
+  while (
+    !cancelledEarly && !isCancelled() &&
+    pagesAttempted < config.maxPages &&
+    Number(store.urlCountsByStatus(auditId).queued || 0) > 0
+  ) {
+    await runWorkers();
+  }
 
   store.setPhase(auditId, 'analyzing');
   const allUrls = store.listUrls(auditId, { limit: 100000, offset: 0 });

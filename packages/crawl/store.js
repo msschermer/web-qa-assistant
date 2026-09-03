@@ -205,6 +205,7 @@ export function openAuditStore(dbPath) {
     setAuditPhase: db.prepare('UPDATE audits SET phase = ? WHERE id = ?'),
     markRunning: db.prepare("UPDATE audits SET status = 'running', started_at = COALESCE(started_at, ?) WHERE id = ?"),
     setAuditStats: db.prepare('UPDATE audits SET stats_json = ? WHERE id = ?'),
+    setAuditConfig: db.prepare('UPDATE audits SET config_json = ? WHERE id = ?'),
     listByStatus: db.prepare('SELECT id FROM audits WHERE status = ?'),
     upsertUrl: db.prepare(`
       INSERT INTO audit_urls (audit_id, url, normalized_url, discovered_via, status, http_status, final_url, redirected, collection_method, title, meta_description, canonical, indexable, h1_count, h1_text, word_count, error, fetched_at, schema_types)
@@ -292,6 +293,12 @@ export function openAuditStore(dbPath) {
     },
     setPhase(id, phase) {
       stmt.setAuditPhase.run(phase, id);
+    },
+    /** Persists a config the operator changed mid-run — today only the page
+     * budget — so a reopened overlay shows the budget the crawl is actually
+     * working to rather than the one it started with. */
+    updateAuditConfig(id, config) {
+      stmt.setAuditConfig.run(JSON.stringify(config || {}), id);
     },
     finishAudit(id, { status, error = null, stats = null }) {
       stmt.updateAuditStatus.run(status, status, error, nowIso(), nowIso(), stats ? JSON.stringify(stats) : null, id);

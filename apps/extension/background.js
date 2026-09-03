@@ -285,6 +285,14 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
     const result=await gatewayGet(`/api/audits?site=${encodeURIComponent(msg.site)}`,10000,'SITE_AUDIT_LIST');
     return{audits:result.audits};
   }
+  if(msg.type==='SITE_AUDIT_PAUSE'){
+    const result=await gatewayPost(`/api/audits/${encodeURIComponent(msg.auditId)}/pause`,{paused:msg.paused!==false},10000,'SITE_AUDIT_PAUSE');
+    return result;
+  }
+  if(msg.type==='SITE_AUDIT_BUDGET'){
+    const result=await gatewayPost(`/api/audits/${encodeURIComponent(msg.auditId)}/budget`,{maxPages:msg.maxPages},10000,'SITE_AUDIT_BUDGET');
+    return result;
+  }
   if(msg.type==='SITE_AUDIT_CANCEL'){
     const result=await gatewayPost(`/api/audits/${encodeURIComponent(msg.auditId)}/cancel`,{},10000,'SITE_AUDIT_CANCEL');
     return{cancelling:result.cancelling};
