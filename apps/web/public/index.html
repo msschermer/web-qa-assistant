@@ -7,7 +7,7 @@
   <meta name="description" content="Inspect a public page with deterministic browser QA, connected evidence, and a guided walkthrough grounded in what the scanners actually found.">
   <meta name="robots" content="index,follow,max-image-preview:large">
   <meta name="author" content="Mike Schermer">
-  <meta name="theme-color" content="#4F46E5">
+  <meta name="theme-color" content="#7350F5">
   <link rel="canonical" href="https://assistant.msschermer.us/">
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700&display=swap" rel="stylesheet">
@@ -15,12 +15,12 @@
 </head>
 <body>
 <!--
-  THESIS: An audit is a numbered set of sheets about one structure. Refuses the SaaS stat-tile dashboard and its centred column.
-  OWN-WORLD: Diazo paper ground, blueprint navy ink, one drafting red reserved by law for confirmed defects; condensed uppercase drawing type, monospaced schedules, hairline rules, keynote numbers, hatched unsurveyed area.
-  STORY: The visitor sees what was surveyed, what was not, and what is broken, then hands the sheet to a client.
-  FIRST VIEWPORT: The sheet fills the board under a ruled masthead; the drawing title sits left with the extension keynote beside it, and the scan field is the sheet's primary control.
-  FORM: The Drawing Set, candidate 5 of 7, seed 40294b97.
-  FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+  THESIS: an audit is an investigation in progress, not a report that appears at the end. Refuses the category's white sheet of tables and the SaaS stat-tile dashboard alike.
+  OWN-WORLD: the operator's console — near-black grounds, violet as the single product voice, one sealed severity ramp, structure carried by hairlines rather than shadow. The palette is packages/ui/tokens.css and nothing here restates a value it already names.
+  STORY: a visitor arrives with one public URL, sees what Lumen surveyed and what it could not, and leaves either with evidence or with the extension.
+  FIRST VIEWPORT: the promise, then the scan field directly beneath it as the page's primary control, with the method stated under it and the extension offered alongside.
+  FORM: the same world as the Site Audit overlay and the exported client report — one mark, one palette, one set of discipline names across all three.
+  FINISH: this page replaced the retired "Drawing Set" world (diazo ground, blueprint ink, drawing title block) when the operator pinned the console direction with six mockups.
 -->
 <a class="skip" href="#scanner">Skip to scanner</a>
 <div class="sheet">
@@ -35,44 +35,34 @@
     <nav><a href="https://github.com/msschermer/web-qa-assistant">Source</a><a href="https://msschermer.us">Portfolio</a></nav>
   </header>
   <main id="scanner" tabindex="-1">
-    <aside class="titleblock">
-      <div class="tb-sheet">S-1</div>
-      <div class="tb-sheet-name">Single page survey</div>
-      <dl>
-        <div class="tb-field"><dt>Surveyor</dt><dd>Lumen browser rules + axe</dd></div>
-        <div class="tb-field"><dt>Scale</dt><dd>1 page, rendered</dd></div>
-        <div class="tb-field"><dt>Scope</dt><dd>Public HTTP/HTTPS only</dd></div>
-      </dl>
-      <div class="tb-legend">
-        <div class="tb-field"><dt>Legend</dt><dd>
-          <ul class="tb-key">
-            <li><span class="tb-swatch tb-swatch-fix"></span>Fix &mdash; confirmed defect</li>
-            <li><span class="tb-swatch tb-swatch-review"></span>Review &mdash; needs human intent</li>
-            <li><span class="tb-swatch tb-swatch-context"></span>Context &mdash; informational</li>
-            
-          </ul>
-        </dd></div>
-        <div class="tb-field"><dt>Method</dt><dd>One page, rendered on the gateway</dd></div>
-        <div class="tb-field"><dt>Not in scope</dt><dd>Whole-site crawling, authenticated pages and live element highlighting are the extension&rsquo;s work, not this page&rsquo;s.</dd></div>
+    <section class="intro">
+      <div class="intro-lead">
+        <h2>Find what matters. Prove it. Then fix it.</h2>
+        <p>Browser rules and axe establish local evidence. Meta State, Performance Monitor, and WCAG Translator add relevant context through the assistant gateway. Walkthroughs explain only what the evidence supports.</p>
+        <form id="scan-form" class="scanbox"><label for="url">Public URL</label><div><input id="url" type="url" required value="https://msschermer.us" placeholder="https://example.com"><button>Run scan</button></div><p>Public HTTP/HTTPS targets only. Private-network destinations are blocked by renderer egress policy.</p></form>
+        <dl class="provenance">
+          <div><dt>Method</dt><dd>One page, rendered on the gateway</dd></div>
+          <div><dt>Evidence</dt><dd>Lumen browser rules and axe-core</dd></div>
+          <div><dt>Not in scope</dt><dd>Whole-site crawling, authenticated pages and live element highlighting &mdash; that is the extension&rsquo;s work</dd></div>
+        </dl>
       </div>
-    </aside>
-    <div class="sheet-body">
-    <section class="intro"><div><h2>Find what matters. Prove it. Then fix it.</h2><p>Browser rules and axe establish local evidence. Meta State, Performance Monitor, and WCAG Translator add relevant context through the assistant gateway. Walkthroughs explain only what the evidence supports.</p></div><div class="install"><h3>Chrome extension</h3><p>Use the extension for authenticated pages, live element highlighting, targeted rechecks, site QA sessions, SPA changes, and safe previews.</p><a id="extension-link" href="https://github.com/msschermer/web-qa-assistant">Extension package</a></div></section>
-    <form id="scan-form" class="scanbox"><label for="url">Public URL</label><div><input id="url" type="url" required value="https://msschermer.us" placeholder="https://example.com"><button>Run scan</button></div><p>Public HTTP/HTTPS targets only. Private-network destinations are blocked by renderer egress policy.</p></form>
-    <div id="status" role="status" aria-live="polite"></div>
-    <section class="scope-schedule" aria-labelledby="scope-heading">
-      <h3 id="scope-heading">What this survey covers</h3>
-      <ol class="scope-list">
-        <li><span class="sc-no">01</span><b>Availability</b><span>Links, fragments and resources that fail to resolve</span></li>
-        <li><span class="sc-no">02</span><b>Discoverability</b><span>Titles, descriptions, canonicals and robots directives</span></li>
-        <li><span class="sc-no">03</span><b>Performance</b><span>Lab timings measured on the renderer, not field data</span></li>
-        <li><span class="sc-no">04</span><b>Accessibility</b><span>axe-core rules plus browser checks against the rendered DOM</span></li>
-        <li><span class="sc-no">05</span><b>Security</b><span>Response headers, mixed content and clickjacking exposure</span></li>
-        <li><span class="sc-no">06</span><b>Web quality</b><span>Markup, structured data and console errors</span></li>
-        <li><span class="sc-no">07</span><b>Coverage</b><span>What could not be reached, probed or verified, stated as a limit</span></li>
-      </ol>
-      
     </section>
+    <div id="status" role="status" aria-live="polite"></div>
+    <div class="survey">
+      <section class="scope-schedule" aria-labelledby="scope-heading">
+        <h3 id="scope-heading">What this survey covers</h3>
+        <ol class="scope-list">
+          <li><b>Availability</b><span>Links, fragments and resources that fail to resolve</span></li>
+          <li><b>Discoverability</b><span>Titles, descriptions, canonicals and robots directives</span></li>
+          <li><b>Performance</b><span>Lab timings measured on the renderer, not field data</span></li>
+          <li><b>Accessibility</b><span>axe-core rules plus browser checks against the rendered DOM</span></li>
+          <li><b>Security</b><span>Response headers, mixed content and clickjacking exposure</span></li>
+          <li><b>Web quality</b><span>Markup, structured data and console errors</span></li>
+          <li><b>Coverage</b><span>What could not be reached, probed or verified, stated as a limit</span></li>
+        </ol>
+      </section>
+      <aside class="install"><h3>Chrome extension</h3><p>Use the extension for authenticated pages, live element highlighting, targeted rechecks, site QA sessions, SPA changes, and safe previews.</p><a id="extension-link" href="https://github.com/msschermer/web-qa-assistant">Extension package</a></aside>
+    </div>
     <section id="report" hidden>
       <div class="report-head"><div><h2 id="report-url"></h2><span id="report-environment" class="report-environment"></span></div><div class="report-actions"><button id="copy-md">Copy report</button><button id="copy-json">Copy JSON</button></div></div>
       <article id="web-overview" class="frank-overview"><div class="overview-top"><span class="lumen-wordmark">Page assessment</span><span id="web-reasoning-mode" class="reasoning-mode"></span></div><h2 id="web-judgment"></h2><p id="brief"></p><div class="overview-meta"><span id="web-material-count"></span><span id="web-coverage-state"></span></div></article>

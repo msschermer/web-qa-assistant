@@ -22,7 +22,11 @@ button,input,select,textarea{font:inherit}button{color:inherit}h1,h2,h3,p{margin
 .scan-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}
 .scan-actions .btn{white-space:nowrap}
 @media(max-width:360px){.scan-actions{flex-direction:column;align-items:stretch;gap:4px}}
-.brand-mark{display:block;flex:0 0 auto;width:28px;height:28px;border-radius:50%;background:radial-gradient(circle at 50% 50%,transparent 31%,var(--wqa-brand) 33%,var(--wqa-brand) 46%,transparent 48%);color:transparent;font-size:0}
+/* One mark across every surface — panel, overlay, exported report: the violet
+   tile with the lens ring. Three near-variants of a logo read as three
+   products. */
+.brand-mark{position:relative;display:block;flex:0 0 auto;width:28px;height:28px;border-radius:8px;background:var(--wqa-brand);color:transparent;font-size:0}
+.brand-mark::after{content:"";position:absolute;inset:8px;border-radius:50%;border:2px solid #fff}
 .app-id{min-width:0}.app-id h1{margin:0;font-size:14px;line-height:1.2}.app-id p{margin:2px 0 0;color:var(--wqa-ink-faint);font-size:12px;overflow-wrap:anywhere;max-width:260px}
 .contextbar{display:flex;align-items:center;gap:8px;padding:6px 14px;border-bottom:1px solid var(--wqa-line);min-height:36px}.env-control{margin-left:auto}.env-control>span{font-size:11px;font-weight:650;letter-spacing:.04em;text-transform:uppercase;color:var(--wqa-ink-faint);margin-right:6px}.env-control select{border:0;background:transparent;color:var(--wqa-ink-soft);font-size:12px;font-weight:600;padding:3px 1px;cursor:pointer}
 main{padding:14px 14px 28px}
@@ -67,10 +71,6 @@ body[data-mode=frank] #idle-state{display:none}
 .idle-history-more{margin:8px 0 0;color:var(--wqa-ink-faint);font-size:11px;font-variant-numeric:tabular-nums}
 .idle-history-more:empty{display:none}
 
-.tb-strip{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 14px 8px;background:var(--wqa-sunken);border-bottom:1px solid var(--wqa-line)}
-.tb-strip .tb-no{display:none}
-.tb-strip .tb-disc{font-size:12px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--wqa-ink-soft)}
-.tb-strip .tb-scale{margin-left:auto;font-size:11.5px;color:var(--wqa-ink-faint);font-variant-numeric:tabular-nums}
 
 .workspace{display:grid;gap:18px}
 .workspace-section{background:transparent;border:0;border-radius:0;box-shadow:none;padding:0}
