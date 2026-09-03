@@ -56,6 +56,12 @@ typography:
     fontWeight: 400
     lineHeight: 1.55
     letterSpacing: "normal"
+  body-public:
+    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "16px"
+    fontWeight: 400
+    lineHeight: 1.55
+    letterSpacing: "normal"
   meta:
     fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
     fontSize: "12.5px"
@@ -64,7 +70,7 @@ typography:
     letterSpacing: "normal"
   label:
     fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
-    fontSize: "10.5px"
+    fontSize: "11px"
     fontWeight: 650
     lineHeight: 1.3
     letterSpacing: "0.09em"
@@ -75,6 +81,7 @@ typography:
     lineHeight: 1.5
     letterSpacing: "normal"
 rounded:
+  xxs: "2px"
   xs: "6px"
   sm: "8px"
   md: "10px"
@@ -252,9 +259,10 @@ None. Lumen has exactly one accent. The semantic and severity colours below are 
 - **Display** (650, 24–26px, 1.1, −0.03em, tabular): stat-strip figures. The largest type in the product is a number.
 - **Headline** (650, 17–19px, 1.2, −0.02em): the page title in the main column, the inspected pattern's title.
 - **Title** (600, 13–13.5px, 1.35): card heads, section headings, finding titles, button labels.
-- **Body** (400, 12.5–13px, 1.55–1.6): lede and descriptive copy, capped at 74ch.
+- **Body** (400, 12.5–13px, 1.55–1.6): lede and descriptive copy in the console surfaces, capped at 74ch.
+- **Body, public** (400, 16px, 1.55): the public scanner at `apps/web/public/`, and the finding headlines on it at 16px. A landing page is read at arm's length by someone deciding whether to use the product; an operator console is scanned by someone working. The two densities are deliberate and the public page does not inherit the console's 13px.
 - **Meta** (500, 11.5–12.5px, 1.45): counts, hints, table heads, foot notes.
-- **Label** (650, 10.5–11px, 0.08–0.09em, uppercase): provenance micro-labels only — SCANNER EVIDENCE, LUMEN INTERPRETATION, RECOMMENDED NEXT MOVE, EXPLORE, VALIDATE.
+- **Label** (650, 11px, 0.07–0.09em, uppercase): provenance micro-labels only — SCANNER EVIDENCE, LUMEN INTERPRETATION, RECOMMENDED NEXT MOVE, EXPLORE, VALIDATE.
 - **Mono** (400, 11–12.5px): URLs, rule ids, coverage detail, evidence values.
 
 ### Named Rules
@@ -266,7 +274,9 @@ None. Lumen has exactly one accent. The semantic and severity colours below are 
 
 **The Tabular Figures Rule.** Any number a reader might compare against another number carries `font-variant-numeric: tabular-nums` — stat strips, counts, table cells, pager labels, history rows.
 
-**The Sentence Case Rule.** Headings, badges and buttons are sentence case or capitalised, never letterspaced uppercase. Uppercase at 0.08–0.09em tracking is reserved for the provenance micro-label.
+**The Sentence Case Rule.** Headings, badges and buttons are sentence case or capitalised, never letterspaced uppercase. Uppercase at 0.07–0.09em tracking is reserved for the provenance micro-label.
+
+**The 11px Floor Rule.** 11px is the smallest type in the product, and the provenance label sits exactly on it. Functional text below 11px fails on high-DPI screens and small viewports, and a letterspaced micro-label is functional text — it names where a sentence came from. Being on the documented ramp is not an exemption: lowering the ramp step to legitimise an 8px label launders the token, not the legibility. The label step was 10.5px until a detector pass called it, and moving the step was the right answer rather than exempting the one surface that got measured.
 
 ## Layout
 
@@ -297,7 +307,7 @@ On a dark ground a drop shadow reads as smudge, so **elevation is carried by the
 
 ## Shapes
 
-Softly rounded, not pill-happy. The default corner is 10px for cards, tables, panels and callouts; controls (buttons, inputs, selects, nav items) take 8px; small inset chrome takes 6px; shells that float — the workspace, the coach — take 12–14px. Fully round (999px) is reserved for counters, status pills, severity badges, progress and coverage bars, and filter chips: things read as tokens rather than containers.
+Softly rounded, not pill-happy. The default corner is 10px for cards, tables, panels and callouts; controls (buttons, inputs, selects, nav items) take 8px; small inset chrome takes 6px; shells that float — the workspace, the coach — take 12–14px. Fully round (999px) is reserved for counters, status pills, severity badges, progress and coverage bars, and filter chips: things read as tokens rather than containers. 2px exists for one job only: capping the outer end of the 3px severity rail, where any larger radius would round a 3px bar into a lozenge.
 
 Three recurring silhouettes define the system:
 - **The inset left rail** (sanctioned). Finding rows carry severity as an inset 3px rail on the leading edge; the selected row in the findings inspector carries a 2px violet one over the violet wash. Resolved findings switch their border to dashed. Automated craft detectors read the rail as a side tab, and that reading is wrong here — the rail is how severity is legible without colour-coding the whole row.

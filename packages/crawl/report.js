@@ -253,7 +253,7 @@ export function renderAuditReportHtml({ audit, urls, links, findings, findingGro
       font:14px/1.55 'Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;
       -webkit-font-smoothing:antialiased}
     header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding:20px 28px;border-bottom:1px solid var(--wqa-line);background:var(--wqa-surface)}
-    .mark{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;background:var(--wqa-brand);color:#fff;font-weight:700;font-size:12px;align-self:center}
+    .mark{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:8px;background:var(--wqa-brand);color:#fff;font-weight:700;font-size:12px;align-self:center}
     header h1{margin:0;font-size:18px;font-weight:650;letter-spacing:-.02em}
     header .prov{margin:0;margin-left:auto;font-size:12px;color:var(--wqa-ink-faint);font-family:var(--r-mono)}
     .scope{margin:0;padding:12px 28px;font-size:13px;line-height:1.5;color:var(--wqa-ink-soft);background:var(--wqa-brand-soft);border-bottom:1px solid var(--wqa-brand-line)}
@@ -262,7 +262,7 @@ export function renderAuditReportHtml({ audit, urls, links, findings, findingGro
 
     .shell{flex:1 0 auto;display:grid;grid-template-columns:200px minmax(0,1fr);align-items:stretch}
     nav{position:sticky;top:0;align-self:start;padding:20px 12px 40px;background:var(--wqa-canvas)}
-    .nav-label{margin:16px 8px 6px;font-size:10px;font-weight:650;letter-spacing:.11em;text-transform:uppercase;color:var(--wqa-ink-faint)}
+    .nav-label{margin:16px 8px 6px;font-size:11px;font-weight:650;letter-spacing:.11em;text-transform:uppercase;color:var(--wqa-ink-faint)}
     nav button{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;margin-bottom:2px;border:0;border-radius:var(--wqa-r-sm);background:transparent;color:var(--wqa-ink-soft);font:inherit;font-size:13px;font-weight:600;text-align:left;cursor:pointer}
     nav button:hover{background:var(--wqa-sunken);color:var(--wqa-ink)}
     nav button.active{background:var(--wqa-brand-soft);color:var(--wqa-ink)}
@@ -279,7 +279,7 @@ export function renderAuditReportHtml({ audit, urls, links, findings, findingGro
 
     .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;margin:14px 0 20px;padding:0;background:var(--wqa-line);border:1px solid var(--wqa-line);border-radius:var(--wqa-r-sm);overflow:hidden}
     .stats>div{padding:13px 15px;background:var(--wqa-surface)}
-    .stats dt{font-size:10.5px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--wqa-ink-faint)}
+    .stats dt{font-size:11px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--wqa-ink-faint)}
     .stats dd{margin:5px 0 0;font-size:26px;font-weight:650;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
     .stats dd.sub{margin-top:1px;font-size:11.5px;font-weight:500;letter-spacing:0;color:var(--wqa-ink-faint)}
 
@@ -298,7 +298,7 @@ export function renderAuditReportHtml({ audit, urls, links, findings, findingGro
     .scroll{overflow-x:auto;margin:0 0 20px;border:1px solid var(--wqa-line);border-radius:var(--wqa-r-sm)}
     table{width:100%;border-collapse:collapse;font-size:12.5px}
     table.fixed{table-layout:fixed;min-width:820px}
-    th{position:sticky;top:0;z-index:1;text-align:left;padding:8px 11px;background:var(--wqa-sunken);color:var(--wqa-ink-faint);font-size:10.5px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--wqa-line);white-space:nowrap}
+    th{position:sticky;top:0;z-index:1;text-align:left;padding:8px 11px;background:var(--wqa-sunken);color:var(--wqa-ink-faint);font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--wqa-line);white-space:nowrap}
     td{padding:9px 11px;border-bottom:1px solid var(--wqa-line);vertical-align:top;color:var(--wqa-ink-soft);max-width:380px;overflow-wrap:anywhere}
     tbody tr:last-child td{border-bottom:0}
     tbody tr:hover td{background:var(--wqa-sunken)}

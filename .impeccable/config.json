@@ -11,6 +11,159 @@
         ],
         "createdAt": "2026-09-03T23:24:31.022Z",
         "reason": "Claude: the <img onerror=...> strings are the XSS-escaping fixture in a test, not shipped markup"
+      },
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "apps/web/public/index.html"
+        ],
+        "createdAt": "2026-09-03T23:43:34.970Z",
+        "reason": "Claude: #frank-snapshot is a hidden img whose src is set only when a rendered snapshot exists; it never ships as a broken-image box"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "apps/web/public/index.html"
+        ],
+        "createdAt": "2026-09-03T23:43:45.985Z",
+        "reason": "DESIGN.md 'The inset left rail' names this sanctioned: severity as a 3px inset leading rail is how it stays legible without colour-coding the whole row"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "apps/web/public/styles.css"
+        ],
+        "createdAt": "2026-09-03T23:43:46.120Z",
+        "reason": "DESIGN.md 'The inset left rail' names this sanctioned: severity as a 3px inset leading rail is how it stays legible without colour-coding the whole row"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "packages/ui/web.css"
+        ],
+        "createdAt": "2026-09-03T23:43:46.265Z",
+        "reason": "DESIGN.md 'The inset left rail' names this sanctioned: severity as a 3px inset leading rail is how it stays legible without colour-coding the whole row"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "packages/ui/lumen.css"
+        ],
+        "createdAt": "2026-09-03T23:43:46.431Z",
+        "reason": "DESIGN.md 'The inset left rail' names this sanctioned: severity as a 3px inset leading rail is how it stays legible without colour-coding the whole row"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "apps/extension/sidepanel.css"
+        ],
+        "createdAt": "2026-09-03T23:43:46.604Z",
+        "reason": "DESIGN.md 'The inset left rail' names this sanctioned: severity as a 3px inset leading rail is how it stays legible without colour-coding the whole row"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "apps/extension/content.js"
+        ],
+        "createdAt": "2026-09-03T23:43:46.761Z",
+        "reason": "DESIGN.md 'The inset left rail' names this sanctioned: severity as a 3px inset leading rail is how it stays legible without colour-coding the whole row"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "dist/extension/content.js"
+        ],
+        "createdAt": "2026-09-03T23:43:46.894Z",
+        "reason": "DESIGN.md 'The inset left rail' names this sanctioned: severity as a 3px inset leading rail is how it stays legible without colour-coding the whole row"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "dist/extension/sidepanel.css"
+        ],
+        "createdAt": "2026-09-03T23:43:47.048Z",
+        "reason": "DESIGN.md 'The inset left rail' names this sanctioned: severity as a 3px inset leading rail is how it stays legible without colour-coding the whole row"
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          "apps/web/public/index.html"
+        ],
+        "createdAt": "2026-09-03T23:43:55.705Z",
+        "reason": "DESIGN.md 'The Hatch Rule': the 45deg hatch marks what was not surveyed, so not-knowing stays visually distinct from broken"
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          "apps/web/public/styles.css"
+        ],
+        "createdAt": "2026-09-03T23:43:55.868Z",
+        "reason": "DESIGN.md 'The Hatch Rule': the 45deg hatch marks what was not surveyed, so not-knowing stays visually distinct from broken"
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          "packages/ui/tokens.css"
+        ],
+        "createdAt": "2026-09-03T23:43:55.983Z",
+        "reason": "DESIGN.md 'The Hatch Rule': the 45deg hatch marks what was not surveyed, so not-knowing stays visually distinct from broken"
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          "dist/extension/content.js"
+        ],
+        "createdAt": "2026-09-03T23:43:56.128Z",
+        "reason": "DESIGN.md 'The Hatch Rule': the 45deg hatch marks what was not surveyed, so not-knowing stays visually distinct from broken"
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          "dist/extension/sidepanel.css"
+        ],
+        "createdAt": "2026-09-03T23:43:56.270Z",
+        "reason": "DESIGN.md 'The Hatch Rule': the 45deg hatch marks what was not surveyed, so not-knowing stays visually distinct from broken"
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          "dist/extension/ui-tokens.css"
+        ],
+        "createdAt": "2026-09-03T23:43:56.444Z",
+        "reason": "DESIGN.md 'The Hatch Rule': the 45deg hatch marks what was not surveyed, so not-knowing stays visually distinct from broken"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "apps/extension/sidepanel.html"
+        ],
+        "createdAt": "2026-09-03T23:46:23.580Z",
+        "reason": "DESIGN.md 'The inset left rail' names this sanctioned: severity as a 3px inset leading rail is how it stays legible without colour-coding the whole row"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "packages/crawl/report.js"
+        ],
+        "createdAt": "2026-09-03T23:46:23.697Z",
+        "reason": "DESIGN.md 'The inset left rail' names this sanctioned"
       }
     ]
   }
