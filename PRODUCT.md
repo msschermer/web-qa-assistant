@@ -121,14 +121,24 @@ machine.
   evidence; it is not a chatbot and not the scanner.
 - Presentation contract: the sidebar is the deterministic evidence/audit record;
   the centered card owns interpretation and action.
-- **Interface convention is a deliberate commitment.** Lumen follows the
-  category standard for site-audit tools rather than a distinctive visual
-  world. Offered a rolled direction and the standing exit, the operator took
-  the exit and named the products Lumen should sit alongside: **Sitebulb** and
-  **Semrush** — Sitebulb's density and severity discipline with Semrush's
-  polish and colour confidence. Future design work executes that convention at
-  full fidelity, without irony and without smuggled quirk, and must not
-  reintroduce a distinctive visual direction unless the operator asks for one.
+- **The visual world is the operator's console, and it is pinned.** Lumen once
+  committed to the category convention — Sitebulb's density and severity
+  discipline with Semrush's polish, executed straight, light theme only. That
+  commitment explicitly reserved the exit for the operator, and the operator
+  took it: they supplied six mockups of a dark instrument surface and asked for
+  the whole product to be rebuilt against them. That is now the direction.
+
+  The thesis: an audit is an investigation in progress, not a report that
+  appears at the end. The world refuses the category's white sheet of tables
+  and commits to the surface a consultant leaves open on a second monitor while
+  a crawl runs. Near-black grounds in five steps, violet (#7350F5) as the
+  single product voice, one sealed severity ramp, structure carried by
+  hairlines rather than shadow. `DESIGN.md` describes it as built.
+
+  Sitebulb and Semrush remain the bar for **density, severity discipline and
+  completeness** — what a professional audit tool must show. They are no longer
+  the reference for how it looks. Future design work extends this world rather
+  than reverting to the convention or starting a third one.
 - A design system already exists and is authoritative: `packages/ui/tokens.css`,
   `packages/ui/lumen.css`, and `docs/DESIGN-SYSTEM.md`.
 - Voice: plain-English translation of scanner output, with raw scanner language
