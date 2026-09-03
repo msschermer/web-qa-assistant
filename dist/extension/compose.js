@@ -82,13 +82,23 @@ export function groupFindings(findings = []) {
 // Interleave by class so the brief always reads across disciplines. Within a
 // class, order stays score-driven. A class is never padded: if it has nothing
 // material, it simply does not appear.
+//
+// Confirmed availability issues (broken links, broken form actions — visitors
+// cannot reach or complete something) are the one exception to interleaving:
+// they are pinned ahead of the round robin instead of taking turns with other
+// disciplines, so three confirmed broken links never end up reading as one
+// broken link plus two lower-priority items from unrelated categories.
 export function composeAttention(findings = [], { limit = 8 } = {}) {
   const material = findings.filter(f => f.frankVisible !== false && f.category !== 'context' && f.confidence !== 'inconclusive');
   const groups = groupFindings(material);
+  const priority = groups
+    .filter(g => g.impactClass === 'availability' && g.lead.confidence === 'confirmed')
+    .sort((a, b) => b.score - a.score);
+  const rest = groups.filter(g => !priority.includes(g));
   const byClass = new Map(IMPACT_CLASS_IDS.map(id => [id, []]));
-  for (const g of groups) byClass.get(g.impactClass)?.push(g);
+  for (const g of rest) byClass.get(g.impactClass)?.push(g);
 
-  const ordered = [];
+  const ordered = [...priority];
   const classOrder = IMPACT_CLASS_IDS
     .filter(id => (byClass.get(id) || []).length)
     .sort((a, b) => {
@@ -105,13 +115,18 @@ export function composeAttention(findings = [], { limit = 8 } = {}) {
   const counts = {};
   for (const g of groups) counts[g.impactClass] = (counts[g.impactClass] || 0) + 1;
 
+  // Pinning availability out of the round robin must not make it disappear from
+  // the represented-classes accounting other consumers (e.g. the MCP review
+  // bundle) rely on to know which disciplines are present in the brief.
+  const representedClasses = (priority.length ? ['availability'] : []).concat(classOrder);
+
   return {
     groups: composed,
     allGroups: groups,
     classCounts: counts,
     materialGroupCount: groups.length,
     materialFindingCount: material.length,
-    representedClasses: classOrder
+    representedClasses
   };
 }
 
@@ -138,7 +153,7 @@ export function composedBrief(composition, { linkAudit = null, coverage = {}, ta
     return blocked;
   }
   if (!groups.length) {
-    if (inconclusive) return `No confirmed material issues were found. Link verification stayed inconclusive for ${inconclusive} of ${checked || inconclusive} checked destination${(checked || inconclusive) === 1 ? '' : 's'}, so Frank did not count those URLs as broken links.`;
+    if (inconclusive) return `No confirmed material issues were found. Link verification stayed inconclusive for ${inconclusive} of ${checked || inconclusive} checked destination${(checked || inconclusive) === 1 ? '' : 's'}, so those URLs were not counted as broken links.`;
     if (unavailable.length) return `No confirmed material issues were found in the available coverage. ${unavailable.join(', ')} could not be checked, so treat this as a partial pass.`;
     return 'No confirmed material issues were found in the available coverage. Lower-priority observations are still available under Show all checks.';
   }

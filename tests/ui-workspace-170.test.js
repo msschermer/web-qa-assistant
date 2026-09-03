@@ -6,10 +6,16 @@ test('side panel is organized as a SaaS QA workspace rather than a scanner stack
   const html=fs.readFileSync('apps/extension/sidepanel.html','utf8');
   const css=fs.readFileSync('apps/extension/sidepanel.css','utf8');
   const js=fs.readFileSync('apps/extension/sidepanel.js','utf8');
-  for(const phrase of ['Page assessment','Filter by QA area','Recommended order','Workspace tools','Report bug'])assert.match(html,new RegExp(phrase));
+  for(const phrase of ['Page assessment','QA areas','Recommended order','Workspace tools','Report bug'])assert.match(html,new RegExp(phrase));
   assert.match(html,/class="brand-mark"/); assert.match(html,/class="tool-grid"/); assert.match(html,/section-intro/);
   assert.match(html,/id="idle-state"/);
-  assert.match(html,/Navigation, discoverability, performance, accessibility/);
+  // The idle panel must still show that Lumen is cross-discipline rather than
+  // an accessibility checker. That used to be a sentence of prose; it is now a
+  // rendered ledger of the QA areas a scan actually covers, which states the
+  // same product invariant more concretely.
+  assert.match(html,/id="idle-areas"/);
+  assert.match(html,/What a scan checks/);
+  for(const area of ['Discoverability','Performance','Accessibility','Security','Web quality'])assert.match(js,new RegExp(area));
   assert.match(css,/\.workspace-section/); assert.match(css,/\.tool-grid/); assert.match(css,/\.ledger-cell/); assert.match(css,/\.bug-dialog/);
   assert.match(css,/\.idle-state/);
   assert.match(css,/data-scanning=true/);
@@ -38,9 +44,10 @@ test('finding cards lead with translated guidance and demote scanner language to
   assert.match(html,/Next step/); assert.match(html,/Technical evidence/); assert.match(html,/Scanner rule/); assert.match(html,/Observed by/);
 });
 
-test('Frank evidence sidebar visibly explains its role while the page card owns reasoning',()=>{
+test('Evidence sidebar visibly explains its role while the page card owns reasoning',()=>{
   const html=fs.readFileSync('apps/extension/sidepanel.html','utf8');
-  assert.match(html,/Evidence ledger/);
+  assert.match(html,/>Evidence</);
+  assert.doesNotMatch(html,/Evidence ledger/);
   assert.match(html,/Key facts/); assert.match(html,/Evidence for this step/);
 });
 

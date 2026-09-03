@@ -38,28 +38,48 @@ setLocalAiTraceSink((type,data)=>runtimeTrace.record(`local-ai:${type}`,data));
 
 let report = null, filter = 'all', tab = null, scanInFlight = false, frank = null, lastFrank = null,
     showAllChecks = false, lastDiagnostic = null, lastScanAttempt = null, siteSession = null, classFilter = '', cloudAiFallback = false, frankReturnFocus = null, frankRequestSeq = 0, pendingFrankCancel = null,
-    scanPhase = SCAN_PHASE.IDLE, resultFlags = emptyResultReady();
+    scanPhase = SCAN_PHASE.IDLE, resultFlags = emptyResultReady(), staleResult = false;
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+const NOTICE_LABELS = { ok: 'Done', warn: 'Attention', error: 'Error' };
+
 function notice(message, kind = 'info') {
-  const el = $('#notice');
-  if (!el) return;
-  el.textContent = String(message || '');
-  if (kind && kind !== 'info') el.dataset.kind = kind;
-  else delete el.dataset.kind;
+  // Errors go to the assertive region so a failure is not announced with the
+  // same urgency as "Scanning current page…". Both regions exist from first
+  // paint; only their content changes.
+  const target = $(kind === 'error' ? '#alert' : '#notice');
+  const other = $(kind === 'error' ? '#notice' : '#alert');
+  if (other) { other.textContent = ''; delete other.dataset.kind; }
+  if (!target) return;
+  const text = String(message || '');
+  if (!text) { target.textContent = ''; delete target.dataset.kind; return; }
+  const label = NOTICE_LABELS[kind] || '';
+  target.innerHTML = (label ? `<b class="notice-label">${esc(label)}</b>` : '') + esc(text);
+  if (kind && kind !== 'info') target.dataset.kind = kind;
+  else delete target.dataset.kind;
 }
 
-function send(msg, timeoutMs = 25000) {
+let pendingAborts = [];
+
+// Resolve every abortable in-flight send. The page may still finish its own
+// requests; we stop waiting on them and record nothing from the run.
+function abortPendingSends() {
+  const list = pendingAborts;
+  pendingAborts = [];
+  for (const abort of list) abort();
+}
+
+function send(msg, timeoutMs = 25000, { abortable = false } = {}) {
   return new Promise(resolve => {
     let settled = false;
-    const timer = setTimeout(() => { if (settled) return; settled = true; resolve({ ok: false, error: 'The extension action timed out.' }); }, timeoutMs);
+    const finish = value => { if (settled) return; settled = true; clearTimeout(timer); resolve(value); };
+    const timer = setTimeout(() => finish({ ok: false, error: 'The extension action timed out.' }), timeoutMs);
+    if (abortable) pendingAborts.push(() => finish({ ok: false, aborted: true, error: 'Scan stopped.' }));
     chrome.runtime.sendMessage(msg, response => {
-      if (settled) return;
-      settled = true; clearTimeout(timer);
       const runtimeError = chrome.runtime.lastError?.message;
-      resolve(response || { ok: false, error: runtimeError || 'No response from the extension service worker.' });
+      finish(response || { ok: false, error: runtimeError || 'No response from the extension service worker.' });
     });
   });
 }
@@ -149,13 +169,13 @@ function frankAction(message, kind = 'ok') {
 
 
 function frankReadinessLabel(state = {}) {
-  if (state.status === 'ready') return { text: 'Frank ready', tone: 'ok', title: 'Chrome on-device reasoning is ready.' };
-  if (state.status === 'downloading') return { text: state.progress != null ? `Frank preparing ${Math.round(state.progress * 100)}%` : 'Frank preparing', tone: 'info', title: state.message };
-  if (state.status === 'warming') return { text: 'Frank warming', tone: 'info', title: state.message };
-  if (state.status === 'downloadable') return { text: 'Frank setup on first use', tone: 'info', title: state.message };
-  if (state.status === 'unavailable') return { text: 'Verified scan guidance', tone: 'warn', title: state.message };
-  if (state.status === 'error') return { text: 'Frank needs retry', tone: 'warn', title: state.message };
-  return { text: 'Checking Frank', tone: 'info', title: state.message || 'Checking Chrome on-device AI availability.' };
+  if (state.status === 'ready') return { text: 'On-device AI ready', tone: 'ok', title: 'Chrome on-device reasoning is ready.' };
+  if (state.status === 'downloading') return { text: state.progress != null ? `Preparing on-device AI ${Math.round(state.progress * 100)}%` : 'Preparing on-device AI', tone: 'info', title: state.message };
+  if (state.status === 'warming') return { text: 'On-device AI warming', tone: 'info', title: state.message };
+  if (state.status === 'downloadable') return { text: 'On-device AI setup on first use', tone: 'info', title: state.message };
+  if (state.status === 'unavailable') return { text: 'On-device AI unavailable', tone: 'warn', title: state.message };
+  if (state.status === 'error') return { text: 'On-device AI needs retry', tone: 'warn', title: state.message };
+  return { text: 'Checking on-device AI', tone: 'info', title: state.message || 'Checking Chrome on-device AI availability.' };
 }
 function renderFrankReadiness(state = localFrankRuntime.snapshot()) {
   runtimeTrace.record('frank-readiness', { status: state.status, progress: state.progress, code: state.code });
@@ -191,9 +211,12 @@ function targetBlocked() {
   return Boolean(report?.targetIntegrityBlocked || report?.page?.targetIntegrity === 'blocked' || report?.priorityMode === 'target-integrity');
 }
 function judgment() {
-  if (targetBlocked()) return { state: 'blocker', title: 'Page could not be reached' };
+  if (targetBlocked()) return { state: 'unreachable', title: 'Page could not be reached' };
   const groups = report?.attention?.materialGroupCount || 0;
-  const blockers = materialFindings().filter(f => f.frankPriority === 'blocker').length;
+  // A confirmed broken link is exactly as urgent as a 'blocker'-severity finding
+  // even when its own severity is only 'high' (a 404, not a 5xx) — visitors
+  // cannot reach it either way, so it must not read as merely "worth addressing".
+  const blockers = materialFindings().filter(f => f.frankPriority === 'blocker' || (f.impactClass === 'availability' && f.confidence === 'confirmed')).length;
   if (blockers) return { state: 'blocker', title: `${groups} issue${groups === 1 ? '' : 's'} need attention` };
   if (groups) return { state: 'attention', title: `${groups} issue${groups === 1 ? '' : 's'} worth addressing` };
   if (incompleteCoverage()) return { state: 'incomplete', title: 'No confirmed problems found' };
@@ -232,7 +255,8 @@ function renderLedger() {
     cell.type = 'button'; cell.className = 'ledger-cell'; cell.dataset.lead = String(item.lead); cell.dataset.tone = item.tone;
     cell.setAttribute('aria-pressed', String(item.active)); cell.title = item.description;
     cell.innerHTML = `<span class="ledger-dot" aria-hidden="true"></span><span class="ledger-label">${esc(item.label)}</span><span class="ledger-count">${esc(item.count)}</span>`;
-    cell.setAttribute('aria-label', `${item.label}: ${item.count}${item.lead ? ', first in recommended order' : ''}`);
+    const toneWord = { critical: 'needs fixing', warn: 'needs review', ok: 'healthy', muted: 'informational' }[String(item.tone || 'muted')] || '';
+    cell.setAttribute('aria-label', `${item.label}: ${item.count}${toneWord ? `, ${toneWord}` : ''}${item.lead ? ', first in recommended order' : ''}`);
     cell.onclick = () => { classFilter = classFilter === id ? '' : id; render(); };
     box.appendChild(cell);
   }
@@ -331,8 +355,8 @@ function coverage() {
     const sideFx = ix.sideEffectLimitation
       ? ' Allowlisted activation may still run page handlers (fetch, analytics, navigation).'
       : ' Allowlisted clicks can still run page handlers.';
-    if (eligible > tested) notes.insertAdjacentHTML('beforeend', `<b>WebQA safely tested ${esc(tested)} of ${esc(eligible)} eligible controls.</b><span>Skipped or budget-limited controls are coverage limits, not proof that remaining controls work.${sideFx}</span>`);
-    else notes.insertAdjacentHTML('beforeend', `<b>WebQA safely tested ${esc(tested)} eligible control${tested === 1 ? '' : 's'}.</b><span>Forms, navigation, purchases, and high-risk actions are never activated.${sideFx}</span>`);
+    if (eligible > tested) notes.insertAdjacentHTML('beforeend', `<b>Lumen safely tested ${esc(tested)} of ${esc(eligible)} eligible controls.</b><span>Skipped or budget-limited controls are coverage limits, not proof that remaining controls work.${sideFx}</span>`);
+    else notes.insertAdjacentHTML('beforeend', `<b>Lumen safely tested ${esc(tested)} eligible control${tested === 1 ? '' : 's'}.</b><span>Forms, navigation, purchases, and high-risk actions are never activated.${sideFx}</span>`);
   }
   if (ix?.restorationFailures) notes.insertAdjacentHTML('beforeend', `<b>Interaction testing stopped after restoration could not be verified.</b><span>Later controls were not activated to avoid leaving the page in an altered state.</span>`);
   if (links?.inconclusive) {
@@ -374,9 +398,45 @@ function renderResolved() {
   }
 }
 
+// Coverage as the panel currently shows it. Exporting findings without the
+// limitations that qualify them reads as a complete audit when it is not.
+function coverageExportLines() {
+  const rows = [...($('#coverage')?.children || [])];
+  const pairs = [];
+  for (let i = 0; i < rows.length - 1; i += 2) {
+    if (rows[i].tagName === 'SPAN' && rows[i + 1].tagName === 'B') {
+      pairs.push([rows[i].textContent.trim(), rows[i + 1].textContent.trim()]);
+    }
+  }
+  const notes = [];
+  let current = null;
+  for (const node of [...($('#coverage-notes')?.children || [])]) {
+    if (node.tagName === 'B') { current = { title: node.textContent.trim(), detail: '', items: [] }; notes.push(current); }
+    else if (node.tagName === 'SPAN' && current) current.detail = node.textContent.trim();
+    else if (node.tagName === 'UL' && current) current.items = [...node.children].map(li => li.textContent.trim());
+  }
+  const summary = ($('#coverage-summary')?.textContent || '').trim();
+  if (!pairs.length && !notes.length && !summary) return [];
+
+  const lines = ['## Coverage and limitations', ''];
+  if (summary) lines.push(`Accounted: ${summary}`, '');
+  for (const [label, value] of pairs) lines.push(`- ${label}: ${value}`);
+  if (pairs.length) lines.push('');
+  for (const note of notes) {
+    lines.push(`**${note.title}** ${note.detail}`.trim());
+    for (const item of note.items) lines.push(`- ${item}`);
+    lines.push('');
+  }
+  return lines;
+}
+
 function markdown() {
   const groups = visibleGroups();
-  const lines = [`# Web QA report`, '', report.page.url, '', `Environment: ${report.environment?.type || 'unknown'} (${report.environment?.confidenceLabel || 'unconfirmed'})`, '', '## Frank', report.priorityBrief || '', ''];
+  const scannedAt = report.scannedAt ? new Date(report.scannedAt) : null;
+  const scannedLine = scannedAt && !Number.isNaN(scannedAt.getTime())
+    ? `Scanned: ${scannedAt.toLocaleString()}`
+    : 'Scanned: time not recorded';
+  const lines = [`# Lumen report`, '', report.page.url, '', scannedLine, `Environment: ${report.environment?.type || 'unknown'} (${report.environment?.confidenceLabel || 'unconfirmed'})`, '', '## Assessment', report.priorityBrief || '', ''];
   const counts = report?.attention?.classCounts || {};
   const labels = report?.attention?.classLabels || {};
   const ledger = LEDGER_ORDER.filter(id => counts[id]).map(id => `${labels[id] || id}: ${counts[id]}`);
@@ -387,13 +447,14 @@ function markdown() {
     if (g.instanceCount > 1) lines.push(`Instances: ${g.instanceCount}`, ...(g.selectors || []).slice(0, 12).map(s => `- \`${s}\``));
     lines.push(`Sources: ${(f.sources || []).join(', ')}`, '');
   }
+  lines.push(...coverageExportLines());
   return lines.join('\n');
 }
 
 function issueText(g) {
   const f = g.lead;
   return [
-    `Web QA issue: ${g.title}`,
+    `Lumen issue: ${g.title}`,
     `Page: ${report.page.url}`,
     `Area: ${report.attention?.classLabels?.[g.impactClass] || g.impactClass}`,
     `Environment: ${report.environment?.type || 'unknown'}`,
@@ -407,7 +468,7 @@ function issueText(g) {
     f.evidence ? `Evidence: ${typeof f.evidence === 'string' ? f.evidence : JSON.stringify(f.evidence)}` : '',
     `Sources: ${(f.sources || []).join(', ')}`,
     f.selector ? `Selector: ${f.selector}` : '',
-    `Acceptance: Rescan or use Recheck and confirm the finding no longer reproduces.`
+    `Acceptance: Start a new scan or use Recheck and confirm the finding no longer reproduces.`
   ].filter(Boolean).join('\n');
 }
 
@@ -416,7 +477,6 @@ function findingContext(f) {
   if (f.link?.text) parts.push(`“${f.link.text}”`);
   if (f.link?.location) parts.push(f.link.location);
   if (f.link?.prominence && f.link.prominence !== 'normal') parts.push(f.link.prominence);
-  if (f.fixOwner) parts.push(`Likely owner: ${f.fixOwner}`);
   if (f.imageMetrics?.isLcpResource) parts.push('current LCP image');
   if (f.verification?.attempts > 1) parts.push(`${f.verification.attempts} verification attempts`);
   return parts.join(' · ');
@@ -516,8 +576,17 @@ function renderOverviewOnly() {
   $('#coverage-state').textContent = blocked
     ? 'Coverage: blocked'
     : incompleteCoverage() ? `${incompleteCoverage()} coverage gap${incompleteCoverage() === 1 ? '' : 's'}` : 'Primary coverage available';
+  const scannedAt = report.scannedAt ? new Date(report.scannedAt) : null;
+  const scanTime = $('#scan-time');
+  if (scanTime) {
+    scanTime.textContent = scannedAt && !Number.isNaN(scannedAt.getTime())
+      ? `Scanned ${scannedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+      : '';
+  }
+  const staleFlag = $('#stale-flag');
+  if (staleFlag) staleFlag.hidden = !staleResult;
   const mode = blocked ? 'integrity' : report.priorityMode === 'ai' ? 'ai' : 'deterministic';
-  $('#reasoning-mode').textContent = blocked ? 'Target integrity' : mode === 'ai' ? 'Cloud-enhanced assessment' : 'Evidence-backed assessment';
+  $('#reasoning-mode').textContent = blocked ? 'Coverage limited' : mode === 'ai' ? 'Cloud reasoning' : 'Evidence-backed assessment';
   $('#reasoning-mode').dataset.mode = mode;
 }
 
@@ -539,7 +608,7 @@ function render() {
       recoverable: true,
       coverageImpact: 'none'
     });
-    notice('Scan evidence is available, but the results panel hit a display error. Try Rescan, or use Report Bug.', 'warn');
+    notice('Scan evidence is available, but the results panel hit a display error. Try New scan, or use Report Bug.', 'warn');
     try {
       document.body.dataset.hasReport = 'true';
       $('#summary').hidden = false;
@@ -562,24 +631,24 @@ function renderUnsafe() {
   envChip.textContent = envManual ? env.type : `${env.type} · ${env.confidenceLabel || 'low'}`;
   envChip.dataset.tone = /high|certain|confirmed/i.test(env.confidenceLabel || '') ? 'ok' : 'info';
   envChip.title = (env.signals || []).join(' · ') || 'Environment context';
-  const notice = env.notice || null;
+  const envNotice = env.notice || null;
   const noticeEl = $('#environment-notice');
-  if (notice && notice.kind !== 'production-index-blocked') {
+  if (envNotice && envNotice.kind !== 'production-index-blocked') {
     noticeEl.hidden = false;
-    noticeEl.dataset.tone = notice.tone || 'info';
+    noticeEl.dataset.tone = envNotice.tone || 'info';
     noticeEl.replaceChildren();
     const kicker = document.createElement('span');
     kicker.className = 'env-kicker';
-    kicker.textContent = notice.kicker || '';
+    kicker.textContent = envNotice.kicker || '';
     const title = document.createElement('strong');
-    title.textContent = notice.title || '';
+    title.textContent = envNotice.title || '';
     const body = document.createElement('p');
-    body.textContent = notice.body || '';
+    body.textContent = envNotice.body || '';
     noticeEl.append(kicker, title, body);
-    if (notice.extra) {
+    if (envNotice.extra) {
       const extra = document.createElement('p');
       extra.className = 'env-extra';
-      extra.textContent = notice.extra;
+      extra.textContent = envNotice.extra;
       noticeEl.append(extra);
     }
     const launchItems = (env.launchReadiness?.items || []).slice(0, 6);
@@ -602,7 +671,9 @@ function renderUnsafe() {
     delete noticeEl.dataset.tone;
   }
   const quiet = report.findings.filter(f => f.lifecycle !== 'ignored' && f.frankVisible === false).length;
-  $('#show-all').textContent = showAllChecks ? 'Recommended only' : `Show all checks${quiet ? ` (${quiet})` : ''}`;
+  const showAll = $('#show-all');
+  showAll.textContent = showAllChecks ? 'Recommended only' : `Show all checks${quiet ? ` (${quiet})` : ''}`;
+  showAll.setAttribute('aria-pressed', String(showAllChecks));
 
   renderPerformanceCard();
   renderOverviewOnly();
@@ -612,11 +683,19 @@ function renderUnsafe() {
   renderSession();
 
   const wrap = $('#findings'); wrap.innerHTML = '';
-  for (const g of visibleGroups()) {
+  const shownGroups = visibleGroups();
+  const status = $('#findings-status');
+  if (status) {
+    const total = Number(report.attention?.materialGroupCount || shownGroups.length);
+    status.textContent = shownGroups.length === total
+      ? `Showing ${shownGroups.length} finding${shownGroups.length === 1 ? '' : 's'}.`
+      : `Showing ${shownGroups.length} of ${total} findings.`;
+  }
+  for (const g of shownGroups) {
     const f = g.lead;
     const presentation = presentFinding({ ...f, impactClass: g.impactClass }, env);
     const node = $('#card').content.cloneNode(true), card = node.querySelector('.finding');
-    card.dataset.tone = f.frankPriority === 'blocker' || f.severity === 'critical' ? 'critical' : f.category === 'fix' ? 'warn' : 'info';
+    card.dataset.tone = f.frankPriority === 'blocker' || f.severity === 'critical' || f.severity === 'high' ? 'critical' : f.category === 'fix' ? 'warn' : 'info';
     card.dataset.findingId = f.id || '';
 
     const classChip = card.querySelector('.chip-class');
@@ -668,7 +747,13 @@ function renderUnsafe() {
         const code = document.createElement('code');
         code.textContent = row.selector || row.target?.stableLocator || `(instance ${i + 1})`;
         li.appendChild(code);
-        const canHighlight = row?.targetType === 'visual' && row?.targetId && row?.target?.status !== 'stale';
+        // Gateway-confirmed external link findings (safe-probe.js) never carry a
+        // pre-registered targetId — there's no live DOM at probe time, only a
+        // CSS selector captured when the candidate was queued. resolveTarget()
+        // already falls back to plain selector resolution when targetId is
+        // empty, so requiring targetId here was hiding Highlight for exactly
+        // the broken-link findings most worth pointing at.
+        const canHighlight = row?.targetType === 'visual' && (row?.targetId || row?.selector) && row?.target?.status !== 'stale';
         if (canHighlight) {
           const btn = document.createElement('button');
           btn.type = 'button';
@@ -683,7 +768,7 @@ function renderUnsafe() {
         const frankBtn = document.createElement('button');
         frankBtn.type = 'button';
         frankBtn.className = 'instance-frank btn btn-text';
-        frankBtn.textContent = 'Ask Frank';
+        frankBtn.textContent = 'Walk through';
         frankBtn.onclick = () => startFrank(row, card, frankBtn, { instances: groupRows, selectedInstanceId: row.id, groupTitle: g.title });
         li.appendChild(frankBtn);
         list.appendChild(li);
@@ -692,7 +777,7 @@ function renderUnsafe() {
 
     const highlight = card.querySelector('.highlight');
     const highlightNav = card.querySelector('.highlight-nav');
-    const highlightables = groupRows.filter(row => row?.targetType === 'visual' && row?.targetId && row?.target?.status !== 'stale');
+    const highlightables = groupRows.filter(row => row?.targetType === 'visual' && (row?.targetId || row?.selector) && row?.target?.status !== 'stale');
     const highlightLead = highlightables[0] || null;
     highlight.hidden = !highlightLead;
     if (highlightNav) highlightNav.hidden = !shouldShowHighlightNav(highlightables.length);
@@ -745,7 +830,7 @@ function renderUnsafe() {
     empty.className = 'empty-findings';
     empty.innerHTML = classFilter ? '<b>Nothing in this area.</b> Select the area again to clear the filter.'
       : showAllChecks ? '<b>No findings in this filter.</b> The current scan did not return matching observations.'
-      : targetBlocked() ? '<b>No page findings to prioritize.</b> Target integrity blocked the scan before page QA ran.'
+      : targetBlocked() ? '<b>No page findings to prioritize.</b> The page could not be reached, so page QA never ran. This is a coverage limit, not a clean result.'
       : incompleteCoverage() ? '<b>No confirmed issues in the current evidence.</b> Some checks were incomplete. That uncertainty is recorded in Scan coverage rather than turned into defects.'
       : '<b>No priority issues need attention.</b> Use Show all checks to inspect lower-priority observations.';
     wrap.appendChild(empty);
@@ -860,7 +945,7 @@ function renderFrankStep(index) {
   $('#frank-progress-bar').style.width = `${progressPct}%`;
   const track = $('#frank-progress-track');
   if (track) { track.setAttribute('aria-valuenow', String(progressPct)); track.setAttribute('aria-valuetext', `Step ${frank.index + 1} of ${total}`); }
-  const STEP_ROLE = { spotlight: 'Locate', evidence: 'Checks', interpretation: 'Meaning', comparison: 'Compare', trend: 'History', impact: 'Impact', remediation: 'Fix', verification: 'Verify', summary: 'Summary' };
+  const STEP_ROLE = { spotlight: 'Locate', evidence: 'Checks', interpretation: 'Interpret', comparison: 'Compare', trend: 'History', impact: 'Impact', remediation: 'Fix', verification: 'Verify', summary: 'Summary' };
   $('#frank-step-type').textContent = STEP_ROLE[step.type] || step.type;
 
   const current = $('#frank-current-evidence'); current.innerHTML = '';
@@ -899,7 +984,7 @@ function leaveFrankLocal() {
 }
 
 async function spotlightFinding(card, target, rows = [], idx = 0) {
-  if (!target?.targetId) {
+  if (!target?.targetId && !target?.selector) {
     actionState(card, 'The affected element changed after the scan. Recheck this issue to refresh its target.', 'error');
     return false;
   }
@@ -916,7 +1001,7 @@ async function spotlightFinding(card, target, rows = [], idx = 0) {
 }
 
 async function startFrank(finding, card, triggerButton = null, extra = {}) {
-  if (!report || !tab?.id) return actionState(card, 'Run a current scan before asking Frank.', 'error');
+  if (!report || !tab?.id) return actionState(card, 'Run a current scan before starting a walkthrough.', 'error');
   pendingFrankCancel?.();
   const button = triggerButton || card?.querySelector?.('.ask-frank') || null;
   const requestId = ++frankRequestSeq, pageUrl = report.page?.url || tab.url, tabId = tab.id;
@@ -933,7 +1018,7 @@ async function startFrank(finding, card, triggerButton = null, extra = {}) {
     };
   }
   frankReturnFocus = button;
-  if (button) { button.disabled = true; button.textContent = button.classList.contains('linkish') ? 'Preparing…' : 'Preparing Frank'; }
+  if (button) { button.disabled = true; button.textContent = button.classList.contains('linkish') ? 'Preparing…' : 'Preparing guide'; }
 
   let cancelled = false, cancelResolve, verifiedResolve;
   const cancelPromise = new Promise(resolve => { cancelResolve = resolve; });
@@ -941,14 +1026,14 @@ async function startFrank(finding, card, triggerButton = null, extra = {}) {
   const resetButton = () => {
     if (!button) return;
     button.disabled = false;
-    button.textContent = button.classList.contains('linkish') ? (finding.title || finding.ruleId || 'Ask Frank') : 'Ask Frank';
+    button.textContent = button.classList.contains('linkish') ? (finding.title || finding.ruleId || 'Walk through') : 'Walk through';
   };
   const cancelThisRequest = () => {
     if (cancelled) return;
     cancelled = true; cancelResolve({ type: 'cancelled' });
     resetButton();
-    if (card?.isConnected) actionState(card, 'Frank preparation was cancelled because the page or selected finding changed.', 'warn');
-    else notice('Frank preparation was cancelled because the page or selected finding changed.', 'warn');
+    if (card?.isConnected) actionState(card, 'Walkthrough preparation was cancelled because the page or selected finding changed.', 'warn');
+    else notice('Walkthrough preparation was cancelled because the page or selected finding changed.', 'warn');
   };
   pendingFrankCancel = cancelThisRequest;
 
@@ -956,8 +1041,8 @@ async function startFrank(finding, card, triggerButton = null, extra = {}) {
     if (cancelled || !currentRequest(requestId, pageUrl, tabId)) return;
     const pct = state.progress != null ? ` · ${Math.round(state.progress * 100)}%` : '';
     const message = state.status === 'downloading'
-      ? `Preparing Frank on this device${pct}. You can keep reviewing the scan; this finding will open automatically when Frank is ready.`
-      : 'Loading Frank on this device. You can keep reviewing the scan; this finding will open automatically when Frank is ready.';
+      ? `Preparing on-device AI${pct}. You can keep reviewing the scan; this finding will open automatically when on-device AI is ready.`
+      : 'Loading on-device AI. You can keep reviewing the scan; this finding will open automatically when on-device AI is ready.';
     actionState(card, message, 'ok', {
       persistent: true,
       actionLabel: 'Use verified guidance now',
@@ -966,10 +1051,10 @@ async function startFrank(finding, card, triggerButton = null, extra = {}) {
   };
   const unsubscribe = localFrankRuntime.subscribe(state => {
     if (['downloading', 'warming', 'downloadable'].includes(state.status)) showPreparing(state);
-    else if (state.status === 'ready' && !cancelled && currentRequest(requestId, pageUrl, tabId)) actionState(card, 'Frank is ready. Building an evidence-grounded explanation…', 'ok', { persistent: true });
+    else if (state.status === 'ready' && !cancelled && currentRequest(requestId, pageUrl, tabId)) actionState(card, 'On-device AI is ready. Building an evidence-grounded explanation…', 'ok', { persistent: true });
   });
 
-  // This call is deliberately synchronous with the Ask Frank click so Chrome
+  // This call is deliberately synchronous with the Walk through click so Chrome
   // can use the user activation to trigger first-use model preparation.
   const readinessPromise = localFrankRuntime.activateFromGesture();
   showPreparing(localFrankRuntime.snapshot());
@@ -982,8 +1067,8 @@ async function startFrank(finding, card, triggerButton = null, extra = {}) {
   if (!prepared.ok || !prepared.plan || !prepared.graph) {
     unsubscribe(); resetButton(); frankReturnFocus = null;
     if (pendingFrankCancel === cancelThisRequest) pendingFrankCancel = null;
-    actionState(card, prepared.error || 'Frank could not prepare this finding.', 'error');
-    if (prepared.diagnostic) showFailure(prepared, 'Frank could not prepare this finding.');
+    actionState(card, prepared.error || 'Could not prepare this finding for a walkthrough.', 'error');
+    if (prepared.diagnostic) showFailure(prepared, 'Could not prepare this finding for a walkthrough.');
     return;
   }
 
@@ -991,7 +1076,7 @@ async function startFrank(finding, card, triggerButton = null, extra = {}) {
   if (report?.frankReview) report.frankReview.started = true;
 
   let plan = prepared.plan;
-  let reasoning = { status: 'fallback', mode: 'deterministic', provider: 'deterministic', code: 'LOCAL_AI_UNAVAILABLE', message: 'Frank is using verified deterministic guidance.' };
+  let reasoning = { status: 'fallback', mode: 'deterministic', provider: 'deterministic', code: 'LOCAL_AI_UNAVAILABLE', message: 'Using verified deterministic guidance.' };
   let skipCloud = false;
   const readiness = await Promise.race([
     readinessPromise.then(result => ({ type: 'local', result })),
@@ -1005,16 +1090,16 @@ async function startFrank(finding, card, triggerButton = null, extra = {}) {
 
   if (readiness?.type === 'verified') {
     skipCloud = true;
-    reasoning = { status: 'fallback', mode: 'deterministic', provider: 'deterministic', code: 'USER_CHOSE_VERIFIED', message: 'You chose verified guidance while Chrome continues preparing Frank in the background.' };
+    reasoning = { status: 'fallback', mode: 'deterministic', provider: 'deterministic', code: 'USER_CHOSE_VERIFIED', message: 'You chose verified guidance while Chrome continues preparing on-device AI in the background.' };
   } else if (readiness?.result?.ok && localFrankRuntime.snapshot().status === 'ready') {
     let taskSession = null;
     try {
       taskSession = await localFrankRuntime.cloneTask();
       plan = await localFrankWalkthrough({ session: taskSession, graph: prepared.graph, deterministicPlan: prepared.plan });
-      reasoning = { status: 'operational', mode: 'ai', provider: 'chrome-built-in', model: 'Chrome built-in model', location: 'device', message: 'Frank improved the verified guidance with an isolated on-device reasoning session. Page evidence stayed on this device.' };
+      reasoning = { status: 'operational', mode: 'ai', provider: 'chrome-built-in', model: 'Chrome built-in model', location: 'device', message: 'On-device reasoning improved the verified guidance with an isolated session. Page evidence stayed on this device.' };
       runtimeTrace.record('frank-reasoning', { status: reasoning.status, provider: reasoning.provider, mode: reasoning.mode });
     } catch (error) {
-      reasoning = { status: 'fallback', mode: 'deterministic', provider: 'chrome-built-in', code: error?.code || 'LOCAL_AI_FAILED', message: String(error?.message || "On-device reasoning did not pass Frank's evidence checks.").slice(0, 240) };
+      reasoning = { status: 'fallback', mode: 'deterministic', provider: 'chrome-built-in', code: error?.code || 'LOCAL_AI_FAILED', message: String(error?.message || 'On-device reasoning did not pass evidence checks.').slice(0, 240) };
       runtimeTrace.record('frank-reasoning', { status: reasoning.status, provider: reasoning.provider, mode: reasoning.mode, code: reasoning.code });
     } finally { try { taskSession?.destroy?.(); } catch {} }
   } else if (readiness?.result?.message) {
@@ -1032,7 +1117,7 @@ async function startFrank(finding, card, triggerButton = null, extra = {}) {
   }
 
   if (!(await currentTabStillMatches(pageUrl, tabId))) {
-    unsubscribe(); cancelThisRequest(); actionState(card, 'The inspected page changed while Frank was preparing. Ask Frank on the current scan instead.', 'warn'); return;
+    unsubscribe(); cancelThisRequest(); actionState(card, 'The inspected page changed while the walkthrough was preparing. Walk through the current scan instead.', 'warn'); return;
   }
 
   const source = plan.guidanceSource || (plan.mode === 'ai' ? 'frank-model' : 'deterministic');
@@ -1058,8 +1143,8 @@ async function startFrank(finding, card, triggerButton = null, extra = {}) {
   if (pendingFrankCancel === cancelThisRequest) pendingFrankCancel = null;
   if (!started.ok) {
     frankReturnFocus = null;
-    actionState(card, started.error || 'Frank could not start the walkthrough.', 'error');
-    if (started.diagnostic) showFailure(started, 'Frank could not start the walkthrough.');
+    actionState(card, started.error || 'Could not start the walkthrough.', 'error');
+    if (started.diagnostic) showFailure(started, 'Could not start the walkthrough.');
     return;
   }
 
@@ -1096,13 +1181,13 @@ async function startFrank(finding, card, triggerButton = null, extra = {}) {
     const aiOperationalFail = frank.plan.mode === 'ai' && frank.plan.guidanceSource === 'frank-model' && frank.reasoning?.status === 'operational';
     const onDeviceFail = aiOperationalFail && frank.reasoning?.provider === 'chrome-built-in';
     const downloading = /downloading|warming|downloadable/i.test(String(document.body.dataset.frankReadiness || ''));
-    $('#frank-mode').textContent = onDeviceFail ? 'Frank · AI review' : aiOperationalFail ? 'Frank · AI review' : (downloading ? 'Verified scan guidance' : 'Verified scan guidance');
+    $('#frank-mode').textContent = onDeviceFail ? 'On-device reasoning' : aiOperationalFail ? 'Cloud reasoning' : 'Evidence-backed guidance';
     $('#frank-mode').dataset.mode = aiOperationalFail ? 'ai' : 'deterministic';
     if (downloading && !aiOperationalFail) {
-      notice('Frank model is downloading. Verified scan guidance is shown in the meantime.', 'info');
+      notice('On-device AI is downloading. Evidence-backed guidance is shown in the meantime.', 'info');
     }
     renderFrankStep(0);
-    notice(snapshot.error || 'Frank started in the side panel because the QA workspace could not be saved for focus mode.', 'warn');
+    notice('Walkthrough opened here in the side panel: the page workspace could not be saved, so the page takeover was skipped. The evidence and steps are the same.', 'warn');
     return;
   }
 
@@ -1113,24 +1198,24 @@ async function startFrank(finding, card, triggerButton = null, extra = {}) {
   // Cost-control / mode notice is recorded in the runtime trace; the panel closes immediately after.
   if (onDevice) runtimeTrace.record('frank-focus-mode', { message: 'No metered AI request was used' });
   else if (aiOperational) runtimeTrace.record('frank-focus-mode', { message: 'Optional metered cloud fallback' });
-  else runtimeTrace.record('frank-focus-mode', { message: 'Verified scan guidance', guidanceSource: frank.plan.guidanceSource || 'deterministic' });
+  else runtimeTrace.record('frank-focus-mode', { message: 'Verified guidance', guidanceSource: frank.plan.guidanceSource || 'deterministic' });
   // Preferred UX: coach owns the page; close the global side panel to restore horizontal space.
   try { window.close(); } catch {}
-  if (windowId) send({ type: 'CLOSE_SIDE_PANEL', windowId }, 3000).catch(() => {});
+  if (windowId) send({ type: 'CLOSE_SIDE_PANEL', windowId, tabId: tab?.id }, 3000).catch(() => {});
 }
 
 async function gotoFrank(index) {
   if (!frank) return;
   const next = Math.max(0, Math.min(frank.plan.steps.length - 1, index));
   const r = await send({ type: 'FRANK_GOTO', tabId: frank.tabId, index: next }, 8000);
-  if (!r.ok) return frankAction(r.error || 'Could not move Frank to that step.', 'error');
+  if (!r.ok) return frankAction(r.error || 'Could not move the walkthrough to that step.', 'error');
   renderFrankStep(next);
 }
 async function endFrank() {
   if (!frank) return;
   await send({ type: 'FRANK_END', tabId: frank.tabId }, 5000);
   leaveFrankLocal();
-  notice('Frank session closed.');
+  notice('Walkthrough closed.');
 }
 
 async function loadSession() {
@@ -1140,8 +1225,37 @@ async function loadSession() {
   renderSession();
 }
 
+// Chrome only grants activeTab for the tab that was active at the moment the
+// user invoked the extension via its toolbar icon — switching tabs while the
+// side panel stays open does not extend that grant to the newly active tab.
+// A scan attempt on a tab Chrome hasn't (re-)granted access to fails with one
+// of these messages (see background.js's ensureInjected/localScan/failurePayload).
+function isPageAccessError(r) {
+  return /page access expired|cannot access|missing host permission|activetab/i.test(String(r?.diagnostic?.technicalMessage || r?.error || ''));
+}
+// The one legitimate way to let "New scan" work after switching tabs without
+// requiring the toolbar-icon dance every time: ask for permission on just this
+// origin (same mechanism as "Watch this site"), scoped and one-time per site.
+async function requestScanPermission(url) {
+  if (!url) return false;
+  let u; try { u = new URL(url); } catch { return false; }
+  if (!/^https?:$/.test(u.protocol)) return false;
+  const pattern = `${u.protocol}//${u.host}/*`;
+  if (await chrome.permissions.contains({ origins: [pattern] }).catch(() => false)) return true;
+  notice('You switched pages — requesting permission to scan this site…');
+  try { return await chrome.permissions.request({ origins: [pattern] }); } catch { return false; }
+}
+
 async function rescan() {
   if (scanInFlight) return;
+  // A cached tab reference from a previous scan must never be trusted here —
+  // if the user switched tabs or navigated since the last scan, "New scan"
+  // has to target whatever page is actually active right now, not whatever
+  // was scanned before. Without this refresh, SCAN_TAB below would silently
+  // re-scan the stale tab, and only closing/reopening the panel (which re-runs
+  // restoreWorkspaceOrRescan) would pick up the real active tab.
+  const active = await send({ type: 'GET_ACTIVE' }, 5000).catch(() => null);
+  if (active?.ok && active.tab?.id) tab = { id: active.tab.id, windowId: active.tab.windowId, url: active.tab.url };
   const scanId = `scan-${Date.now().toString(36)}`;
   const scanMode = tab?.id ? 'current-tab' : 'active-tab';
   runtimeTrace.clear();
@@ -1154,6 +1268,14 @@ async function rescan() {
   scanPhase = SCAN_PHASE.DISCOVERING;
   resultFlags = emptyResultReady();
   const button = $('#scan'); button.disabled = true; button.textContent = 'Scanning';
+  const stopButton = $('#stop-scan');
+  const scanHadFocus = document.activeElement === button;
+  if (stopButton) {
+    stopButton.hidden = false;
+    stopButton.disabled = false;
+    if (scanHadFocus) stopButton.focus();
+  }
+  staleResult = false;
   lockResultsUi();
   $('#idle-state').hidden = true;
   $('#summary').hidden = false;
@@ -1171,7 +1293,12 @@ async function rescan() {
   }
   clearDiagnostic(); notice('Scanning current page…');
   try {
-    const r = await send(tab?.id ? { type: 'SCAN_TAB', tabId: tab.id } : { type: 'SCAN_ACTIVE' }, 45000);
+    let r = await send(tab?.id ? { type: 'SCAN_TAB', tabId: tab.id } : { type: 'SCAN_ACTIVE' }, 45000, { abortable: true });
+    if (!r.ok && isPageAccessError(r) && (await requestScanPermission(tab?.url))) {
+      notice('Permission granted. Scanning…');
+      r = await send(tab?.id ? { type: 'SCAN_TAB', tabId: tab.id } : { type: 'SCAN_ACTIVE' }, 45000, { abortable: true });
+    }
+    if (r.aborted) { restoreAfterStop(); return; }
     if (!r.ok) {
       lastScanAttempt = { ...lastScanAttempt, ok: false, operation: r.diagnostic?.operation || 'SCAN', code: r.diagnostic?.id || '' };
       runtimeTrace.record('scan-failed', { scanId, diagnosticId: r.diagnostic?.id || '', operation: r.diagnostic?.operation || 'SCAN' });
@@ -1186,7 +1313,8 @@ async function rescan() {
     resultFlags.scanCollectionComplete = true;
     applyScanProgress({ phase: SCAN_PHASE.VERIFYING_LINKS });
     const scanned = new Date(collected.scannedAt || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    const enriched = await send({ type: 'ENRICH', report: collected, tabId: tab?.id }, 120000);
+    const enriched = await send({ type: 'ENRICH', report: collected, tabId: tab?.id }, 120000, { abortable: true });
+    if (enriched.aborted) { restoreAfterStop(); return; }
     if (enriched.ok) {
       report = stampReportIdentity(enriched.report);
       resultFlags = {
@@ -1251,6 +1379,7 @@ async function rescan() {
           frankInitialReviewComplete: Boolean(report.priorityBrief)
         };
         scanPhase = SCAN_PHASE.READY;
+        staleResult = true;
         revealResultsUi();
         render();
       }
@@ -1258,10 +1387,14 @@ async function rescan() {
     await updateWatch();
   } finally {
     scanInFlight = false;
+    pendingAborts = [];
+    const returnFocus = stopButton && (document.activeElement === stopButton || document.activeElement === document.body);
+    if (stopButton) stopButton.hidden = true;
+    if (returnFocus && scanHadFocus) button.focus();
     if (document.body.dataset.resultReady !== 'true') delete document.body.dataset.scanning;
     button.disabled = false;
-    button.textContent = report && document.body.dataset.resultReady === 'true' ? 'Rescan' : (report ? 'Scan page' : 'Scan page');
-    if (document.body.dataset.resultReady === 'true') button.textContent = 'Rescan';
+    button.textContent = report && document.body.dataset.resultReady === 'true' ? 'New scan' : (report ? 'Scan page' : 'Scan page');
+    if (document.body.dataset.resultReady === 'true') button.textContent = 'New scan';
     if (!report) {
       if (lastDiagnostic) {
         $('#summary').hidden = false;
@@ -1298,7 +1431,7 @@ async function loadSettings() {
 /* ---------------- events ---------------- */
 $('#copy-diagnostic').onclick = async () => {
   if (!lastDiagnostic) return;
-  const text = [`Web QA Assistant ${lastDiagnostic.version || ''}`.trim(), `Diagnostic: ${lastDiagnostic.id || 'Unavailable'}`, `Operation: ${lastDiagnostic.operation || 'Unknown'}`, `Time: ${lastDiagnostic.timestamp || ''}`, `Technical message: ${lastDiagnostic.technicalMessage || ''}`, lastDiagnostic.stack ? `Stack:\n${lastDiagnostic.stack}` : ''].filter(Boolean).join('\n');
+  const text = [`Lumen ${lastDiagnostic.version || ''}`.trim(), `Diagnostic: ${lastDiagnostic.id || 'Unavailable'}`, `Operation: ${lastDiagnostic.operation || 'Unknown'}`, `Time: ${lastDiagnostic.timestamp || ''}`, `Technical message: ${lastDiagnostic.technicalMessage || ''}`, lastDiagnostic.stack ? `Stack:\n${lastDiagnostic.stack}` : ''].filter(Boolean).join('\n');
   try { await navigator.clipboard.writeText(text); notice('Diagnostics copied.', 'ok'); }
   catch { notice('Clipboard access was not available.', 'error'); }
 };
@@ -1341,6 +1474,43 @@ function bindHelpDots() {
 }
 bindHelpDots();
 $('#scan').onclick = rescan;
+
+// Stopping abandons the run. Anything the page has already started may still
+// finish on its own; nothing from this run is recorded either way.
+function restoreAfterStop() {
+  scanPhase = SCAN_PHASE.FAILED;
+  if (report && resultReadyFromReport(report)) {
+    scanPhase = SCAN_PHASE.READY;
+    staleResult = true;
+    revealResultsUi();
+    render();
+    notice('Scan stopped. Showing your last complete results.', 'warn');
+  } else {
+    notice('Scan stopped. Nothing from this run was recorded.', 'warn');
+  }
+}
+
+$('#stop-scan').onclick = () => {
+  const stopButton = $('#stop-scan');
+  if (stopButton) stopButton.disabled = true;
+  abortPendingSends();
+};
+$('#scan-site').onclick = async () => {
+  const button = $('#scan-site');
+  button.disabled = true;
+  try {
+    const r = await send({ type: 'SITE_AUDIT_OPEN' }, 10000);
+    if (!r.ok) { notice(r.error || 'Could not open the site audit workspace.', 'error'); return; }
+    // The audit workspace is a full-page overlay on the inspected tab, in the
+    // same spirit as Frank's Walkthrough — the side panel gets out of the way
+    // rather than fighting it for space.
+    const windowInfo = await chrome.windows.getCurrent().catch(() => null);
+    try { window.close(); } catch {}
+    if (windowInfo?.id) send({ type: 'CLOSE_SIDE_PANEL', windowId: windowInfo.id, tabId: r.tabId }, 3000).catch(() => {});
+  } finally {
+    button.disabled = false;
+  }
+};
 $('#show-all').onclick = () => { showAllChecks = !showAllChecks; filter = 'all'; classFilter = ''; render(); };
 $('#copy-md').onclick = async () => { if (!report) return; try { await navigator.clipboard.writeText(markdown()); notice('Report copied.', 'ok'); } catch { notice('Clipboard access was not available.', 'error'); } };
 $('#copy-json').onclick = async () => { if (!report) return; try { await navigator.clipboard.writeText(JSON.stringify(report, null, 2)); notice('JSON report copied.', 'ok'); } catch { notice('Clipboard access was not available.', 'error'); } };
@@ -1398,7 +1568,7 @@ async function runGatewayTest() {
     const localRow = document.createElement('div');
     localRow.className = 'integration-row';
     localRow.dataset.status = localAi.status === 'available' ? 'available' : localAi.status === 'unavailable' ? 'degraded' : 'not-applicable';
-    localRow.innerHTML = `<b>On-device Frank</b><span>${esc(localAi.status || 'unavailable')}</span>`;
+    localRow.innerHTML = `<b>On-device AI</b><span>${esc(localAi.status || 'unavailable')}</span>`;
     localRow.title = localAi.message || '';
     list.appendChild(localRow);
     const ai = r.integrations?.openai;
@@ -1504,8 +1674,134 @@ function applyWorkspaceSnapshot(workspace, { fromFrankFocus = false } = {}) {
   revealResultsUi();
   render();
   focusFindingCard(workspace.findingId || '');
-  notice(fromFrankFocus ? 'Returned to QA with your previous scan.' : 'Restored your previous scan.', 'ok');
+  notice(fromFrankFocus ? 'Returned to findings with your previous scan.' : 'Restored your previous scan.', 'ok');
   return true;
+}
+
+// Opening the panel (or clicking the toolbar icon while it's already open)
+// must never start a scan on its own — only the "Scan page" / "New scan"
+// button click does that. This restores a still-valid previous result for
+// the current page when one exists, and otherwise leaves the idle state up
+// with nothing running until the user explicitly asks for one.
+const IDLE_AREA_LABELS = {
+  availability: 'Availability', discoverability: 'Discoverability', performance: 'Performance',
+  accessibility: 'Accessibility', security: 'Security', implementation: 'Web quality', coverage: 'Coverage'
+};
+
+// What each discipline actually inspects on a single page. Stated so the idle
+// sheet carries the scope of the survey rather than seven bare nouns.
+const IDLE_AREA_SCOPE = {
+  availability: 'Links, fragments and resources that fail to resolve',
+  discoverability: 'Titles, descriptions, canonicals and robots directives',
+  performance: 'Lab timings measured in this browser, on this network',
+  accessibility: 'axe-core rules plus browser checks against the live DOM',
+  security: 'Response headers, mixed content and clickjacking exposure',
+  implementation: 'Markup, structured data and console errors',
+  coverage: 'What could not be reached, probed or verified'
+};
+
+/** The idle panel used to be three paragraphs over an empty column. It now
+ * states what page is under review and what a scan actually covers — both
+ * known before any scan runs, so nothing here is speculative. */
+function renderIdleContext() {
+  const block = $('#idle-page');
+  let parsed = null;
+  try { parsed = tab?.url ? new URL(tab.url) : null; } catch { parsed = null; }
+  if (parsed && /^https?:$/.test(parsed.protocol)) {
+    $('#idle-page-host').textContent = parsed.hostname;
+    $('#idle-page-path').textContent = parsed.pathname === '/' ? '/' : parsed.pathname;
+    const secure = parsed.protocol === 'https:';
+    const scheme = $('#idle-page-scheme');
+    scheme.textContent = secure ? 'HTTPS' : 'Not secure (HTTP)';
+    scheme.className = `idle-scheme ${secure ? 'ok' : 'warn'}`;
+    block.hidden = false;
+  } else {
+    block.hidden = true;
+  }
+  const areas = $('#idle-areas');
+  if (areas && !areas.childElementCount) {
+    for (const area of LEDGER_ORDER) {
+      const li = document.createElement('li');
+      const name = document.createElement('b');
+      name.textContent = IDLE_AREA_LABELS[area] || area;
+      const scope = document.createElement('span');
+      scope.textContent = IDLE_AREA_SCOPE[area] || '';
+      li.append(name, scope);
+      areas.appendChild(li);
+    }
+  }
+}
+
+const sameDocument = (a, b) => {
+  try {
+    const x = new URL(a), y = new URL(b);
+    return x.origin === y.origin && x.pathname === y.pathname && x.search === y.search;
+  } catch { return false; }
+};
+
+async function refreshIdleHistory() {
+  const block = $('#idle-history');
+  if (!block) return;
+  block.hidden = true;
+  if (!tab?.url) return;
+  let session = null;
+  try {
+    const r = await send({ type: 'GET_SITE_SESSION', pageUrl: tab.url }, 5000);
+    session = r?.ok === false ? null : (r?.session || null);
+  } catch { session = null; }
+  const pages = Object.values(session?.pages || {})
+    .filter(p => p?.url && p.lastScan)
+    .sort((a, b) => new Date(b.lastScan) - new Date(a.lastScan));
+  if (!pages.length) return;
+
+  const time = value => new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const plural = (n, word) => `${n} ${word}${Number(n) === 1 ? '' : 's'}`;
+
+  const thisPage = pages.find(p => sameDocument(p.url, tab.url));
+  const others = pages.filter(p => p !== thisPage);
+  const last = $('#idle-last');
+  if (last) {
+    last.innerHTML = thisPage
+      ? `<b>This page</b> was scanned at ${esc(time(thisPage.lastScan))} — ${esc(plural(Number(thisPage.materialCount || 0), 'issue'))}.`
+      : `<b>This page</b> has not been scanned yet.`;
+  }
+
+  const rows = $('#idle-history-rows');
+  if (rows) {
+    rows.innerHTML = '';
+    for (const page of others.slice(0, 4)) {
+      const row = document.createElement('div');
+      row.className = 'idle-history-row';
+      let path = page.url;
+      try { const u = new URL(page.url); path = (u.pathname || '/') + (u.search || ''); } catch {}
+      row.innerHTML = `<b>${esc(path)}</b><span>${esc(time(page.lastScan))} · ${esc(plural(Number(page.materialCount || 0), 'issue'))}</span>`;
+      rows.appendChild(row);
+    }
+    rows.hidden = others.length === 0;
+  }
+
+  const more = $('#idle-history-more');
+  if (more) {
+    const openTotal = pages.reduce((n, p) => n + Number(p.materialCount || 0), 0);
+    const hidden = Math.max(0, others.length - 4);
+    more.textContent = hidden
+      ? `${plural(hidden, 'more page')} on this site · ${plural(openTotal, 'issue')} open in this session`
+      : (others.length ? `${plural(openTotal, 'issue')} open across ${plural(pages.length, 'page')} in this session` : '');
+  }
+  block.hidden = false;
+}
+
+function showIdleState() {
+  delete document.body.dataset.hasReport;
+  delete document.body.dataset.resultReady;
+  delete document.body.dataset.scanning;
+  $('#summary').hidden = true;
+  $('#idle-state').hidden = false;
+  renderIdleContext();
+  refreshIdleHistory();
+  const button = $('#scan');
+  button.disabled = false;
+  button.textContent = 'Scan page';
 }
 
 async function restoreWorkspaceOrRescan({ tabId = null, pageUrl = '', preferRestore = true } = {}) {
@@ -1530,20 +1826,15 @@ async function restoreWorkspaceOrRescan({ tabId = null, pageUrl = '', preferRest
           recoverable: true,
           coverageImpact: 'none'
         });
-        notice('Extension updated. Refreshing this page assessment…', 'warn');
-        await rescan();
+        notice('Extension updated. Click Scan page to refresh this assessment.', 'warn');
+        showIdleState();
         return { restored: false, staleBuild: true };
-      }
-      const shouldRestore = Boolean(workspace.frankFocus || workspace.pendingReturn);
-      if (!shouldRestore) {
-        await rescan();
-        return { restored: false };
       }
       const fromFrank = Boolean(workspace.frankFocus || workspace.pendingReturn);
       if (workspace.frankFocus && useTabId) await send({ type: 'FRANK_END', tabId: useTabId }, 4000).catch(() => {});
       if (!applyWorkspaceSnapshot(workspace, { fromFrankFocus: fromFrank })) {
         await send({ type: 'CLEAR_WORKSPACE_SNAPSHOT', tabId: useTabId }, 4000).catch(() => {});
-        await rescan();
+        showIdleState();
         return { restored: false, staleBuild: true };
       }
       await send({ type: 'PATCH_WORKSPACE_SNAPSHOT', tabId: useTabId, patch: { frankFocus: false, pendingReturn: false } }, 4000).catch(() => {});
@@ -1552,7 +1843,7 @@ async function restoreWorkspaceOrRescan({ tabId = null, pageUrl = '', preferRest
       return { restored: true };
     }
   }
-  await rescan();
+  showIdleState();
   return { restored: false };
 }
 
@@ -1562,7 +1853,7 @@ chrome.runtime.onMessage.addListener(msg => {
     restoreWorkspaceOrRescan({ tabId: msg.tabId, pageUrl: msg.pageUrl || '', preferRestore: true });
   }
   if (msg?.type === 'FRANK_STEP_CHANGED' && frank) renderFrankStep(msg.index);
-  if (msg?.type === 'FRANK_CLOSED' && frank) { leaveFrankLocal(); notice('Frank session closed.'); }
+  if (msg?.type === 'FRANK_CLOSED' && frank) { leaveFrankLocal(); notice('Walkthrough closed.'); }
   if (msg?.type === 'OPEN_REPORT_BUG') {
     runtimeTrace.record('report-bug-opened', { fromFrank: true });
     $('#bug-include-context').checked = false;

@@ -27,5 +27,5 @@ test('priority brief separates incomplete coverage from real defects',()=>{
   });
   assert.match(text,/No confirmed material issues/i);
   assert.match(text,/2 of 12/i);
-  assert.match(text,/did not count those URLs as broken links/i);
+  assert.match(text,/were not counted as broken links/i);
 });

@@ -110,9 +110,9 @@ if (JSON.stringify(manifest.host_permissions) !== JSON.stringify(requiredHosts))
   bad++;
   console.error('extension host permissions should be limited to the assistant gateway and localhost development endpoints');
 }
-if (!fs.existsSync('packages/ui/tokens.css')) {
+if (!fs.existsSync('packages/ui/tokens.css') || !fs.existsSync('packages/ui/lumen.css')) {
   bad++;
-  console.error('shared UI design tokens are missing');
+  console.error('shared UI design tokens or Lumen Tailwind source are missing');
 }
 if (!fs.existsSync('.github/workflows/ci.yml') || !fs.existsSync('.github/workflows/release.yml')) {
   bad++;
@@ -137,7 +137,21 @@ const ALLOWED_HOSTS = new Set([
   // Platform suffixes used in environment-classification fixtures.
   'vercel.app', 'netlify.app', 'pages.dev', 'bigscoots-staging.com',
   // RFC 2606 reserved second-level examples.
-  'example.co.uk'
+  'example.co.uk',
+  // Synthetic sibling used only to test that a shared multi-part public
+  // suffix (.co.uk) is never mistaken for a shared domain.
+  'other-example.co.uk',
+  // Social platforms that reject automated link probes. These are the subject
+  // of packages/crawl/link-verification.js, not client data: a fixture cannot
+  // assert "facebook.com is a known-unverifiable host" while saying example.com.
+  'facebook.com', 'instagram.com', 'linkedin.com', 'x.com', 'twitter.com',
+  'tiktok.com', 'threads.net', 'pinterest.com', 'quora.com', 'reddit.com',
+  // A competitor's public product documentation, cited as a source in
+  // docs/SITEBULB-PARITY-PLAN.md. This check exists to keep real client and
+  // test-site names out of the repository; a citation to a published vendor
+  // reference is neither, and stripping it would leave the comparison's
+  // claims unattributable.
+  'sitebulb.com'
 ]);
 const HOST_PATTERN = /https?:\/\/([a-z0-9.-]+\.[a-z]{2,})/gi;
 function allowedHost(host) {
@@ -146,11 +160,24 @@ function allowedHost(host) {
   // Any subdomain of an allowed apex is fine (e.g. staging.example.com).
   return [...ALLOWED_HOSTS].some(allowed => h.endsWith(`.${allowed}`));
 }
+/** Third-party agent-skill payloads installed by `npx impeccable install`.
+ * Scoped to that vendor by name on purpose: our own skills under
+ * .claude/skills (lumen-*, run-web-qa-assistant) are our content and stay
+ * scanned. */
+const VENDORED_SKILL_DIR = /(^|\/)\.(claude|cursor|github)\/skills\/impeccable$/;
+
 function scanForClientData(dir) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
       if (['node_modules', '.git', 'dist', 'qa-runs', '.autoqa'].includes(e.name)) continue;
+      // Vendored agent skills (installed by `npx impeccable install` into
+      // .claude/.cursor/.github) are third-party code, not our fixtures. They
+      // legitimately contain SSRF-test hostnames like `127.0.0.1.evil.com` and
+      // the vendor's own domain. This rule exists to stop *our* fixtures from
+      // carrying real client data; policing someone else's tool does nothing
+      // for that and only teaches the team to ignore a failing gate.
+      if (VENDORED_SKILL_DIR.test(full.replace(/\\/g, '/'))) continue;
       scanForClientData(full);
       continue;
     }
@@ -344,13 +371,13 @@ const frankUiPrepare = panelSource.indexOf("type: 'PREPARE_FRANK'", frankUiStart
 const frankUiLocalStart = panelSource.indexOf('localFrankRuntime.activateFromGesture', frankUiStart);
 if (frankUiStart < 0 || frankUiLocalStart < frankUiStart || frankUiPrepare < 0 || frankUiLocalStart > frankUiPrepare) {
   bad++;
-  console.error('on-device Frank regression: model activation must begin directly from the Ask Frank user gesture before awaited preparation');
+  console.error('on-device Frank regression: model activation must begin directly from the Walk through user gesture before awaited preparation');
 }
 if (!/class LocalFrankRuntime/.test(localAiSource) || !/cloneTask\s*\(/.test(localAiSource) || /resolveLocalFrankSession/.test(panelSource)) {
   bad++;
   console.error('on-device Frank regression: persistent readiness manager + cloned finding sessions are required');
 }
-if (!/Use verified guidance now/.test(panelSource) || !/Preparing Frank on this device/.test(panelSource)) {
+if (!/Use verified guidance now/.test(panelSource) || !/Preparing on-device AI/.test(panelSource)) {
   bad++;
   console.error('Frank readiness UX regression: preparing state must remain visible and allow deterministic guidance without rescanning');
 }
@@ -456,6 +483,10 @@ if (!/local-ai\.js/.test(fs.readFileSync('scripts/build-extension.mjs','utf8')))
   bad++;
   console.error('build regression: local-ai.js is not copied into the extension distribution');
 }
+if (!/buildLumenCss|build-css/.test(fs.readFileSync('scripts/build-extension.mjs','utf8')) || !/tailwindcss/.test(fs.readFileSync('package.json','utf8'))) {
+  bad++;
+  console.error('build regression: Lumen Tailwind compile must run as part of the extension build');
+}
 const extensionBuildSource = fs.readFileSync('scripts/build-extension.mjs','utf8');
 const axeCacheIndex = extensionBuildSource.indexOf('const axeBytes=');
 const distRemoveIndex = extensionBuildSource.indexOf('fs.rmSync(out');
@@ -470,17 +501,17 @@ if (/Standard guidance/.test(panelHtmlSource) || /This is the evidence behind th
 
 // 1.6 focus-mode contract: sidebar is evidence; the page card is Frank's reasoning.
 const contentSource = fs.readFileSync('apps/extension/content.js', 'utf8');
-if (!(/Frank · AI review/.test(contentSource) || /On-device reasoning/.test(contentSource)) || !(/Verified scan guidance/.test(contentSource) || /Verified guidance/.test(contentSource)) || /Evidence-grounded guidance/.test(contentSource)) {
+if (!/On-device reasoning/.test(contentSource) || !(/Verified scan guidance/.test(contentSource) || /Verified guidance/.test(contentSource)) || /Evidence-grounded guidance/.test(contentSource)) {
   bad++;
-  console.error('1.6.1 Frank focus card must disclose the actual reasoning mode');
+  console.error('1.6.1 walkthrough card must disclose the actual reasoning mode');
 }
 if (!/step\.headline/.test(contentSource) || !/step\.body/.test(contentSource) || !/aria-live/.test(contentSource)) {
   bad++;
   console.error('Frank focus regression: the page overlay must render the reasoning headline/body with an announced live region');
 }
-if (!/id=\"frank-ledger-title\"/.test(panelHtmlSource) || !/Evidence ledger/.test(panelHtmlSource) || !/id=\"frank-facts\"/.test(panelHtmlSource)) {
+if (!/id=\"frank-ledger-title\"/.test(panelHtmlSource) || !/>Evidence</.test(panelHtmlSource) || /Evidence ledger/.test(panelHtmlSource) || !/id=\"frank-facts\"/.test(panelHtmlSource)) {
   bad++;
-  console.error('Frank focus regression: deterministic facts must remain in the sidebar evidence ledger');
+  console.error('Frank focus regression: deterministic facts must remain in the sidebar Evidence panel');
 }
 if (/id=\"frank-step-body\"/.test(panelHtmlSource) || /id=\"frank-step-headline\"/.test(panelHtmlSource)) {
   bad++;
@@ -508,9 +539,13 @@ if (fs.existsSync(distManifestPath)) {
     }
   }
   const distPanel = fs.readFileSync('dist/extension/sidepanel.html', 'utf8');
-  if (!/Ask Frank/.test(distPanel) || />Explain</.test(distPanel) || !/id="ledger"/.test(distPanel)) {
+  if (!/Walk through/.test(distPanel) || />Explain</.test(distPanel) || !/id="ledger"/.test(distPanel)) {
     bad++;
     console.error('stale extension UI detected in dist/extension. Run npm run build:extension.');
+  }
+  if (!fs.existsSync('dist/extension/sidepanel.css') || !fs.existsSync('apps/web/public/styles.css')) {
+    bad++;
+    console.error('Lumen CSS compile missing: run npm run build:extension');
   }
 }
 

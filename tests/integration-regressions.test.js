@@ -102,7 +102,7 @@ test('release build cannot silently ship stale extension files', () => {
   assert.equal(lock.version, pkg.version);
   assert.equal(lock.packages[''].version, pkg.version);
   assert.equal(distManifest.version, sourceManifest.version);
-  assert.match(distPanel, /Ask Frank/);
+  assert.match(distPanel, /Walk through/);
   assert.match(distPanel, /Technical evidence/);
   assert.doesNotMatch(distPanel, />Explain</);
   assert.doesNotMatch(distBackground, /return await r\.json\(\)/);
@@ -169,7 +169,89 @@ test('finding cards expose confidence, recheck and team handoff', () => {
   assert.match(panel, /f\.confidence/);
   assert.match(html, /class="recheck/);
   assert.match(html, /Copy issue/);
-  assert.match(panel, /Acceptance: Rescan/);
+  assert.match(panel, /Acceptance: Start a new scan/);
+});
+
+test('scanning again always targets the currently active tab, and the button reads "New scan"', () => {
+  const panel = read('apps/extension/sidepanel.js');
+  assert.match(panel, /textContent = 'New scan'/);
+  assert.doesNotMatch(panel, /textContent = 'Rescan'/);
+  const start = panel.indexOf('async function rescan');
+  const end = panel.indexOf('async function updateWatch');
+  const rescanBlock = panel.slice(start, end);
+  // A stale cached `tab` from a previous scan must be refreshed from the real
+  // active tab before deciding which tab to scan — otherwise switching tabs or
+  // navigating without closing/reopening the panel silently re-scans the
+  // wrong page (SCAN_TAB with an old id) instead of the page actually on screen.
+  assert.match(rescanBlock, /type: 'GET_ACTIVE' \}/);
+  const activeIdx = rescanBlock.indexOf("type: 'GET_ACTIVE'");
+  const scanTabIdx = rescanBlock.indexOf("type: 'SCAN_TAB'");
+  assert.ok(activeIdx >= 0 && scanTabIdx > activeIdx, 'the active tab must be refreshed before the SCAN_TAB/SCAN_ACTIVE decision');
+});
+
+test('New scan recovers from a missing activeTab grant by requesting site permission and retrying once', () => {
+  const panel = read('apps/extension/sidepanel.js');
+  // Chrome only grants activeTab to the tab that was active when the user
+  // clicked the toolbar icon. Switching tabs while the panel stays open does
+  // not extend that grant, so a scan on the newly active tab fails until the
+  // user re-invokes the extension via the icon — the exact "close and reopen"
+  // workaround this fix is meant to eliminate. The fallback below is the one
+  // legitimate way around it: request permission for just that origin (the
+  // same mechanism as "Watch this site") and retry, instead of dead-ending.
+  assert.match(panel, /function isPageAccessError\(r\)/);
+  assert.match(panel, /page access expired\|cannot access\|missing host permission\|activetab/i);
+  assert.match(panel, /async function requestScanPermission\(url\)/);
+  assert.match(panel, /chrome\.permissions\.request\(\{ origins: \[pattern\] \}\)/);
+  const start = panel.indexOf('async function rescan');
+  const end = panel.indexOf('async function updateWatch');
+  const rescanBlock = panel.slice(start, end);
+  assert.match(rescanBlock, /isPageAccessError\(r\)/);
+  assert.match(rescanBlock, /requestScanPermission\(tab\?\.url\)/);
+  // The retry must re-send the same scan request, not just request permission
+  // and stop — a permission grant with no follow-up scan is still a dead end.
+  const firstSend = rescanBlock.indexOf("type: 'SCAN_TAB'");
+  const retrySend = rescanBlock.indexOf("type: 'SCAN_TAB'", firstSend + 1);
+  assert.ok(retrySend > firstSend, 'a granted permission must trigger a second scan attempt on the same tab');
+});
+
+test('the side panel is per-tab like DevTools, not a single panel shared across every tab in the window', () => {
+  const bg = read('apps/extension/background.js');
+  // The manifest's side_panel.default_path enables the panel globally for
+  // every tab by default. That has to be explicitly disabled at runtime
+  // (setOptions with no tabId = the default for every tab), or Lumen stays
+  // visible on every tab regardless of the per-tab enabling below.
+  assert.match(bg, /function disableGlobalSidePanelDefault\(\)\{chrome\.sidePanel\.setOptions\(\{path:'sidepanel\.html',enabled:false\}\)/);
+  const onInstalledIdx = bg.indexOf('chrome.runtime.onInstalled.addListener');
+  const onStartupIdx = bg.indexOf('chrome.runtime.onStartup.addListener');
+  assert.match(bg.slice(onInstalledIdx, onInstalledIdx + 160), /disableGlobalSidePanelDefault\(\)/);
+  assert.match(bg.slice(onStartupIdx, onStartupIdx + 160), /disableGlobalSidePanelDefault\(\)/);
+  // Only a fresh toolbar-icon click on a specific tab enables + opens Lumen
+  // for that tab — this is also what keeps activeTab valid for scanning,
+  // since the panel only ever becomes visible right after its own tab's click.
+  const clickStart = bg.indexOf('chrome.action.onClicked.addListener');
+  const clickEnd = bg.indexOf('\n});', clickStart);
+  const clickBlock = bg.slice(clickStart, clickEnd);
+  assert.match(clickBlock, /chrome\.sidePanel\.setOptions\(\{tabId:tab\.id,path:'sidepanel\.html',enabled:true\}\)/);
+  assert.match(clickBlock, /chrome\.sidePanel\.open\(\{tabId:tab\.id\}\)/);
+  assert.doesNotMatch(clickBlock, /chrome\.sidePanel\.open\(\{windowId/);
+  // A closed tab's per-tab panel state must not linger for a future tab that reuses its id.
+  assert.match(bg, /chrome\.tabs\.onRemoved\.addListener\(tabId=>\{chrome\.sidePanel\.setOptions\(\{tabId,enabled:false\}\)/);
+});
+
+test('broken-link findings can be highlighted even without a pre-registered targetId', () => {
+  const panel = read('apps/extension/sidepanel.js');
+  // Gateway-confirmed external link findings (safe-probe.js) never get a
+  // targetId — there's no live DOM at probe time — only a selector captured
+  // when the link was queued. Requiring targetId here hid Highlight for
+  // exactly the broken-link findings most worth pointing at.
+  assert.match(panel, /targetType === 'visual' && \(row\?\.targetId \|\| row\?\.selector\)/g);
+  assert.match(panel, /if \(!target\?\.targetId && !target\?\.selector\)/);
+});
+
+test('"Likely owner" is no longer shown on finding cards', () => {
+  const panel = read('apps/extension/sidepanel.js');
+  assert.doesNotMatch(panel, /Likely owner/);
+  assert.doesNotMatch(panel, /fixOwner/);
 });
 
 test('gateway exposes request IDs, protected extension routes and integration health', () => {

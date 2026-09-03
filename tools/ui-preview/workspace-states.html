@@ -9,7 +9,7 @@
   <style>
     body{margin:0;background:#e8ecf1}
     .preview-frame{width:360px;min-height:100vh;margin:0 auto;background:var(--wqa-canvas);box-shadow:0 0 0 1px #c9d2dc}
-    .preview-note{position:sticky;top:0;z-index:40;padding:8px 12px;background:#12395E;color:#fff;font:600 12px/1.4 system-ui}
+    .preview-note{position:sticky;top:0;z-index:40;padding:8px 12px;background:#143E63;color:#fff;font:600 12px/1.4 system-ui}
   </style>
 </head>
 <body data-has-report="true">
@@ -17,9 +17,9 @@
   <p class="preview-note">Static layout preview · narrow 360px · synthetic fixtures · not live extension runtime</p>
   <header class="app-header">
     <div class="brand-lockup">
-      <span class="brand-mark" aria-hidden="true">WQ</span>
+      <span class="brand-mark" aria-hidden="true"></span>
       <div class="app-id">
-        <h1>Web QA Assistant</h1>
+        <h1>Lumen</h1>
         <p>mixed.example</p>
       </div>
     </div>
@@ -41,10 +41,8 @@
         </div>
         <article class="brief" data-state="attention">
           <div class="brief-top">
-            <span class="frank-mark" aria-hidden="true">F</span>
-            <span class="frank-name">Frank</span>
             <span class="chip chip-quiet">Evidence-backed assessment</span>
-            <span class="chip" data-tone="ok">Frank ready</span>
+            <span class="chip" data-tone="ok">On-device AI ready</span>
           </div>
           <h3 id="judgment-title">3 issues worth addressing</h3>
           <p>Start with page title is missing, then document language is missing, then viewport metadata is missing.</p>
@@ -72,7 +70,7 @@
           <p class="detail">Search and browser tabs have no page name to show.</p>
           <div class="finding-next"><span>Next step</span><p>Add a unique, descriptive title element.</p></div>
           <div class="finding-actions">
-            <button class="btn btn-brand">Ask Frank</button>
+            <button class="btn btn-brand">Walk through</button>
             <button class="btn btn-quiet">Recheck</button>
           </div>
           <details class="technical"><summary>Technical evidence</summary><div class="instance-list">seo.title-missing</div></details>
@@ -87,7 +85,7 @@
           <h3>Document language is missing</h3>
           <p class="detail">Assistive tech cannot determine the page language.</p>
           <div class="finding-next"><span>Next step</span><p>Set lang on the html element.</p></div>
-          <div class="finding-actions"><button class="btn btn-brand">Ask Frank</button></div>
+          <div class="finding-actions"><button class="btn btn-brand">Walk through</button></div>
         </article>
 
         <article class="finding" data-tone="warn">
@@ -99,7 +97,7 @@
           <h3>Viewport metadata is missing</h3>
           <p class="detail">Mobile layout may not scale correctly.</p>
           <div class="finding-next"><span>Next step</span><p>Add a viewport meta tag.</p></div>
-          <div class="finding-actions"><button class="btn btn-brand">Ask Frank</button></div>
+          <div class="finding-actions"><button class="btn btn-brand">Walk through</button></div>
           <details class="technical" open><summary>Technical evidence</summary><div class="instance-list">web.viewport-missing</div></details>
         </article>
       </section>

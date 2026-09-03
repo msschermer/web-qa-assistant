@@ -64,9 +64,9 @@ test('Frank guidance source labels distinguish deterministic fallback', () => {
   const g = guidanceFor({ ruleId: 'performance.browser.ttfb', performanceObservation: { ttfbMs: 2000 } });
   assert.ok(g.interpretation);
   const side = fs.readFileSync(path.join(root, 'sidepanel.js'), 'utf8');
-  assert.match(side, /Verified scan guidance/);
+  assert.match(side, /Verified guidance/);
   assert.match(side, /guidanceSource === 'frank-model'/);
   const content = fs.readFileSync(path.join(root, 'content.js'), 'utf8');
-  assert.match(content, /Verified scan guidance/);
+  assert.match(content, /Verified guidance/);
   assert.match(content, /Page-level performance observation/);
 });

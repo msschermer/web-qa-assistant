@@ -8,11 +8,26 @@ import net from 'node:net';
 import { Agent, fetch as undiciFetch } from 'undici';
 import { sanitizeUrl } from '../ai/evidence-contract.js';
 
+/**
+ * A browser refuses to show the response at all here — it interstitials the
+ * visitor with a security warning instead. That's a confirmed, actionable fact
+ * about the destination (distinct from "we couldn't tell"), so it must not be
+ * silently absorbed into the generic network-failure/inconclusive bucket. It
+ * also must never be worked around by disabling TLS verification: an
+ * unreachable-behind-a-bad-certificate destination is exactly the case where
+ * blindly trusting the connection would be the wrong fix.
+ */
+const TLS_ERROR_CODE_PATTERN = /^(CERT_|DEPTH_|SELF_SIGNED|UNABLE_TO_(GET|VERIFY)|ERR_TLS_|HOSTNAME_MISMATCH$)/;
+export function isTlsErrorCode(code = '') {
+  return TLS_ERROR_CODE_PATTERN.test(String(code || ''));
+}
+
 export const PROBE_DEFAULTS = Object.freeze({
   timeoutMs: 4500,
   maxRedirects: 5,
   maxCandidates: 80,
   concurrency: 4,
+  perHostConcurrency: 2,
   maxBodyBytes: 8192,
   totalBudgetMs: 18000
 });
@@ -123,19 +138,32 @@ function redirectLocation(res, currentUrl) {
   } catch { return null; }
 }
 
+/**
+ * Node's connect layer calls back into a custom `lookup` with {all:true}
+ * whenever it uses dual-stack/Happy-Eyeballs connection logic (its default
+ * since Node 18+), and then expects an array of {address,family} records, not
+ * the legacy 3-argument (err, address, family) shape. Answering with the
+ * legacy shape regardless of `options.all` makes Node treat the pinned IP
+ * string as an addresses array and fail every single external probe
+ * instantly with ERR_INVALID_IP_ADDRESS ("Invalid IP address: undefined") —
+ * surfacing only as an opaque, generic "fetch failed". Exported standalone so
+ * this exact contract can be pinned by a test without a live network call.
+ */
+export function pinnedLookup(pick, family) {
+  return (_host, options, callback) => {
+    if (!pick || isPrivateIpAddress(pick)) {
+      callback(new Error('destination-not-allowed'));
+      return;
+    }
+    if (options && options.all) callback(null, [{ address: pick, family }]);
+    else callback(null, pick, family);
+  };
+}
+
 function pinnedFetch(addresses, hostname) {
   const pick = normalizeHost((addresses || [])[0] || '');
-  const agent = new Agent({
-    connect: {
-      lookup(_host, _options, callback) {
-        if (!pick || isPrivateIpAddress(pick)) {
-          callback(new Error('destination-not-allowed'));
-          return;
-        }
-        callback(null, pick, net.isIPv6(pick) ? 6 : 4);
-      }
-    }
-  });
+  const family = net.isIPv6(pick) ? 6 : 4;
+  const agent = new Agent({ connect: { lookup: pinnedLookup(pick, family) } });
   return (url, init = {}) => undiciFetch(url, {
     ...init,
     dispatcher: agent,
@@ -153,7 +181,21 @@ async function fetchHop(url, method, timeoutMs, maxBodyBytes, fetchImpl) {
       credentials: 'omit',
       cache: 'no-store',
       signal: controller.signal,
-      headers: { accept: '*/*' }
+      // A single, low-volume "is this link still reachable" check is what a
+      // browser does when a person clicks it — not a crawl of the
+      // destination's structure — so a browser-realistic header set here
+      // (rather than an honest bot UA, which is right for the site being
+      // audited itself) cuts down on false "broken" results from sites whose
+      // bot-protection blocks anything that doesn't look like a browser. It
+      // does not, and cannot, get past protection keyed on IP reputation or
+      // TLS fingerprint (Yelp-style aggressive WAFs) — those still need a
+      // human to confirm manually, which is exactly why a 403/401/429 here
+      // is reported as "blocked", never as a confirmed broken link.
+      headers: {
+        accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'accept-language': 'en-US,en;q=0.9',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+      }
     });
     if (method === 'GET' && res.body) {
       try {
@@ -198,6 +240,10 @@ export async function probeExternalDestination(raw, options = {}) {
   let current = String(raw || '');
   let redirected = false;
   let method = 'HEAD';
+  // Every hop is a real decision (gate check + at least a network attempt or an
+  // explicit safety refusal), so these destinations must still be attempts>=1 —
+  // otherwise mapExternalProbeRows silently drops them instead of reporting why.
+  const visited = new Set([current]);
 
   for (let hop = 0; hop <= maxRedirects; hop++) {
     const gate = await assertPublicProbeDestination(current, options);
@@ -210,7 +256,7 @@ export async function probeExternalDestination(raw, options = {}) {
         redirected,
         durationMs: Date.now() - started,
         method,
-        attempts: 0
+        attempts: 1
       };
     }
 
@@ -235,6 +281,19 @@ export async function probeExternalDestination(raw, options = {}) {
             attempts: 1
           };
         }
+        if (visited.has(next)) {
+          return {
+            url: String(raw || ''),
+            status: headStatus,
+            error: 'redirect-loop',
+            finalUrl: evidenceUrl(next),
+            redirected: true,
+            durationMs: Date.now() - started,
+            method: 'HEAD',
+            attempts: 1
+          };
+        }
+        visited.add(next);
         redirected = true;
         current = next;
         continue;
@@ -275,10 +334,16 @@ export async function probeExternalDestination(raw, options = {}) {
       first = await fetchHop(gate.url, 'GET', timeoutMs, maxBodyBytes, fetchImpl);
     } catch (error) {
       const msg = String(error?.name === 'AbortError' ? 'timeout' : (error?.message || error));
+      // undici wraps every low-level failure in a generic "fetch failed" TypeError;
+      // the actual reason (ENOTFOUND, ECONNREFUSED, ECONNRESET, certificate error...)
+      // lives on error.cause and was previously discarded, leaving diagnostics with
+      // no way to tell a real DNS/connection failure from a code defect.
+      const causeCode = error?.cause?.code ? String(error.cause.code) : '';
       return {
         url: String(raw || ''),
         status: 0,
         error: /abort|timeout/i.test(msg) ? 'timeout' : (/destination-not-allowed/i.test(msg) ? 'destination-not-allowed' : msg),
+        errorCode: causeCode || undefined,
         finalUrl: evidenceUrl(gate.url),
         redirected,
         durationMs: Date.now() - started,
@@ -302,6 +367,19 @@ export async function probeExternalDestination(raw, options = {}) {
           attempts: 1
         };
       }
+      if (visited.has(next)) {
+        return {
+          url: String(raw || ''),
+          status,
+          error: 'redirect-loop',
+          finalUrl: evidenceUrl(next),
+          redirected: true,
+          durationMs: Date.now() - started,
+          method: 'GET',
+          attempts: 1
+        };
+      }
+      visited.add(next);
       redirected = true;
       current = next;
       continue;
@@ -366,8 +444,16 @@ export async function probeExternalDestination(raw, options = {}) {
     redirected: true,
     durationMs: Date.now() - started,
     method,
-    attempts: 0
+    attempts: 1
   };
+}
+
+function probeHostOf(url) {
+  try {
+    return normalizeHost(new URL(String(url || '')).hostname);
+  } catch {
+    return String(url || '');
+  }
 }
 
 function candidateKey(url) {
@@ -399,37 +485,96 @@ export async function probeExternalCandidates(candidates = [], options = {}) {
 
   const uniqueUrls = [...byKey.keys()];
   const resultByKey = new Map();
-  let cursor = 0;
+  // Raising global concurrency must not let every worker pile onto one struggling host.
+  const perHostConcurrency = Math.max(1, Number(options.perHostConcurrency || PROBE_DEFAULTS.perHostConcurrency));
+  const hostInFlight = new Map();
+  const pending = uniqueUrls.map((url) => ({ url, host: probeHostOf(url), taken: false }));
+  let remaining = pending.length;
+
+  function budgetExhausted(url) {
+    resultByKey.set(url, {
+      url,
+      status: 0,
+      error: 'budget-exhausted',
+      finalUrl: evidenceUrl(url),
+      redirected: false,
+      durationMs: 0,
+      method: 'GET',
+      attempts: 0
+    });
+  }
+
+  function claim() {
+    for (const item of pending) {
+      if (item.taken) continue;
+      if ((hostInFlight.get(item.host) || 0) >= perHostConcurrency) continue;
+      item.taken = true;
+      remaining--;
+      hostInFlight.set(item.host, (hostInFlight.get(item.host) || 0) + 1);
+      return item;
+    }
+    return null;
+  }
+
+  function drainRemainingAsExhausted() {
+    for (const item of pending) {
+      if (item.taken) continue;
+      item.taken = true;
+      remaining--;
+      budgetExhausted(item.url);
+    }
+  }
 
   async function worker() {
-    while (cursor < uniqueUrls.length) {
+    while (remaining > 0) {
       if (Date.now() - startedAll > totalBudgetMs) {
-        const url = uniqueUrls[cursor++];
-        resultByKey.set(url, {
-          url,
-          status: 0,
-          error: 'budget-exhausted',
-          finalUrl: evidenceUrl(url),
-          redirected: false,
-          durationMs: 0,
-          method: 'GET',
-          attempts: 0
-        });
+        drainRemainingAsExhausted();
+        return;
+      }
+      const item = claim();
+      if (!item) {
+        // Every remaining URL belongs to a host already at its cap; yield and retry.
+        await new Promise((resolve) => setTimeout(resolve, 25));
         continue;
       }
-      const url = uniqueUrls[cursor++];
-      const row = await probeExternalDestination(url, options);
-      resultByKey.set(url, { ...row, url });
+      try {
+        const row = await probeExternalDestination(item.url, options);
+        resultByKey.set(item.url, { ...row, url: item.url });
+      } finally {
+        hostInFlight.set(item.host, Math.max(0, (hostInFlight.get(item.host) || 1) - 1));
+      }
     }
   }
 
   await Promise.all(Array.from({ length: Math.min(concurrency, uniqueUrls.length || 1) }, () => worker()));
+  // A budget cutoff mid-flight can leave late URLs unclaimed by any worker.
+  for (const item of pending) if (!resultByKey.has(item.url)) budgetExhausted(item.url);
 
   return list.map((c) => {
     const key = candidateKey(c?.url);
     const row = resultByKey.get(key) || { url: c?.url, status: 0, error: 'unavailable', durationMs: 0, method: 'GET', attempts: 0 };
     return { ...row, url: c.url };
   });
+}
+
+/**
+ * Named causes for every disposition a gateway probe row can carry, kept
+ * separate from the generic 'network-failure' bucket so a deliberate SSRF
+ * refusal or a genuine redirect cycle isn't reported as an indistinguishable
+ * network problem in diagnostics.
+ */
+export function causeForProbeRow(row = {}, status = 0) {
+  if (status === 429) return 'rate-limited';
+  if ([401, 403].includes(status)) return 'remote-blocked';
+  const err = String(row.error || '');
+  if (!status) {
+    if (/destination-not-allowed|dns-failed/i.test(err)) return 'other';
+    if (/redirect-loop|redirect-limit/i.test(err)) return 'other';
+    if (/budget-exhausted/i.test(err)) return 'other';
+    if (/cors|opaque|failed to fetch/i.test(err)) return 'cors-or-opaque';
+    return 'network-failure';
+  }
+  return 'ambiguous-response';
 }
 
 /**
@@ -457,7 +602,8 @@ export function mapExternalProbeRows(candidates = [], probeRows = []) {
       status,
       method,
       durationMs: Number(row.durationMs || 0),
-      finalUrl: evidenceUrl(row.finalUrl || candidate.url)
+      finalUrl: evidenceUrl(row.finalUrl || candidate.url),
+      errorClass: row.errorCode || ''
     };
     const link = {
       url: evidenceUrl(candidate.url),
@@ -528,19 +674,34 @@ export function mapExternalProbeRows(candidates = [], probeRows = []) {
       resolvedUrls.add(candidate.url);
       continue;
     }
+    if (!status && isTlsErrorCode(row.errorCode)) {
+      findings.push({
+        id: `navigation.link-insecure-external:${hash(candidate.url)}`,
+        ruleId: 'navigation.link-insecure-external',
+        title: 'External link points to a site with an invalid security certificate',
+        detail: `${text ? `"${text}" ` : ''}points to ${evidenceUrl(candidate.url)}. The destination's TLS certificate failed validation (${row.errorCode}), so browsers show visitors a security warning before they can reach it.`,
+        category: 'fix',
+        severity: 'high',
+        confidence: 'confirmed',
+        evidence: `tls-error ${row.errorCode} ${evidenceUrl(candidate.url)}`,
+        count: occurrences,
+        selector: candidate.selector || '',
+        targetType: 'visual',
+        sources: ['browser'],
+        link,
+        verification: { ...verification, method: 'privileged external TLS handshake' },
+        fingerprint: hash(`ext-tls|${candidate.url}|${row.errorCode}`)
+      });
+      resolvedUrls.add(candidate.url);
+      continue;
+    }
     incompleteChecks.push({
       kind: 'external-link',
       url: candidate.url,
       path: candidate.url,
       text,
       reason: status ? `http-${status}` : (row.error || 'unavailable'),
-      cause: status === 429
-        ? 'rate-limited'
-        : [401, 403].includes(status)
-          ? 'remote-blocked'
-          : (!status && /cors|opaque|failed to fetch|budget-exhausted/i.test(String(row.error || '')))
-            ? (/budget-exhausted/i.test(String(row.error || '')) ? 'other' : 'cors-or-opaque')
-            : (!status ? 'network-failure' : 'ambiguous-response'),
+      cause: causeForProbeRow(row, status),
       status,
       attempts: [attempt],
       prominence: candidate.prominence || '',

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
+import { buildLumenCss } from './build-css.mjs';
 const root=process.cwd(),src=path.join(root,'apps/extension'),out=path.join(root,'dist/extension');
 function shortBuildRevision(){
   try{
@@ -14,7 +15,19 @@ const installedAxe=path.join(root,'node_modules/axe-core/axe.min.js'),vendoredAx
 const axeBytes=fs.existsSync(installedAxe)?fs.readFileSync(installedAxe):fs.existsSync(vendoredAxe)?fs.readFileSync(vendoredAxe):null;
 if(!axeBytes)throw new Error('axe-core runtime is unavailable. Run npm ci, or start from a release source package that includes dist/extension/vendor/axe.min.js.');
 fs.rmSync(out,{recursive:true,force:true});fs.mkdirSync(out,{recursive:true});
-for(const name of ['manifest.json','background.js','content.js','page-diagnostics.js','sidepanel.html','sidepanel.css','sidepanel.js'])fs.copyFileSync(path.join(src,name),path.join(out,name));
+for(const name of ['manifest.json','background.js','content.js','page-diagnostics.js','sidepanel.html','sidepanel.js'])fs.copyFileSync(path.join(src,name),path.join(out,name));
+buildLumenCss({
+  extensionCss: path.join(out,'sidepanel.css'),
+  webCss: path.join(root,'apps/web/public/styles.css')
+});
+{
+  const coachCss=fs.readFileSync(path.join(root,'packages/ui/coach.css'),'utf8');
+  const contentPath=path.join(out,'content.js');
+  let content=fs.readFileSync(contentPath,'utf8');
+  const next=content.replace(/function frankCss\(\) \{[\s\S]*?\n  \}/,`function frankCss() {\n    return ${JSON.stringify(coachCss)};\n  }`);
+  if(next===content)throw new Error('Failed to inject Lumen coach CSS into content.js');
+  fs.writeFileSync(contentPath,next);
+}
 const localAiSource=fs.readFileSync(path.join(src,'local-ai.js'),'utf8')
   .replaceAll('../../packages/findings/evidence-ledger.js','./evidence-ledger.js')
   .replaceAll('../../packages/findings/guidance-composition.js','./guidance-composition.js');

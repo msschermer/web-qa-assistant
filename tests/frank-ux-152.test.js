@@ -6,14 +6,14 @@ const panel=fs.readFileSync('apps/extension/sidepanel.js','utf8');
 const html=fs.readFileSync('apps/extension/sidepanel.html','utf8');
 const content=fs.readFileSync('apps/extension/content.js','utf8');
 
-test('scan overview does not imply that AI ran before Ask Frank',()=>{
+test('scan overview does not imply that AI ran before Walk through',()=>{
   assert.match(html,/id="reasoning-mode"[^>]*>Evidence-backed assessment</);
   assert.doesNotMatch(panel.slice(panel.indexOf('async function rescan'),panel.indexOf('async function updateWatch')),/connected reasoning/i);
 });
 
-test('Frank states distinguish on-device, optional cloud, and deterministic guidance',()=>{
-  assert.match(panel,/Frank · AI review/);
-  assert.match(panel,/Verified scan guidance/);
+test('Walkthrough states distinguish on-device, optional cloud, and deterministic guidance',()=>{
+  assert.match(panel,/On-device reasoning/);
+  assert.match(panel,/Verified guidance/);
   assert.match(panel,/guidanceSource/);
   assert.doesNotMatch(html,/Standard guidance/);
 });

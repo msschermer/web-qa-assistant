@@ -33,7 +33,7 @@ function assessmentFor(f,guidance={}){
   const c=String(f.confidence||'confirmed');
   if(c==='confirmed'||c==='corroborated')return{status:'verified',statement:'Verified by the available deterministic evidence.',limitations:extra};
   if(c==='inferred')return{status:'review',statement:'Observed, but implementation intent is not proven.',limitations:extra||'Confirm intent before changing production behavior.'};
-  return{status:'context',statement:'Context only; this is not a verified defect.',limitations:extra||'Frank should not present inconclusive evidence as an issue.'};
+  return{status:'context',statement:'Context only; this is not a verified defect.',limitations:extra||'Do not present inconclusive evidence as an issue.'};
 }
 const INTERPRETATION_KINDS=new Set(['finding','rule','text','naming.aria-label','image-purpose','image-purpose-confidence','nearby-text','interactive-ancestor','element-size','target-width','target-height','target-minimum','target-spacing','target-spacing-required','contrast-ratio','contrast-required','foreground-color','background-color','font-size','font-weight','link-url','http-status','robots','canonical','measurement-type','lcp','ttfb','transfer','lcp-element','redirect-chain','cls','overflow-px','overflow-viewport','resource-url']);
 const IMPACT_KINDS=new Set(['finding','rule','wcag','impact','target-minimum','target-spacing-required','contrast-required','confidence','link-prominence','http-status','robots','canonical','measurement-type','lcp','ttfb','transfer','mobile-change','desktop-change']);
@@ -94,15 +94,15 @@ export function deterministicFrankPlan(graph){const f=graph.finding,targetId=tar
     : documentMode
       ? `${g.interpretation} ${docCopy.body}`
       : unresolvedSpotlight
-        ? `${g.interpretation} The recorded element could not be re-anchored on the live page, so Frank will not guess a spotlight.`
+        ? `${g.interpretation} The recorded element could not be re-anchored on the live page, so a spotlight will not be guessed.`
         : g.interpretation;
   const stepTarget=documentMode||unresolvedSpotlight||markupMode?'':targetId;
   steps.push(step('read','interpretation',readHeadline,readBody,{targetId:stepTarget,evidence:stepEvidence(graph,'interpretation'),metrics:interpretationMetrics(graph),code:markupMode?safeCode(graph):''}));
   const comparisons=comparisonMetrics(graph);if(comparisons.length>=2)steps.push(step('compare','comparison','The observation points disagree','Browser and connected published-state values were gathered independently. The disagreement is the evidence.',{evidence:evidenceBy(graph,e=>['browser','meta-state'].includes(e.source)),metrics:comparisons}));const trends=trendMetrics(graph);if(trends.length&&f.targetType!=='historical')steps.push(step('trend','trend','History changes the priority','Performance Monitor adds recent history so a current value can be separated from a sustained regression.',{evidence:evidenceBy(graph,e=>e.source==='performance-monitor'),metrics:trends}));
   steps.push(step('impact','impact','Why this matters here',g.impact,{targetId:stepTarget,evidence:stepEvidence(graph,'impact')}));
-  steps.push(step('fix','remediation','What I would change',composeFixStepBody(g),{targetId:stepTarget,evidence:stepEvidence(graph,'remediation'),code:safeCode(graph)}));
-  if(g.alternatives)steps.push(step('alternatives','evidence','What I ruled out',g.alternatives,{targetId:stepTarget,evidence:graph.evidence.slice(0,4)}));
+  steps.push(step('fix','remediation','What to change',composeFixStepBody(g),{targetId:stepTarget,evidence:stepEvidence(graph,'remediation'),code:safeCode(graph)}));
+  if(g.alternatives)steps.push(step('alternatives','evidence','What was ruled out',g.alternatives,{targetId:stepTarget,evidence:graph.evidence.slice(0,4)}));
   steps.push(step('verify','verification','Verify the correction',g.verify,{targetId:stepTarget,evidence:stepEvidence(graph,'verification')}));
   const sourceText=graph.sources.map(sourceLabel).join(', ')||'the current scan';
-  return{version:3,title:f.title,summary:`Frank is using ${sourceText}. Environment: ${graph.environment?.type||'unknown'} (${graph.environment?.confidenceLabel||'unconfirmed'}).`,mode:'deterministic',guidanceSource:'deterministic',findingId:graph.findingId,sources:graph.sources,assessment:assessmentFor(f,g),steps:trimSteps(steps)}}
+  return{version:3,title:f.title,summary:`This walkthrough uses ${sourceText}. Environment: ${graph.environment?.type||'unknown'} (${graph.environment?.confidenceLabel||'unconfirmed'}).`,mode:'deterministic',guidanceSource:'deterministic',findingId:graph.findingId,sources:graph.sources,assessment:assessmentFor(f,g),steps:trimSteps(steps)}}
 export function validateFrankPlan(plan,graph){if(!plan||plan.version!==3||!plan.assessment||!Array.isArray(plan.steps)||plan.steps.length<3||plan.steps.length>8)return false;const validTargets=new Set(Object.keys(graph.targets||{})),validEvidence=new Set((graph.evidence||[]).map(e=>e.id));let hasVerification=false;for(const s of plan.steps){if(!FRANK_STEP_TYPES.includes(s.type)||!s.headline||!s.body)return false;if(s.targetId&&!validTargets.has(s.targetId))return false;if((s.evidenceRefs||[]).some(id=>!validEvidence.has(id)))return false;if(s.preview?.enabled&&(!s.targetId||!FRANK_PREVIEW_PROPERTIES.includes(s.preview.property)||!s.preview.value))return false;if(s.type==='verification')hasVerification=true}return hasVerification}

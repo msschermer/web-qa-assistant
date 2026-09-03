@@ -8,8 +8,9 @@ const panelCss = fs.readFileSync('apps/extension/sidepanel.css', 'utf8');
 const content = fs.readFileSync('apps/extension/content.js', 'utf8');
 const tokens = fs.readFileSync('packages/ui/tokens.css', 'utf8');
 
-test('sidebar is the deterministic evidence ledger, not a duplicate Frank narrative card', () => {
-  assert.match(panelHtml, /Evidence ledger/);
+test('sidebar is the deterministic evidence panel, not a duplicate walkthrough narrative card', () => {
+  assert.match(panelHtml, />Evidence</);
+  assert.doesNotMatch(panelHtml, /Evidence ledger/);
   assert.match(panelHtml, /id="frank-facts"/);
   assert.match(panelHtml, /Evidence for this step/);
   assert.match(panelHtml, /Full evidence record/);
@@ -21,7 +22,7 @@ test('sidebar is the deterministic evidence ledger, not a duplicate Frank narrat
   assert.match(panelJs, /Sources/);
 });
 
-test('center focus card owns Frank explanation and walkthrough navigation', () => {
+test('center focus card owns walkthrough explanation and navigation', () => {
   assert.match(content, /textContent = step\.headline/);
   assert.match(content, /textContent = step\.body/);
   assert.match(content, /aria-live="polite" aria-atomic="true"/);
@@ -29,12 +30,13 @@ test('center focus card owns Frank explanation and walkthrough navigation', () =
   assert.match(content, /pointer-events:auto/);
   assert.match(content, /Back/);
   assert.match(content, /Next/);
-  assert.match(content, /Return to QA/);
+  assert.match(content, /Back to findings/);
+  assert.doesNotMatch(content, /Return to QA/);
   assert.doesNotMatch(content, /aria-label="Exit Frank"/);
   assert.doesNotMatch(content, /orientation only/i);
 });
 
-test('focus mode keeps the real target visible and positions Frank around it', () => {
+test('focus mode keeps the real target visible and positions the coach around it', () => {
   assert.match(content, /getBoundingClientRect\(\)/);
   assert.match(content, /positions/);
   assert.match(content, /spotlight/);
@@ -42,18 +44,25 @@ test('focus mode keeps the real target visible and positions Frank around it', (
   assert.match(content, /Math\.min/);
 });
 
-test('current-step evidence can be visually traced back to Frank reasoning', () => {
+test('current-step evidence can be visually traced back to walkthrough reasoning', () => {
   assert.match(panelJs, /activeIds/);
   assert.match(panelJs, /row\.dataset\.active/);
   assert.match(panelCss, /evidence-row\[data-active=(?:"true"|true)\]/);
 });
 
-test('1.6 visual identity strengthens Frank without adding Tailwind build debt', () => {
+test('Lumen visual identity compiles Tailwind from component classes rather than utility soup', () => {
   assert.match(tokens, /--wqa-accent:/);
   assert.match(tokens, /--wqa-accent-soft:/);
-  // Side panel stays flat SaaS workspace; Frank focus card keeps restrained brand accents.
+  // The operator took the standing exit from the direction round: the product
+  // now follows the category standard, with one indigo primary carrying the
+  // product voice. Still pinned, so the identity cannot drift silently.
+  assert.match(tokens, /--wqa-brand:#4F46E5/);
   assert.doesNotMatch(panelCss, /linear-gradient/);
   assert.match(content, /linear-gradient/);
   const packageJson = fs.readFileSync('package.json', 'utf8');
-  assert.doesNotMatch(packageJson, /tailwind/i);
+  assert.match(packageJson, /tailwindcss/);
+  const lumen = fs.readFileSync('packages/ui/lumen.css', 'utf8');
+  assert.match(lumen, /@theme/);
+  assert.match(lumen, /tailwindcss/);
+  assert.doesNotMatch(panelHtml, /class="[^"]*\bflex\s+(?:flex-col|items-|justify-|px-|py-)/);
 });

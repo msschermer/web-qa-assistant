@@ -51,6 +51,34 @@ test('runtime trace ignores readiness flood',()=>{
   assert.equal(out[0].type,'scan-start');
 });
 
+test('Report bug exposes per-URL probe history for unresolved links, redacted',()=>{
+  const report={
+    environment:{type:'production'},
+    linkAudit:{
+      incompleteChecks:[{
+        kind:'external-link',
+        url:'https://example.com/2021/01/29/horrific-crash?utm_source=secret&session=abc123',
+        path:'/2021/01/29/horrific-crash',
+        text:'Read the full report here',
+        reason:'destination-not-allowed',
+        cause:'other',
+        status:0,
+        attempts:[{attempt:1,state:'unavailable',status:0,durationMs:42,finalUrl:'https://example.com/2021/01/29/horrific-crash',errorClass:'TypeError'}]
+      }]
+    }
+  };
+  const artifact=buildBugReport({version:'1.7.0',trace:[],readiness:{status:'ready'},report,includeContext:false});
+  const text=JSON.stringify(artifact);
+  assert.equal(artifact.links.unresolvedLinks.length,1);
+  const row=artifact.links.unresolvedLinks[0];
+  assert.equal(row.sameOrigin,false);
+  assert.equal(row.reason,'destination-not-allowed');
+  assert.equal(row.cause,'other');
+  assert.equal(row.attempts[0].errorClass,'TypeError');
+  assert.match(row.url,/^https:\/\/example\.com\/2021\/01\/29\/horrific-crash$/);
+  assert.doesNotMatch(text,/utm_source=secret|session=abc123/);
+});
+
 test('Report bug redacts bearer-style credentials even from explicit user context',()=>{
   const bearer='Bearer '+['abcDEF123456','7890xyzTOKEN'].join('');
   const artifact=buildBugReport({version:'1.7.0',trace:[],readiness:{status:'ready'},includeContext:true,userNote:`Request failed with ${bearer}`,localAi:{status:'rejected',code:'LOCAL_AI_FAILED',candidate:{remediation:`Retry with ${bearer}`}}});
@@ -64,7 +92,7 @@ test('Report bug is consumer-facing and local-only in the side panel',()=>{
   const js=fs.readFileSync('apps/extension/sidepanel.js','utf8');
   assert.match(html,/id="report-bug"/);
   assert.match(html,/Nothing is sent automatically/);
-  assert.match(html,/Include current finding and Frank wording/);
+  assert.match(html,/Include current finding and walkthrough wording/);
   assert.match(html,/Download report/);
   assert.doesNotMatch(html,/Export Logs|Support Bundle|JSON Dump/);
   assert.match(js,/buildBugReport/);

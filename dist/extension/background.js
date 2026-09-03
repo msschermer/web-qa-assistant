@@ -19,6 +19,7 @@ const GATEWAY_TIMEOUT_MS = 10000;
 const FRANK_TIMEOUT_MS = 16000;
 const dirtyTimers = new Map();
 const workspaceHot = new Map();
+const renderLoops = new Map(); // auditId -> { cancelled }
 const RELEASE_VERSION = '1.7.5';
 const WORKSPACE_SESSION_KEY = 'qaWorkspaceByTab';
 const LINK_CACHE_SESSION_KEY = 'qaLinkStatusCache';
@@ -147,17 +148,36 @@ function requestId(operation='REQ'){return `WQA-${operation}-${Date.now().toStri
 function failurePayload(error, operation='UNKNOWN'){
   const raw=String(error?.message||error||'Unknown extension error'),stack=typeof error?.stack==='string'?error.stack.slice(0,5000):'',id=`WQA-${diagnosticHash(`${operation}|${raw}|${stack.split('\n')[1]||''}`)}`;
   let message='The extension could not complete this action.';
-  if(/Page access expired|Cannot access|Missing host permission|activeTab/i.test(raw))message='Page access expired. Click the Web QA Assistant toolbar icon on this page, then try again.';
+  if(/Page access expired|Cannot access|Missing host permission|activeTab/i.test(raw))message='Page access expired. Click the Lumen toolbar icon on this page, then try again.';
   else if(/cannot be inspected|normal HTTP or HTTPS/i.test(raw))message='This browser page cannot be inspected. Open a normal HTTP or HTTPS page.';
   else if(/timed out|timeout/i.test(raw))message='The action timed out before it completed.';
   else if(/no longer available|No active browser tab/i.test(raw))message='The inspected browser tab is no longer available.';
   return{error:message,diagnostic:{id,operation,technicalMessage:raw,stack,version:RELEASE_VERSION,timestamp:new Date().toISOString()}};
 }
 
+// The side panel is per-tab, like DevTools, not a single panel shared across
+// every tab in the window. The manifest's side_panel.default_path enables it
+// globally by default, so that has to be explicitly overridden to disabled
+// here (no tabId = the default for every tab); a tab only gets Lumen once the
+// toolbar icon is clicked while that specific tab is active, and switching to
+// a tab that was never opened this way shows no panel at all. This also fixes
+// scanning after a tab switch at the root: since a tab's panel only ever
+// becomes visible in response to its own fresh toolbar-icon click, Chrome
+// always has a current activeTab grant for whatever tab Lumen is showing.
+function disableGlobalSidePanelDefault(){chrome.sidePanel.setOptions({path:'sidepanel.html',enabled:false}).catch(()=>{})}
 chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:false}).catch(()=>{});
-chrome.runtime.onInstalled.addListener(()=>chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:false}).catch(()=>{}));
-chrome.runtime.onStartup.addListener(()=>chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:false}).catch(()=>{}));
-chrome.action.onClicked.addListener(tab=>{if(!tab?.windowId)return;chrome.sidePanel.open({windowId:tab.windowId}).catch(()=>{});chrome.runtime.sendMessage({type:'ACTION_INVOKED',tabId:tab.id,windowId:tab.windowId,pageUrl:tab.url||''}).catch(()=>{})});
+disableGlobalSidePanelDefault();
+chrome.runtime.onInstalled.addListener(()=>{chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:false}).catch(()=>{});disableGlobalSidePanelDefault()});
+chrome.runtime.onStartup.addListener(()=>{chrome.sidePanel.setPanelBehavior({openPanelOnActionClick:false}).catch(()=>{});disableGlobalSidePanelDefault()});
+chrome.action.onClicked.addListener(tab=>{
+  if(!tab?.id||!tab?.windowId)return;
+  chrome.sidePanel.setOptions({tabId:tab.id,path:'sidepanel.html',enabled:true}).catch(()=>{});
+  chrome.sidePanel.open({tabId:tab.id}).catch(()=>{});
+  chrome.runtime.sendMessage({type:'ACTION_INVOKED',tabId:tab.id,windowId:tab.windowId,pageUrl:tab.url||''}).catch(()=>{})
+});
+// A tab's per-tab panel state is otherwise never cleared, so a closed tab's
+// id could later be reused by a brand-new tab that never invoked Lumen.
+chrome.tabs.onRemoved.addListener(tabId=>{chrome.sidePanel.setOptions({tabId,enabled:false}).catch(()=>{})});
 
 function emitScanProgress(phase, extra = {}) {
   chrome.runtime.sendMessage({ type: 'SCAN_PROGRESS', phase, source: 'background', ...extra }).catch(() => {});
@@ -168,9 +188,10 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
   if(msg?.type==='RETURN_TO_QA'){
     const tabId=msg.tabId||sender.tab?.id;
     const windowId=msg.windowId||sender.tab?.windowId;
-    if(!windowId){send({ok:false,error:'Frank could not identify the browser window to reopen QA.'});return false}
+    if(!tabId&&!windowId){send({ok:false,error:'Could not identify the browser tab to reopen findings.'});return false}
+    if(tabId)chrome.sidePanel.setOptions({tabId,path:'sidepanel.html',enabled:true}).catch(()=>{});
     let openPromise;
-    try{openPromise=chrome.sidePanel.open({windowId})}
+    try{openPromise=chrome.sidePanel.open(tabId?{tabId}:{windowId})}
     catch(error){openPromise=Promise.reject(error)}
     (async()=>{
       let opened=false,openError='';
@@ -181,7 +202,7 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
         if(tabId)await frankMessage(tabId,{type:'FRANK_END'});
       }catch{}
       if(opened)send({ok:true,opened:true});
-      else send({ok:false,opened:false,endedCoach:true,error:openError||'Could not reopen the side panel. Use the Web QA Assistant toolbar icon.'});
+      else send({ok:false,opened:false,endedCoach:true,error:openError||'Could not reopen the side panel. Use the Lumen toolbar icon.'});
     })();
     return true;
   }
@@ -200,7 +221,7 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
     const enriched=await enrich(msg.report,msg.tabId||null);
     if(msg.tabId&&enriched?.page?.url){
       try{await updateState({id:msg.tabId,url:enriched.page.url},enriched)}
-      catch(error){console.error(`[Web QA Assistant ${RELEASE_VERSION}] updateState after ENRICH failed`,error)}
+      catch(error){console.error(`[Lumen ${RELEASE_VERSION}] updateState after ENRICH failed`,error)}
     }
     return{report:enriched}
   }
@@ -230,15 +251,103 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
   if(msg.type==='FRANK_RESET_PREVIEW')return frankMessage(msg.tabId,{type:'FRANK_RESET_PREVIEW'});
   if(msg.type==='HIGHLIGHT'){const tabId=msg.tabId||(await activeTab())?.id;if(!tabId)throw new Error('No inspected browser tab was found.');try{await chrome.tabs.sendMessage(tabId,{type:'PING'})}catch{try{await ensureInjected(tabId)}catch{throw new Error('Page access expired. Click the toolbar icon on this page and try Highlight again.')}}return chrome.tabs.sendMessage(tabId,{type:'HIGHLIGHT',targetId:msg.targetId,selector:msg.selector,ruleId:msg.ruleId})}
   if(msg.type==='GET_ACTIVE'){const s=await settings();return{tab:await activeTab(),settings:{apiBase:s.apiBase,apiKey:s.apiKey,cloudAiFallback:Boolean(s.cloudAiFallback),managedAccess:Boolean(s.installToken),managedAccessExpiresAt:Number(s.installTokenExpiresAt||0)}}}
+  // --- Full-site audit: the extension only ever holds an audit id and polls
+  // the gateway for it — the crawl itself runs and persists server-side, so it
+  // survives this side panel closing, the tab navigating, or the service
+  // worker being recycled. Message names are SITE_AUDIT_-prefixed to stay
+  // clearly distinct from the unrelated per-tab AUDIT_LINKS message used by
+  // the current-page link checker.
+  if(msg.type==='SITE_AUDIT_OPEN'){
+    const tab=await activeTab();
+    if(!tab?.id)throw new Error('No active browser tab was found.');
+    if(!/^https?:/i.test(tab.url||''))throw new Error('This browser page cannot be audited. Open a normal HTTP or HTTPS page.');
+    try{await chrome.tabs.sendMessage(tab.id,{type:'PING'})}catch{await ensureInjected(tab.id)}
+    await chrome.tabs.sendMessage(tab.id,{type:'OPEN_SITE_AUDIT',startUrl:tab.url});
+    return{opened:true,tabId:tab.id};
+  }
+  if(msg.type==='SITE_AUDIT_START'){
+    const result=await gatewayPost('/api/audits',{startUrl:msg.startUrl,maxPages:msg.maxPages,concurrency:msg.concurrency,includeSubdomains:msg.includeSubdomains,respectRobots:msg.respectRobots},15000,'SITE_AUDIT_START');
+    return{auditId:result.auditId,config:result.config};
+  }
+  if(msg.type==='SITE_AUDIT_STATUS'){
+    const result=await gatewayGet(`/api/audits/${encodeURIComponent(msg.auditId)}`,10000,'SITE_AUDIT_STATUS');
+    return{audit:result.audit};
+  }
+  if(msg.type==='SITE_AUDIT_LIST'){
+    const result=await gatewayGet(`/api/audits?site=${encodeURIComponent(msg.site)}`,10000,'SITE_AUDIT_LIST');
+    return{audits:result.audits};
+  }
+  if(msg.type==='SITE_AUDIT_CANCEL'){
+    const result=await gatewayPost(`/api/audits/${encodeURIComponent(msg.auditId)}/cancel`,{},10000,'SITE_AUDIT_CANCEL');
+    return{cancelling:result.cancelling};
+  }
+  if(msg.type==='SITE_AUDIT_FINDINGS'){
+    const qs=new URLSearchParams({limit:String(msg.limit||100),offset:String(msg.offset||0),...(msg.groupByRule?{groupByRule:'1'}:{}),...(msg.url?{url:msg.url}:{}),...(msg.ruleId?{ruleId:msg.ruleId}:{}),...(msg.confidence?{confidence:msg.confidence}:{})});
+    const result=await gatewayGet(`/api/audits/${encodeURIComponent(msg.auditId)}/findings?${qs}`,15000,'SITE_AUDIT_FINDINGS');
+    return{findings:result.findings,groups:result.groups};
+  }
+  if(msg.type==='SITE_AUDIT_URLS'){
+    const qs=new URLSearchParams({limit:String(msg.limit||100),offset:String(msg.offset||0),...(msg.status?{status:msg.status}:{}),...(msg.depth!=null&&msg.depth!==''?{depth:String(msg.depth)}:{}),...(msg.httpClass?{httpClass:msg.httpClass}:{})});
+    const result=await gatewayGet(`/api/audits/${encodeURIComponent(msg.auditId)}/urls?${qs}`,15000,'SITE_AUDIT_URLS');
+    return{urls:result.urls};
+  }
+  if(msg.type==='SITE_AUDIT_DISTRIBUTIONS'){
+    const result=await gatewayGet(`/api/audits/${encodeURIComponent(msg.auditId)}/distributions`,15000,'SITE_AUDIT_DISTRIBUTIONS');
+    return result;
+  }
+  if(msg.type==='SITE_AUDIT_LINKS'){
+    const qs=new URLSearchParams({limit:String(msg.limit||100),offset:String(msg.offset||0),...(msg.status?{status:msg.status}:{}),...(msg.sourceUrl?{sourceUrl:msg.sourceUrl}:{})});
+    const result=await gatewayGet(`/api/audits/${encodeURIComponent(msg.auditId)}/links?${qs}`,15000,'SITE_AUDIT_LINKS');
+    return{links:result.links};
+  }
+  if(msg.type==='SITE_AUDIT_EXPORT'){
+    const qs=new URLSearchParams({dataset:msg.dataset||'findings',...(msg.status?{status:msg.status}:{})});
+    const result=await gatewayGetText(`/api/audits/${encodeURIComponent(msg.auditId)}/export.csv?${qs}`,20000,'SITE_AUDIT_EXPORT');
+    return{text:result.text,filename:`audit-${msg.auditId}-${msg.dataset||'findings'}.csv`};
+  }
+  if(msg.type==='SITE_AUDIT_REPORT'){
+    const result=await gatewayGetText(`/api/audits/${encodeURIComponent(msg.auditId)}/report.html`,30000,'SITE_AUDIT_REPORT');
+    return{html:result.text,filename:`audit-${msg.auditId}-report.html`};
+  }
+  if(msg.type==='SITE_AUDIT_DEBUG'){
+    const result=await gatewayGetText(`/api/audits/${encodeURIComponent(msg.auditId)}/debug.json`,30000,'SITE_AUDIT_DEBUG');
+    return{json:result.text,filename:`audit-${msg.auditId}-debug.json`};
+  }
+  // The local render pass: runs entirely in the user's own browser (see
+  // runRenderLoop above), so unlike every other SITE_AUDIT_* message this one
+  // does not simply proxy to the gateway — it drives chrome.tabs itself.
+  if(msg.type==='SITE_AUDIT_RENDER_PERMISSION'){
+    return{granted:await hasOriginPermission(msg.siteOrigin)};
+  }
+  if(msg.type==='SITE_AUDIT_RENDER_START'){
+    // First await in this handler on purpose: chrome.permissions.request only
+    // honors a request made while still handling the user gesture that
+    // triggered this message (the click in content.js's overlay).
+    const granted=await requestOriginPermission(msg.siteOrigin);
+    if(!granted)return{started:false,error:'permission-denied'};
+    if(renderLoops.has(msg.auditId))return{started:true,alreadyRunning:true};
+    renderLoops.set(msg.auditId,{cancelled:false});
+    runRenderLoop(msg.auditId).catch(()=>{renderLoops.delete(msg.auditId)});
+    return{started:true};
+  }
+  if(msg.type==='SITE_AUDIT_RENDER_STOP'){
+    const control=renderLoops.get(msg.auditId);
+    if(control)control.cancelled=true;
+    return{stopping:Boolean(control)};
+  }
+  if(msg.type==='SITE_AUDIT_RENDER_STATE'){
+    return{running:renderLoops.has(msg.auditId)};
+  }
   if(msg.type==='SAVE_WORKSPACE_SNAPSHOT')return saveWorkspaceSnapshot(msg.workspace||msg);
   if(msg.type==='GET_WORKSPACE_SNAPSHOT')return getWorkspaceSnapshot(msg.tabId);
   if(msg.type==='PATCH_WORKSPACE_SNAPSHOT')return patchWorkspaceSnapshot(msg.tabId,msg.patch||{});
   if(msg.type==='CLEAR_WORKSPACE_SNAPSHOT')return clearWorkspaceSnapshot(msg.tabId);
   if(msg.type==='CLOSE_SIDE_PANEL'){
+    const tabId=msg.tabId||sender.tab?.id;
     const windowId=msg.windowId||sender.tab?.windowId;
-    if(!windowId)throw new Error('No browser window was available to close the side panel.');
+    if(!tabId&&!windowId)throw new Error('No browser tab was available to close the side panel.');
     if(typeof chrome.sidePanel.close!=='function')return{closed:false,unsupported:true};
-    await chrome.sidePanel.close({windowId});
+    await chrome.sidePanel.close(tabId?{tabId}:{windowId});
     return{closed:true};
   }
   if(msg.type==='GET_SITE_SESSION'){const s=await settings(),url=msg.pageUrl||(await activeTab())?.url;if(!url)return{session:null};return{session:s.siteSessions[new URL(url).origin]||null}}
@@ -249,13 +358,15 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
   if(msg.type==='SET_ENVIRONMENT'){const url=msg.pageUrl||(await activeTab())?.url;if(!url)throw new Error('Page context is unavailable.');const origin=new URL(url).origin,allowed=new Set(['production','staging','preview','local','development','auto']);if(!allowed.has(msg.environment))throw new Error('Unsupported environment value.');const s=await settings();if(msg.environment==='auto')delete s.environmentOverridesByOrigin[origin];else s.environmentOverridesByOrigin[origin]=msg.environment;await chrome.storage.local.set({environmentOverridesByOrigin:s.environmentOverridesByOrigin});return{saved:true}}
   if(msg.type==='WATCH_DIRTY'&&sender.tab){const s=await settings(),origin=new URL(sender.tab.url).origin;if(s.watchedOrigins.includes(origin))scheduleWatched(sender.tab);return{scheduled:true}}
   if(msg.type==='OPEN_REPORT_BUG_FROM_FRANK'){
+    const tabId=msg.tabId||sender.tab?.id;
     const windowId=msg.windowId||sender.tab?.windowId;
-    if(windowId)await chrome.sidePanel.open({windowId}).catch(()=>{});
+    if(tabId)chrome.sidePanel.setOptions({tabId,path:'sidepanel.html',enabled:true}).catch(()=>{});
+    if(tabId||windowId)await chrome.sidePanel.open(tabId?{tabId}:{windowId}).catch(()=>{});
     chrome.runtime.sendMessage({type:'OPEN_REPORT_BUG'}).catch(()=>{});
     return{opened:true};
   }
   return null;
-})().then(x=>send({ok:true,...x})).catch(error=>{console.error(`[Web QA Assistant ${RELEASE_VERSION}] ${msg?.type||'UNKNOWN'} failed`,error);send({ok:false,...failurePayload(error,msg?.type||'UNKNOWN')})});return true});
+})().then(x=>send({ok:true,...x})).catch(error=>{console.error(`[Lumen ${RELEASE_VERSION}] ${msg?.type||'UNKNOWN'} failed`,error);send({ok:false,...failurePayload(error,msg?.type||'UNKNOWN')})});return true});
 
 chrome.tabs.onRemoved.addListener(tabId=>{clearWorkspaceSnapshot(tabId).catch(()=>{})});
 chrome.tabs.onUpdated.addListener(async(tabId,change,updatedTab)=>{
@@ -273,6 +384,80 @@ async function ensureInjected(tabId){
     await chrome.scripting.executeScript({target:{tabId},files:['page-diagnostics.js'],injectImmediately:true,world:'ISOLATED'});
   }catch{}
   await chrome.scripting.executeScript({target:{tabId},files:['vendor/axe.min.js','image-purpose.js','target-integrity.browser.js','browser-rules.js','content.js']});
+}
+
+// --- Site audit local render pass ---------------------------------------
+// Deep, JS-dependent checks (axe, runtime errors, image sizing) never run on
+// our server for a site crawl — see packages/crawl/crawler.js's module doc.
+// Instead this drives the user's own browser through the exact single-page
+// scan pipeline "Scan Page" already uses (chrome.tabs.sendMessage 'SCAN'),
+// one crawled URL at a time in a background tab, and posts each result back
+// to the audit. The cost of a real render lands on the user's machine, never
+// ours; the loop is deliberately stateless beyond `renderLoops` itself — the
+// server is what remembers which pages still need rendering, so a killed
+// service worker or a closed panel only means "click render again".
+function originPatternOf(url){
+  try{const u=new URL(url);if(!/^https?:$/.test(u.protocol))return null;return `${u.protocol}//${u.hostname}/*`}catch{return null}
+}
+async function hasOriginPermission(url){
+  const pattern=originPatternOf(url);
+  if(!pattern)return false;
+  return chrome.permissions.contains({origins:[pattern]}).catch(()=>false);
+}
+// Must be called as the first await after the message that carries the click
+// gesture from content.js's overlay — chrome.permissions.request only honors
+// a request made while handling a user-initiated action.
+async function requestOriginPermission(url){
+  const pattern=originPatternOf(url);
+  if(!pattern)return false;
+  if(await chrome.permissions.contains({origins:[pattern]}).catch(()=>false))return true;
+  try{return await chrome.permissions.request({origins:[pattern]})}catch{return false}
+}
+function waitForTabComplete(tabId,timeoutMs=20000){
+  return new Promise((resolve)=>{
+    let done=false;
+    const finish=(ok)=>{if(done)return;done=true;chrome.tabs.onUpdated.removeListener(listener);clearTimeout(timer);resolve(ok)};
+    const listener=(id,change)=>{if(id===tabId&&change.status==='complete')finish(true)};
+    chrome.tabs.onUpdated.addListener(listener);
+    const timer=setTimeout(()=>finish(false),timeoutMs);
+    chrome.tabs.get(tabId).then((tab)=>{if(tab?.status==='complete')finish(true)}).catch(()=>finish(false));
+  });
+}
+async function renderOnePage(auditId,url){
+  let tabId;
+  try{
+    const tab=await chrome.tabs.create({url,active:false});
+    tabId=tab.id;
+    await waitForTabComplete(tabId,20000);
+    await ensureInjected(tabId);
+    const report=await chrome.tabs.sendMessage(tabId,{type:'SCAN'});
+    if(!report?.page?.url)throw new Error('The page produced no report.');
+    await gatewayPost(`/api/audits/${encodeURIComponent(auditId)}/render-result`,{report},20000,'SITE_AUDIT_RENDER_RESULT');
+    return{ok:true};
+  }catch(error){
+    // One page failing to render (a redirect to a login wall, a slow third
+    // party, a page that closed itself) must not stop the whole pass — the
+    // remaining queued pages are independent and still worth attempting.
+    return{ok:false,error:String(error?.message||error)};
+  }finally{
+    if(tabId)try{await chrome.tabs.remove(tabId)}catch{}
+  }
+}
+async function runRenderLoop(auditId){
+  const control=renderLoops.get(auditId);
+  try{
+    while(control&&!control.cancelled){
+      let queue;
+      try{queue=await gatewayGet(`/api/audits/${encodeURIComponent(auditId)}/render-queue?limit=1`,10000,'SITE_AUDIT_RENDER_QUEUE')}
+      catch{break}
+      const url=queue?.urls?.[0];
+      if(!url)break;
+      if(control.cancelled)break;
+      await renderOnePage(auditId,url);
+    }
+  }finally{
+    renderLoops.delete(auditId);
+  }
 }
 try{
   chrome.scripting.registerContentScripts([{
@@ -412,11 +597,11 @@ async function updateState(tab,report){
   session.pages[u.pathname]={url:report.page.url,title:report.page.title||'',lastScan:session.updatedAt,materialCount:actionable.length,fixCount:actionable.filter(f=>f.category==='fix').length,reviewCount:actionable.filter(f=>f.category==='review').length,resolvedCount:resolved.length,environment:report.environment?.type||'unknown'};
   const pageRows=Object.entries(session.pages).sort((a,b)=>new Date(b[1].lastScan)-new Date(a[1].lastScan)).slice(0,50);session.pages=Object.fromEntries(pageRows);s.siteSessions[origin]=session;
   await chrome.storage.local.set({scanState:s.scanState,siteSessions:s.siteSessions});
-  await chrome.action.setBadgeText({tabId:tab.id,text:fresh.length?String(Math.min(99,fresh.length)):''});await chrome.action.setBadgeBackgroundColor({tabId:tab.id,color:'#B3261E'});
+  await chrome.action.setBadgeText({tabId:tab.id,text:fresh.length?String(Math.min(99,fresh.length)):''});await chrome.action.setBadgeBackgroundColor({tabId:tab.id,color:'#B42318'});
 }
 
 async function scanExistingTab(tabId){if(!tabId)throw new Error('The inspected tab is no longer available.');let report;try{await chrome.tabs.sendMessage(tabId,{type:'PING'});report=await chrome.tabs.sendMessage(tabId,{type:'SCAN'})}catch{try{await ensureInjected(tabId);report=await chrome.tabs.sendMessage(tabId,{type:'SCAN'})}catch{throw new Error('This tab navigated or page access expired. Click the toolbar icon on the current page, or enable Watch this site for persistent rescans.')}}if(!report?.page?.url||!/^https?:/i.test(report.page.url))throw new Error('This browser page cannot be inspected. Open a normal HTTP or HTTPS page.');return contextualize(report)}
-async function localScan(tab){if(!tab?.id)throw new Error('No active browser tab was found.');if(tab.url&&!/^https?:/i.test(tab.url))throw new Error('This browser page cannot be inspected. Open a normal HTTP or HTTPS page.');try{await ensureInjected(tab.id)}catch(error){const message=String(error?.message||error||'');if(/Cannot access|Missing host permission|activeTab|chrome:\/\/|edge:\/\/|about:/i.test(message))throw new Error('Page access expired. Click the toolbar icon on this page, then use Rescan normally.');throw error}let report=await chrome.tabs.sendMessage(tab.id,{type:'SCAN'});if(!report?.page?.url||!/^https?:/i.test(report.page.url))throw new Error('This browser page cannot be inspected. Open a normal HTTP or HTTPS page.');return contextualize(report)}
+async function localScan(tab){if(!tab?.id)throw new Error('No active browser tab was found.');if(tab.url&&!/^https?:/i.test(tab.url))throw new Error('This browser page cannot be inspected. Open a normal HTTP or HTTPS page.');try{await ensureInjected(tab.id)}catch(error){const message=String(error?.message||error||'');if(/Cannot access|Missing host permission|activeTab|chrome:\/\/|edge:\/\/|about:/i.test(message))throw new Error('Page access expired. Click the toolbar icon on this page, then use New scan normally.');throw error}let report=await chrome.tabs.sendMessage(tab.id,{type:'SCAN'});if(!report?.page?.url||!/^https?:/i.test(report.page.url))throw new Error('This browser page cannot be inspected. Open a normal HTTP or HTTPS page.');return contextualize(report)}
 async function addLinkAudit(report,tabId,{privilegedExternal=true}={}){
   if(['complete','partial'].includes(report?.coverage?.links)&&report?.linkAudit&&!report?.externalLinkCandidates?.length)return report;if(!tabId)return report;
   try{
@@ -550,12 +735,14 @@ async function gatewayCredential(root,{refresh=false}={}){
   if(refresh||s.installToken)await chrome.storage.local.set({installToken:'',installTokenExpiresAt:0});
   try{return{token:await registerManagedAccess(root),type:'managed'}}catch{return{token:'',type:'none'}}
 }
-async function gatewayPost(path,payload,timeoutMs=GATEWAY_TIMEOUT_MS,operation='GATEWAY'){
+async function gatewayRequest(method,path,payload,timeoutMs=GATEWAY_TIMEOUT_MS,operation='GATEWAY'){
   const errors=[],rid=requestId(operation);
   for(const root of await gatewayCandidates()){
     let credential=await gatewayCredential(root);
     for(let attempt=0;attempt<2;attempt++)try{
-      const data=await fetchJson(root+path,{method:'POST',headers:{'content-type':'application/json','x-web-qa-request-id':rid,...(credential.token?{'x-web-qa-key':credential.token}:{})},body:JSON.stringify(payload)},timeoutMs);
+      const options={method,headers:{'x-web-qa-request-id':rid,...(credential.token?{'x-web-qa-key':credential.token}:{})}};
+      if(method!=='GET'){options.headers['content-type']='application/json';options.body=JSON.stringify(payload||{})}
+      const data=await fetchJson(root+path,options,timeoutMs);
       return{...data,gateway:root,requestId:data.requestId||rid,accessMode:credential.type};
     }catch(error){
       const status=Number(error?.status||0);
@@ -564,6 +751,29 @@ async function gatewayPost(path,payload,timeoutMs=GATEWAY_TIMEOUT_MS,operation='
       if([401,403].includes(status)){error.gateway=root;throw error}
       break;
     }
+  }
+  throw new Error(errors.join(' | ')||'No assistant gateway is available.');
+}
+async function gatewayPost(path,payload,timeoutMs=GATEWAY_TIMEOUT_MS,operation='GATEWAY'){
+  return gatewayRequest('POST',path,payload,timeoutMs,operation);
+}
+async function gatewayGet(path,timeoutMs=GATEWAY_TIMEOUT_MS,operation='GATEWAY'){
+  return gatewayRequest('GET',path,null,timeoutMs,operation);
+}
+// CSV export is not JSON, so it cannot go through fetchJson/gatewayRequest —
+// this mirrors their credential/candidate-root logic for a raw text response.
+async function gatewayGetText(path,timeoutMs=GATEWAY_TIMEOUT_MS,operation='GATEWAY'){
+  const errors=[],rid=requestId(operation);
+  for(const root of await gatewayCandidates()){
+    const credential=await gatewayCredential(root);
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
+    try{
+      const res=await fetch(root+path,{method:'GET',headers:{'x-web-qa-request-id':rid,...(credential.token?{'x-web-qa-key':credential.token}:{})},signal:controller.signal});
+      const text=await res.text();
+      if(!res.ok)throw Object.assign(new Error(`HTTP ${res.status}`),{status:res.status});
+      return{text,contentType:res.headers.get('content-type')||'text/plain'};
+    }catch(error){errors.push(`${root}: ${error?.name==='AbortError'?'timeout':error.message}`)}
+    finally{clearTimeout(timer)}
   }
   throw new Error(errors.join(' | ')||'No assistant gateway is available.');
 }
@@ -609,17 +819,38 @@ function localOnlyCoverage(report){
       :'local-only';
   return base;
 }
+// Gateway-confirmed external link findings arrive with no targetId — safe-probe.js
+// runs in Node with no DOM, so it can only carry whatever plain CSS selector was
+// captured client-side at escalation time, which degrades to just "a" for a plain
+// body-text link with no class/id (matches every link on the page). The scanned
+// page is still open right here, so ask the content script to re-resolve each
+// finding's destination URL against the live DOM and register a real target.
+async function reconcileGatewayLinkTargets(findings,tabId){
+  if(!tabId||!Array.isArray(findings)||!findings.length)return findings;
+  const candidates=findings.filter(f=>f&&!f.targetId&&f.targetType==='visual'&&f.link?.url&&!f.link?.internal);
+  if(!candidates.length)return findings;
+  try{
+    const res=await chrome.tabs.sendMessage(tabId,{type:'RECONCILE_LINK_TARGETS',findings:candidates.map(f=>({id:f.id,ruleId:f.ruleId,fingerprint:f.fingerprint,targetType:f.targetType,link:{url:f.link.url,internal:Boolean(f.link.internal)}}))});
+    const patches=new Map((res?.patches||[]).map(p=>[p.id,p]));
+    if(!patches.size)return findings;
+    return findings.map(f=>{
+      const p=patches.get(f.id);
+      return p?{...f,targetId:p.targetId,selector:p.selector||f.selector,target:{...(f.target||{}),instanceId:p.targetId,status:'valid',confidence:'high'}}:f;
+    });
+  }catch{return findings}
+}
 async function enrich(report,tabId=null){
   const privatePage=isPrivateHost(report.page?.hostname||'');
   // Connected public pages: content-script audit only; gateway performs privileged external probes.
   report=await addLinkAudit(report,tabId,{privilegedExternal:privatePage});report=await contextualize(report);
-  if(privatePage){const coverage=localOnlyCoverage(report);const next={...report,coverage,priorityBrief:'Local inspection complete. Frank is using browser and accessibility evidence only; connected services are intentionally disabled for this private environment.',priorityMode:'deterministic',connectedMode:'local-only',context:{performance:null,services:{}}};next.publishedCoverage=buildPublishedCoverage({report:next,coverage,connectedMode:'local-only',attempted:false});next.frankReview=emptyFrankReview({reason:'not-requested'});next.guidanceSource=scanGuidanceSource({hasVisibleGuidance:true,priorityMode:'deterministic',coverageAi:coverage.ai,frankReview:next.frankReview});next.coverageReasons=explainCoverageReasons(next,{publishedReason:next.publishedCoverage.reason});return next}
+  if(privatePage){const coverage=localOnlyCoverage(report);const next={...report,coverage,priorityBrief:'Local inspection complete. This scan uses browser and accessibility evidence only; connected services are intentionally disabled for this private environment.',priorityMode:'deterministic',connectedMode:'local-only',context:{performance:null,services:{}}};next.publishedCoverage=buildPublishedCoverage({report:next,coverage,connectedMode:'local-only',attempted:false});next.frankReview=emptyFrankReview({reason:'not-requested'});next.guidanceSource=scanGuidanceSource({hasVisibleGuidance:true,priorityMode:'deterministic',coverageAi:coverage.ai,frankReview:next.frankReview});next.coverageReasons=explainCoverageReasons(next,{publishedReason:next.publishedCoverage.reason});return next}
   const publishedStarted=Date.now();
   try{
     const result=await gatewayPost('/api/context',gatewayContextEnvelope(report),22000,'CONTEXT');
     const latencyMs=Date.now()-publishedStarted;
     if(result?.report){
       const merged=mergeGatewayReport(report,result.report);
+      merged.findings=await reconcileGatewayLinkTargets(merged.findings,tabId);
       const contextual=await contextualize(merged,result.report.context||result.report.context?.services||null);
       const next={...contextual,aiGateway:result.gateway,requestId:result.requestId,connectedMode:'gateway'};
       next.publishedCoverage=buildPublishedCoverage({
@@ -657,7 +888,7 @@ async function enrich(report,tabId=null){
 }
 async function targetContext(tabId,targetId,selector,ruleId=''){if(!tabId||(!targetId&&!selector))return null;try{const result=await chrome.tabs.sendMessage(tabId,{type:'TARGET_CONTEXT',targetId,selector,ruleId});return result?.found?result:null}catch{return null}}
 async function prepareFrank({finding,report,tabId,instances=[],selectedInstanceId='',groupTitle=''}){
-  if(!finding||!report?.page)throw new Error('Frank needs a current finding and scan report.');
+  if(!finding||!report?.page)throw new Error('A walkthrough needs a current finding and scan report.');
   const inspectedTabId=tabId||(await activeTab())?.id;if(!inspectedTabId)throw new Error('The inspected browser tab is no longer available.');
   try{await chrome.tabs.sendMessage(inspectedTabId,{type:'PING'})}catch{await ensureInjected(inspectedTabId)}
   let sourceReport=report;
@@ -686,7 +917,7 @@ async function prepareFrank({finding,report,tabId,instances=[],selectedInstanceI
   return{plan,graph,tabId:inspectedTabId,reasoning:{status:'ready',mode:'deterministic',provider:'deterministic',message:'Verified deterministic guidance is ready for optional on-device improvement.'}};
 }
 async function cloudFrankPlan({graph}){
-  if(!graph?.finding||!graph?.page)throw new Error('Frank needs a prepared evidence graph.');
+  if(!graph?.finding||!graph?.page)throw new Error('A walkthrough needs a prepared evidence graph.');
   if(isPrivateHost(graph.page.hostname||''))return{plan:null,reasoning:{status:'disabled',mode:'deterministic',provider:'openai',code:'PRIVATE_PAGE',message:'Cloud AI is disabled for private pages.'}};
   try{
     const result=await gatewayPost('/api/frank/plan',{graph:gatewayFrankGraph(graph)},FRANK_TIMEOUT_MS,'FRANK');
@@ -695,10 +926,10 @@ async function cloudFrankPlan({graph}){
   }catch(error){return{plan:null,reasoning:{status:'fallback',mode:'deterministic',provider:'openai',code:error?.code||'GATEWAY_FRANK_FAILED',message:String(error?.message||'Cloud reasoning could not be reached.').slice(0,240)}}}
 }
 async function startFrankPlan({plan,graph,tabId,reasoning=null}){
-  if(!plan||!graph||!validateFrankPlan(plan,graph))throw new Error('Frank refused to start an invalid walkthrough plan.');
+  if(!plan||!graph||!validateFrankPlan(plan,graph))throw new Error('Could not start an invalid walkthrough plan.');
   const inspectedTabId=tabId||(await activeTab())?.id;if(!inspectedTabId)throw new Error('The inspected browser tab is no longer available.');
   const coachPlan=withCoachMetrics(plan,graph);
-  const start=await chrome.tabs.sendMessage(inspectedTabId,{type:'FRANK_START',plan:coachPlan,targets:graph.targets,reasoning});if(!start?.started)throw new Error('Frank could not start on the inspected page.');
+  const start=await chrome.tabs.sendMessage(inspectedTabId,{type:'FRANK_START',plan:coachPlan,targets:graph.targets,reasoning});if(!start?.started)throw new Error('The walkthrough could not start on the inspected page.');
   return{started:true,tabId:inspectedTabId};
 }
 // Backwards-compatible message for older side panels: deterministic only. New
@@ -711,7 +942,7 @@ async function recheckFinding({finding,tabId}){
     const result=await chrome.tabs.sendMessage(tabId,{type:'RECHECK_LINK',url:finding.link.url});
     if(result?.verificationState==='healthy')return{state:'resolved',message:`Resolved. ${new URL(finding.link.url).pathname} now responds successfully.`,result};
     if(result?.verificationState==='confirmed-failure')return{state:'still-present',message:`Still present. The destination remains a confirmed ${result.status||'failure'}.`,result};
-    return{state:'inconclusive',message:'Recheck was inconclusive. Frank is not treating that as proof the issue remains.',result};
+    return{state:'inconclusive',message:'Recheck was inconclusive. That is not treated as proof the issue remains.',result};
   }
   let current=await scanExistingTab(tabId);current=await enrich(current,tabId);
   const match=(current.findings||[]).find(x=>(x.id&&finding.id&&x.id===finding.id)||(x.ruleId===finding.ruleId&&(x.selector||'')===(finding.selector||'')));

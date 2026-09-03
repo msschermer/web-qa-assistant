@@ -1,4 +1,6 @@
 const SENSITIVE_NAME = /(token|secret|password|passwd|authorization|auth|session|cookie|jwt|key|credential|nonce|csrf|xsrf)/i;
+// Keep in sync with the gateway/service-worker external probe cap.
+export const GATEWAY_EXTERNAL_CANDIDATE_CAP = 80;
 const ALLOWED_ATTRS = new Set(['id','class','role','type','name','href','src','alt','title','for','lang','rel','target','action','method','aria-label','aria-labelledby','aria-describedby','aria-hidden','aria-expanded','aria-controls','aria-current','aria-required','aria-invalid','tabindex']);
 
 function clip(value, max) {
@@ -322,7 +324,9 @@ export function gatewayContextEnvelope(report = {}) {
       Number(report.externalLinkCandidateTotal || 0),
       Array.isArray(report.externalLinkCandidates) ? report.externalLinkCandidates.length : 0
     ),
-    externalLinkCandidates: (report.externalLinkCandidates || []).slice(0, 12).map((c) => ({
+    // Must match the gateway prober's maxCandidates. A smaller slice here silently caps how
+    // many external destinations can ever be confirmed broken, regardless of server capacity.
+    externalLinkCandidates: (report.externalLinkCandidates || []).slice(0, GATEWAY_EXTERNAL_CANDIDATE_CAP).map((c) => ({
       url: String(c.url || '').slice(0, 2000),
       text: sanitizeText(c.text, 180),
       occurrences: Math.max(1, Number(c.occurrences || 1)),

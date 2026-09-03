@@ -372,6 +372,32 @@ function projectLinkExecution(ex) {
   };
 }
 
+/**
+ * Per-URL probe history for the unresolved subset, so a future bug report can
+ * answer "what happened to this exact link" without re-running the scan.
+ * Redacted the same way as everything else here: origin+path only, no query
+ * values, credentials, or raw DOM.
+ */
+function projectUnresolvedLinks(report) {
+  const checks = Array.isArray(report?.linkAudit?.incompleteChecks) ? report.linkAudit.incompleteChecks : [];
+  return checks.slice(0, 20).map((c) => ({
+    url: diagnosticUrl(c.url) || undefined,
+    sameOrigin: c.kind === 'internal-link',
+    anchorText: redactText(c.text, 80) || undefined,
+    reason: clip(c.reason, 40) || undefined,
+    cause: clip(c.cause, 40) || undefined,
+    status: Number(c.status || 0) || undefined,
+    attempts: Array.isArray(c.attempts) ? c.attempts.slice(0, 4).map((a) => ({
+      attempt: Number(a.attempt || 0) || undefined,
+      method: clip(a.method, 10) || undefined,
+      state: clip(a.state, 20) || undefined,
+      status: Number(a.status || 0) || undefined,
+      elapsedMs: Number(a.durationMs || 0) || undefined,
+      errorClass: clip(a.errorClass, 40) || undefined
+    })) : undefined
+  }));
+}
+
 function projectLinks(report) {
   const accounting = buildCoverageAccounting(report || {}).links;
   const unavailable = /unavailable/i.test(String(report?.coverage?.links || ''));
@@ -422,7 +448,8 @@ function projectLinks(report) {
     reason: accounting.probeBudgetPreventedCoverage
       ? (clip(report?.coverageReasons?.links, 60) || 'probe-budget-exhausted')
       : undefined,
-    accountingOk: accounting.accountingOk === true
+    accountingOk: accounting.accountingOk === true,
+    unresolvedLinks: projectUnresolvedLinks(report) || undefined
   };
 }
 
@@ -1175,7 +1202,7 @@ export function buildBugReport({
 
 export function bugReportPrivacySummary(includeContext = false) {
   if (includeContext) {
-    return 'Includes bounded current-finding measurements, Frank wording, and a redacted page title. URLs are reduced to origin/path. Selectors, cookies, form values, query values and raw DOM are never included.';
+    return 'Includes bounded current-finding measurements, walkthrough wording, and a redacted page title. URLs are reduced to origin/path. Selectors, cookies, form values, query values and raw DOM are never included.';
   }
-  return 'Includes scan origin/path, coverage codes, finding ruleIds, lab metrics, link counts, and runtime event codes. Finding titles, query values, cookies, form values, selectors, Frank wording and credentials are excluded.';
+  return 'Includes scan origin/path, coverage codes, finding ruleIds, lab metrics, link counts, and runtime event codes. Finding titles, query values, cookies, form values, selectors, walkthrough wording and credentials are excluded.';
 }

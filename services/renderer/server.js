@@ -136,7 +136,7 @@ app.post('/scan', async (req, res) => {
     // Gateway-authoritative privileged probes (SSRF+DNS per hop). No browser host permissions.
     const externalCandidates = Array.isArray(links?.externalCandidates) ? links.externalCandidates.slice(0, 80) : [];
     if (externalCandidates.length) {
-      const probeRows = await probeExternalCandidates(externalCandidates, { maxCandidates: 80, concurrency: 6, totalBudgetMs: 20000 });
+      const probeRows = await probeExternalCandidates(externalCandidates, { maxCandidates: 80, concurrency: 12, totalBudgetMs: 20000 });
       const applied = mapExternalProbeRows(externalCandidates, probeRows);
       const probedCount = probeRows.filter((row) => Number(row.attempts || 0) > 0 && String(row.error || '') !== 'budget-exhausted').length;
       const accounted = applyPrivilegedProbeAccounting({

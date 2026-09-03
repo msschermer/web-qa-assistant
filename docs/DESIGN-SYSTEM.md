@@ -2,25 +2,25 @@
 
 ## Product posture
 
-Web QA Assistant should feel like a senior engineering review surface, not a generic scanner dashboard or AI chatbot. Frank is a restrained guided-investigation layer, not a mascot.
+**Lumen** should feel like a calm engineering review tool, not a scanner dump and not a chatbot. There is no named persona. The product shows what the page is actually doing.
 
 ## Visual language
 
-The extension and web app share `packages/ui/tokens.css` and the portfolio visual system:
+The extension and web app share `packages/ui/tokens.css`. Source CSS lives in `packages/ui/lumen.css` and is compiled with Tailwind v4 into `dist/extension/sidepanel.css` and `apps/web/public/styles.css`. Markup uses stable component classes (`btn-primary`, `finding-card`, `workspace-section`), not utility soup.
 
-- paper background
-- near-white surfaces
-- dark ink typography
-- restrained engineering blue
+- soft blue-gray workspace canvas with white cards
+- deep navy-charcoal ink typography
+- a deep engineering blue brand (`#143E63`) with a teal accent (`#087C89`)
 - green for resolved/healthy states
-- status colors supplemented by text so color is never the only meaning
-- IBM Plex Sans and IBM Plex Mono fallbacks
+- severity as a 3px left rail plus text, so color is never the only meaning
+- IBM Plex Sans for reading and IBM Plex Mono for selectors and rule IDs
+- the extension does not fetch Google Fonts (CSP); the public web app may keep the existing font link
 
 ## Information hierarchy
 
-1. **Frank judgment**: what deserves attention now
-2. **material findings**: human-readable problem, confidence and context
-3. **actions**: Ask Frank, Highlight, Recheck, Copy issue
+1. **Page assessment**: what deserves attention now
+2. **Recommended order**: human-readable problem, confidence and context
+3. **actions**: Walk through, Highlight, Recheck, Copy issue
 4. **coverage**: what was and was not successfully checked
 5. **technical details**: rule IDs, selectors and raw bounded evidence behind progressive disclosure
 
@@ -28,16 +28,21 @@ The extension and web app share `packages/ui/tokens.css` and the portfolio visua
 
 Use:
 
-- `Evidence summary` for the scan overview, which does not imply that an AI request occurred
+- `Evidence-backed assessment` / `Evidence summary` for the scan overview, which does not imply that an AI request occurred
 - `On-device reasoning` when Chrome built-in AI improved a walkthrough locally
 - `Cloud reasoning` only when the optional metered cloud fallback was explicitly enabled and succeeded
-- `Verified guidance` for deterministic Frank when local AI is unavailable, still preparing, or fails evidence-quality validation
+- `Verified guidance` for deterministic walkthroughs when local AI is unavailable, still preparing, or fails evidence-quality validation
 - `Confirmed`, `Corroborated`, `Inferred` for evidence strength
 - `Incomplete coverage` for checker uncertainty
 
 Do not turn inability to verify into a defect.
 
-## Frank walkthrough
+## Walkthrough
+
+Two surfaces stay split:
+
+- **Side panel Evidence**: deterministic facts only
+- **On-page guide**: explanation and action
 
 The predictable conceptual grammar is:
 
@@ -50,8 +55,8 @@ Comparison/trend steps are inserted only when supported. Recheck is available at
 - all actions keyboard accessible
 - visible focus state
 - no status communicated only by color
-- Frank dialogs/overlays trap focus while active and restore focus on close
-- Escape exits Frank
+- walkthrough dialogs/overlays trap focus while active and restore focus on close
+- Escape exits the walkthrough
 - status changes use appropriate live regions
 - narrow side-panel widths remain usable
 - reduced-motion preferences are respected where animation is used
@@ -73,14 +78,16 @@ to the new palette rather than to an unstyled browser default.
 
 | Role | Token | Value |
 | --- | --- | --- |
-| Canvas | `--wqa-canvas` | `#F1F4F8` |
+| Canvas | `--wqa-canvas` | `#F3F6FA` |
 | Elevated surface | `--wqa-surface` | `#FFFFFF` |
-| Sunken surface | `--wqa-sunken` | `#F7F9FB` |
-| Primary ink | `--wqa-ink` | `#101828` |
-| Secondary ink | `--wqa-ink-soft` | `#475467` |
-| Tertiary ink | `--wqa-ink-faint` | `#8A94A6` |
-| Hairline | `--wqa-line` | `#E4E9F0` |
-| Brand | `--wqa-brand` | `#12395E` |
+| Sunken surface | `--wqa-sunken` | `#F7F9FC` |
+| Primary ink | `--wqa-ink` | `#102133` |
+| Secondary ink | `--wqa-ink-soft` | `#45566B` |
+| Tertiary ink | `--wqa-ink-faint` | `#78879A` |
+| Hairline | `--wqa-line` | `#E2E8F0` |
+| Brand | `--wqa-brand` | `#143E63` |
+| Accent | `--wqa-accent` | `#087C89` |
+| Secondary accent | `--wqa-violet` | `#5557A7` |
 | Critical | `--wqa-critical` | `#B42318` |
 | Warning | `--wqa-warn` | `#B54708` |
 | Healthy | `--wqa-ok` | `#067647` |
@@ -122,27 +129,27 @@ problem and three accessibility groups, the ledger says so before the reader scr
 Empty areas are omitted, never shown as zero. A zero would imply a check ran and
 passed, which is not always what happened.
 
-## Frank focus mode — 1.6.0
+## Walkthrough focus mode — 1.6.0
 
-Frank focus mode deliberately separates **facts** from **reasoning**.
+Focus mode deliberately separates **facts** from **reasoning**.
 
-### Sidebar: evidence ledger
+### Sidebar: Evidence
 
 The side panel is the stable deterministic inspection record: finding status, confidence, environment, selector/target, measured values, tool provenance, verification attempts, current-step evidence, full bounded evidence, and utility actions. It answers: **what did the tools actually find?**
 
-### Center card: Frank
+### Center card: walkthrough
 
-The centered card owns Frank's narrative: interpretation, impact, remediation, and verification. It is allowed to carry a short heading plus several concise sentences because the rest of the page is already dimmed to create a dedicated focus surface. It answers: **what do these facts mean and what should I do?**
+The centered card owns the narrative: interpretation, impact, remediation, and verification. It is allowed to carry a short heading plus several concise sentences because the rest of the page is already dimmed to create a dedicated focus surface. It answers: **what do these facts mean and what should I do?**
 
 The real target remains spotlighted. Placement tries right, left, below, and above the target so the card does not cover the element when a reasonable alternative exists. The deterministic walkthrough begins with interpretation rather than a redundant standalone “locate” step.
 
-Current-step evidence receives a stronger visual treatment in the sidebar so a user can trace Frank's statement back to the facts without duplicating the whole explanation there.
+Current-step evidence receives a stronger visual treatment in the sidebar so a user can trace the statement back to the facts without duplicating the whole explanation there.
 
-### Frank identity
+### Identity
 
-1.6.0 strengthens Frank through hierarchy and interaction rather than decoration: the focus card has a restrained accent treatment, readiness has explicit chips/states, and evidence uses a more technical ledger treatment. The product remains calm and engineering-led rather than adopting playful assistant visuals.
+The product is **Lumen**. The mark is a simple aperture, not a letter-mascot. Walkthrough chrome uses a restrained teal accent. The product remains calm and engineering-led.
 
-### Tailwind decision
+### Tailwind
 
-Tailwind was evaluated for this release and deliberately not adopted. The existing shared token layer and contained extension CSS are sufficient for the required redesign. Migrating frameworks would add build configuration and visual-regression risk without creating product personality by itself. Revisit only if future component growth makes the current CSS objectively difficult to maintain.
+Lumen CSS is authored in `packages/ui/lumen.css` with Tailwind v4 (`@theme` plus `@layer components`). `npm run build:extension` compiles that source into the extension distribution and `apps/web/public/styles.css`. Component class names stay stable so tests can assert structure without depending on generated utility class strings.
 

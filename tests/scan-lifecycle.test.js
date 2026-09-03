@@ -113,7 +113,7 @@ test('side panel keeps results locked until resultReady and reveals them togethe
   assert.match(rescan, /revealResultsUi\(\)/);
   assert.match(rescan, /frankInitialReviewComplete/);
   assert.match(rescan, /scanPhase = SCAN_PHASE\.READY/);
-  assert.match(rescan, /const r = await send\(tab\?\.id \? \{ type: 'SCAN_TAB'/);
+  assert.match(rescan, /let r = await send\(tab\?\.id \? \{ type: 'SCAN_TAB'/);
   assert.doesNotMatch(rescan.split("const enriched")[0], /\brender\(\)/);
   assert.match(css, /data-result-ready=true/);
   assert.match(css, /\.recommendations-section/);

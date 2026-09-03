@@ -24,11 +24,11 @@ test('cloud Frank is double opt-in: server gate plus extension user setting',()=
   assert.match(bg,/cloudAiFallback:false/);
 });
 
-test('Chrome built-in AI is the default Frank path and starts from the Ask Frank gesture',()=>{
+test('Chrome built-in AI is the default walkthrough path and starts from the Walk through gesture',()=>{
   const start=panel.indexOf('async function startFrank');
   const prepare=panel.indexOf("type: 'PREPARE_FRANK'",start);
   const local=panel.indexOf('activateFromGesture',start);
-  assert.ok(local>start && local<prepare,'on-device preparation must begin directly from the Ask Frank gesture');
+  assert.ok(local>start && local<prepare,'on-device preparation must begin directly from the Walk through gesture');
   assert.match(panel,/provider: 'chrome-built-in'/);
   assert.match(panel,/No metered AI request was used/);
   assert.match(bg,/FRANK_START_PLAN/);

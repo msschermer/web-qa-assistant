@@ -72,7 +72,7 @@ test('extension ships immersive Frank runtime without debugger permission',()=>{
   assert.match(build,/policy\.js/);
 });
 
-test('Frank web demo has guided screenshot path and Ask Frank controls',()=>{
+test('web demo has guided screenshot path and Walk through controls',()=>{
   const api=fs.readFileSync('services/api/server.js','utf8');
   const renderer=fs.readFileSync('services/renderer/server.js','utf8');
   const web=fs.readFileSync('apps/web/public/app.js','utf8');

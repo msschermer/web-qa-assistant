@@ -25,3 +25,6 @@ tools/accept-dogfood/*.json
 .autoqa/chrome-permission-state.json
 tools/autoqa/.chrome-profile*/
 AUTOQA_BOOTSTRAP_PROBE.tmp.md
+
+# Full-site audit local persistence (services/api uses AUDIT_DB_PATH to relocate this)
+data/

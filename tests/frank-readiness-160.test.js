@@ -89,7 +89,7 @@ test('first-use download progress is observable and resolves in place to ready',
   assert.ok(states.some(state => state.status === 'ready'));
 });
 
-test('Ask Frank waits for readiness and never uses Rescan as an AI recovery action', () => {
+test('Walk through waits for readiness and never uses Rescan as an AI recovery action', () => {
   const start = panel.indexOf('async function startFrank');
   const rescan = panel.indexOf('async function rescan');
   const update = panel.indexOf('async function updateWatch');
@@ -97,7 +97,7 @@ test('Ask Frank waits for readiness and never uses Rescan as an AI recovery acti
   const rescanBlock = panel.slice(rescan, update);
 
   assert.match(startBlock, /localFrankRuntime\.activateFromGesture\(\)/);
-  assert.match(startBlock, /this finding will open automatically when Frank is ready/);
+  assert.match(startBlock, /this finding will open automatically when on-device AI is ready/);
   assert.match(startBlock, /Use verified guidance now/);
   assert.match(startBlock, /await localFrankRuntime\.cloneTask\(\)/);
   assert.doesNotMatch(startBlock, /resolveLocalFrankSession|setTimeout\([^)]*10000|LOCAL_AI_PREPARING/);
@@ -108,7 +108,7 @@ test('page or finding changes cancel pending Frank work before late readiness ca
   assert.match(panel, /pendingFrankCancel\?\.\(\)/);
   assert.match(panel, /currentRequest\(requestId, pageUrl, tabId\)/);
   assert.match(panel, /currentTabStillMatches\(pageUrl, tabId\)/);
-  assert.match(panel, /The inspected page changed while Frank was preparing/);
+  assert.match(panel, /The inspected page changed while the walkthrough was preparing/);
 });
 
 test('separate website findings never share page evidence through the warm base session', async () => {

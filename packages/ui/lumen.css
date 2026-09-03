@@ -1,0 +1,32 @@
+/*
+  Lumen source stylesheet.
+  Compiled by scripts/build-css.mjs into dist/extension/sidepanel.css and apps/web/public/styles.css.
+  Skip Tailwind preflight — panel, coach, and web already ship their own resets.
+*/
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@source "../../apps/extension/**/*.{html,js}";
+@source "../../apps/web/public/**/*.{html,js}";
+@source not "../../apps/web/public/styles.css";
+
+@theme {
+  --font-sans: 'Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;
+  --font-mono: ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;
+  --color-lumen-canvas: #F6F7F9;
+  --color-lumen-surface: #FFFFFF;
+  --color-lumen-sunken: #F9FAFB;
+  --color-lumen-ink: #101828;
+  --color-lumen-ink-soft: #475467;
+  --color-lumen-brand: #4F46E5;
+  --color-lumen-brand-strong: #4338CA;
+  --color-lumen-brand-soft: #EEF2FF;
+  --color-lumen-accent: #4F46E5;
+  --color-lumen-accent-soft: #EEF2FF;
+  --color-lumen-line: #EAECF0;
+}
+
+@import "./tokens.css";
+@import "../../apps/extension/sidepanel.css" layer(components);
+@import "./coach.css" layer(components);
+@import "./web.css" layer(components);

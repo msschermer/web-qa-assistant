@@ -329,6 +329,31 @@
     }
     return null;
   }
+  /**
+   * Many themes duplicate the same link (a desktop nav item and its hidden
+   * mobile-menu twin, most often) — sharing one URL/fragment/href means they
+   * land in the same finding group, and DOM order alone decides which one
+   * becomes "the" element to highlight. If that pick is the hidden duplicate,
+   * highlighting resolves fine (the element exists) but its bounding rect is
+   * zero-sized or off the visible page, so the ring renders pinned to a
+   * corner and scrollIntoView has nothing meaningful to scroll to. Prefer
+   * whichever candidate is actually rendered on screen right now.
+   */
+  function isRenderedOnScreen(el){
+    if(!el||typeof el.getBoundingClientRect!=='function')return false;
+    let rect;
+    try{rect=el.getBoundingClientRect()}catch{return false}
+    if(!rect||rect.width<1||rect.height<1)return false;
+    try{
+      const style=getComputedStyle(el);
+      if(style.display==='none'||style.visibility==='hidden'||(style.opacity!==''&&Number(style.opacity)===0))return false;
+    }catch{}
+    return true;
+  }
+  function pickVisibleAnchor(anchors){
+    if(!Array.isArray(anchors)||!anchors.length)return anchors?.[0]||null;
+    return anchors.find(isRenderedOnScreen)||anchors[0];
+  }
   function registerTarget(el,seed){
     if(!el||el.nodeType!==1)return'';
     const targetId=`target_${hash(`${seed}|${selectorFor(el)}|${el.tagName}`)}`;
@@ -386,7 +411,7 @@
     let selectorMatches=0;
     try{selectorMatches=selector?document.querySelectorAll(selector).length:0}catch{selectorMatches=0}
     const reason=!selector&&!targetId?'This finding is not tied to a single page element.'
-      :selectorMatches>1?'The recorded selector now matches several elements, so Frank will not guess which one it was.'
+      :selectorMatches>1?'The recorded selector now matches several elements, so the walkthrough will not guess which one it was.'
       :'The element was on the page when it was scanned and is not there now. It was most likely re-rendered, lazily removed, or behind a state change.';
     return{found:false,via:'unresolved',visible:false,tag:d?.tag||'',selector,selectorMatches,reason,
       described:d?{text:d.text,alt:d.alt,href:d.href,src:d.src,classes:d.classes.join(' ')}:null};
@@ -869,7 +894,7 @@
     }
     const out=[];
     for(const[kind,anchors]of groups){
-      const first=anchors[0];
+      const first=pickVisibleAnchor(anchors);
       out.push(finding({
         ruleId:'ux.inert-link',
         title:kind==='empty-href'?'Link href does not declare a destination':'Link href does not declare a navigation destination',
@@ -2951,7 +2976,7 @@
     }
     const out=[];
     for(const[id,anchors]of groups){
-      const first=anchors[0],ctx=linkContext(first);
+      const first=pickVisibleAnchor(anchors),ctx=linkContext(first);
       const sources=anchors.slice(0,12).map(a=>({...linkContext(a),selector:selectorFor(a)}));
       out.push(finding({ruleId:'navigation.fragment-missing',title:'In-page link points to a missing fragment',detail:`${ctx.text?`"${ctx.text}" `:''}points to #${id}, but no matching id or name exists in the document.`,category:'fix',severity:'medium',element:first,count:anchors.length,confidence:'confirmed',evidence:`#${id}`,extra:{link:{url:`#${id}`,internal:true,fragment:id,status:0,occurrences:anchors.length,sources,...ctx},verification:{state:'confirmed',method:'deterministic DOM fragment resolution',attempts:1,evidence:[`no element with id or name "${id}"`]}}}));
     }
@@ -3171,7 +3196,7 @@
       if(aborted){
         state=(reason==='probe-cancelled'||reason==='scanner-cancelled')?'cancelled':'timeout';
       }else if(/redirect/i.test(message))state='redirect-error';
-      return{state,status:0,error:message,abortReason:aborted?(reason||'abort'):'',finalUrl:url,durationMs:Math.round(performance.now()-started),method:verb};
+      return{state,status:0,error:message,errorName:error?.name||'',abortReason:aborted?(reason||'abort'):'',finalUrl:url,durationMs:Math.round(performance.now()-started),method:verb};
     }finally{clearTimeout(timer)}
   }
   function headNeedsGet(result){
@@ -3674,7 +3699,8 @@
     }
     // External timeout/opaque failures rarely gain evidence from a same-origin browser retry.
     if(!internal&&(first.state==='timeout'||first.state==='cancelled'||first.state==='unavailable'||firstStatus===0)){
-      const cause=first.state==='timeout'?'scanner-timeout':first.state==='cancelled'?'scanner-cancelled':/cors|opaque|failed to fetch|typeerror/i.test(String(first.error||''))?'cors-or-opaque':'network-failure';
+      const isCorsLike=first.errorName==='TypeError'||/cors|opaque|failed to fetch|typeerror/i.test(String(first.error||''));
+      const cause=first.state==='timeout'?'scanner-timeout':first.state==='cancelled'?'scanner-cancelled':isCorsLike?'cors-or-opaque':'network-failure';
       return{verificationState:'inconclusive',confidence:'inconclusive',result:first,attempts,cause};
     }
     const second=await probeUrl(url,{timeoutMs:degraded?Math.max(retryTimeoutMs,8000):retryTimeoutMs,internal,preferHead:false});
@@ -3734,7 +3760,10 @@
     if([401,403].includes(status))return'remote-blocked';
     const err=String(result.error||'');
     if(!internal&&(result.state==='unavailable'||status===0)){
-      if(/failed to fetch|networkerror|cors|opaque|typeerror/i.test(err))return'cors-or-opaque';
+      // A structured error name is a more reliable CORS/opaque signal than message
+      // text, which varies by browser build/locale and can silently fall through
+      // to the generic network-failure bucket, hiding the real cause in diagnostics.
+      if(result.errorName==='TypeError'||/failed to fetch|networkerror|cors|opaque|typeerror/i.test(err))return'cors-or-opaque';
       return'network-failure';
     }
     if(result.state==='unavailable'||status===0)return'network-failure';
@@ -3861,10 +3890,10 @@
         return;
       }
       bucket.attempted++;
-      const first=entry.anchors[0],ctx=linkContext(first);
+      const first=pickVisibleAnchor(entry.anchors),ctx=linkContext(first);
       const sources=entry.anchors.slice(0,12).map(a=>({...linkContext(a),selector:selectorFor(a),scope:frameContextFor(a)?.embeddedContext||'top-document'}));
       const result=verified.result||verified.attempts?.[verified.attempts.length-1]||{status:0,state:'unavailable',finalUrl:entry.url};
-      const attemptEvidence=(verified.attempts||[]).map((a,index)=>({attempt:index+1,state:a.state,status:a.status||0,durationMs:a.durationMs||0,finalUrl:a.finalUrl||entry.url}));
+      const attemptEvidence=(verified.attempts||[]).map((a,index)=>({attempt:index+1,state:a.state,status:a.status||0,durationMs:a.durationMs||0,finalUrl:a.finalUrl||entry.url,errorClass:a.errorName||''}));
       const method=entry.internal?'same-origin browser GET with independent retry':'cross-origin GET with independent retry';
       const extra={link:{url:entry.url,internal:!!entry.internal,sourceUrl:location.href,status:result.status||0,state:result.state||'unknown',finalUrl:result.finalUrl||entry.url,redirected:!!result.redirected,occurrences:entry.anchors.length,sources,scope:[...entry.frames][0]||'top-document',frames:[...entry.frames],...ctx},verification:{state:verified.verificationState,method,attempts:attemptEvidence.length,evidence:attemptEvidence}};
       if(verified.verificationState==='healthy'){healthy++;bucket.healthy++;return}
@@ -3891,7 +3920,12 @@
             confidence:'inconclusive',verification:{...extra.verification,state:'inconclusive'},extra
           }));
         }
-        if(!entry.internal&&!verified.hostInferred&&(result.state==='unavailable'||result.status===0||result.state==='timeout')){
+        // Host inference from in-page timeouts/CORS reflects page-context limits, not the
+        // destination. The gateway probes from a different vantage, so those links still
+        // deserve escalation. Only hosts that explicitly signalled 401/403/429 stay excluded,
+        // since hammering a host that already told us to back off gains no new evidence.
+        const escalatableInference=!verified.hostInferred||!['remote-blocked','rate-limited'].includes(verified.cause);
+        if(!entry.internal&&escalatableInference&&(result.state==='unavailable'||result.status===0||result.state==='timeout')){
           externalCandidates.push({url:entry.url,text:ctx.text||'',occurrences:entry.anchors.length,sources,prominence:ctx.prominence||'',location:ctx.location||'',selector:selectorFor(first)});
         }
         return;
@@ -3986,7 +4020,7 @@
       if(!liveAnchors.length){
         liveAnchors=[{nodeType:1,localName:'a',tagName:'A',id:'',classList:{length:0},parentElement:null,innerText:candidate.text||'',className:'',getAttribute(name){return name==='href'?candidate.url:null},hasAttribute(){return false},closest(){return null},getBoundingClientRect(){return{x:0,y:0,width:0,height:0}}}];
       }
-      const first=liveAnchors[0],ctx={text:candidate.text||'',location:candidate.location||'body',prominence:candidate.prominence||'normal',...linkContext(first)};
+      const first=pickVisibleAnchor(liveAnchors),ctx={text:candidate.text||'',location:candidate.location||'body',prominence:candidate.prominence||'normal',...linkContext(first)};
       const sources=candidate.sources||[{...ctx,selector:candidate.selector||selectorFor(first)}];
       const attempt={attempt:attemptsCount,state:status?'complete':'unavailable',status,method,durationMs:Number(row.durationMs||0),finalUrl:row.finalUrl||candidate.url};
       const confirmationOk=(status===404||status===410||status>=500)?(method==='GET'&&attemptsCount>=2):true;
@@ -4000,6 +4034,15 @@
         resolvedUrls.add(candidate.url);continue;
       }
       if(status>=200&&status<400){resolvedUrls.add(candidate.url);continue}
+      // No TLS-specific cause here on purpose, unlike safe-probe.js's Node-side
+      // pinnedFetch (which reads error.cause.code and can emit a dedicated
+      // navigation.link-insecure-external finding). This branch runs entirely
+      // in the page's own browser context, where fetch() collapses every TLS
+      // failure into the same generic TypeError as a CORS failure — the
+      // browser deliberately does not expose certificate error codes to page
+      // JS. There is no client-side signal to branch on, so falling through
+      // to 'cors-or-opaque'/'network-failure' is the correct, honest outcome,
+      // not a gap to mirror the server-side branch into.
       incompleteChecks.push({kind:'external-link',url:candidate.url,path:candidate.url,text:candidate.text||'',reason:status?`http-${status}`:(row.error||'unavailable'),cause:status===429?'rate-limited':[401,403].includes(status)?'remote-blocked':(!status&&/cors|opaque|failed to fetch/i.test(String(row.error||'')))?'cors-or-opaque':(!status?'network-failure':'ambiguous-response'),status,attempts:[attempt],prominence:candidate.prominence||'',location:candidate.location||''});
       if([401,403,429].includes(status)){
         const label=status===429?'rate-limited':status===401?'unauthorized':'forbidden';
@@ -4014,6 +4057,36 @@
       resolvedUrls.add(candidate.url);
     }
     return{findings,incompleteChecks,resolvedUrls:[...resolvedUrls]};
+  }
+
+  /**
+   * Gateway-confirmed external link findings (safe-probe.js, running in Node
+   * with no DOM) can only carry a plain CSS selector captured at escalation
+   * time — for a plain body-text link with no class or id, selectorFor()
+   * degrades to just "a", which matches every link on the page. Once the
+   * gateway's result is back, the page is still right here, so re-resolve the
+   * matching anchor by its actual URL (unambiguous) and register a real
+   * targetId + fingerprint for it, the same way every other finding type
+   * already gets one. Highlight then has a specific element to point at
+   * instead of "the first <a> tag anywhere".
+   */
+  function reconcileGatewayLinkTargets(findings=[]){
+    const patches=[];
+    for(const f of findings||[]){
+      if(!f||f.targetId||f.targetType!=='visual'||!f.link?.url||f.link?.internal)continue;
+      let el=null;
+      try{
+        const matches=[...document.querySelectorAll('a[href]')].filter(a=>{
+          try{return classifyLink(a)?.url===f.link.url}catch{return false}
+        });
+        el=pickVisibleAnchor(matches);
+      }catch{el=null}
+      if(!el)continue;
+      const targetId=registerTarget(el,`${f.ruleId}|${f.fingerprint||f.id}`);
+      if(!targetId)continue;
+      patches.push({id:f.id,targetId,selector:selectorFor(el)});
+    }
+    return patches;
   }
 
   function merge(local,axeResults,linkResult={findings:[],checked:0}){
@@ -4089,7 +4162,7 @@
     globalThis.__WEBQA_RUNTIME_ERRORS__={count,samples,source:'renderer'};
   }
 
-  globalThis.WebQARules={run,axeFindings,resolvedTargetState,validateResolvedTarget,auditLinks,recheckLink,applyExternalProbeResults,merge,recordRuntimeErrors,hydrateLinkCache,exportLinkCache,clearLinkCache(){linkVerificationCache.clear()},selectorFor,resolveTarget,performanceSignals,preparePerformanceSignals,prepareSafeInteractions,semanticContextFor,targetContextFor(targetId,selector='',ruleId=''){
+  globalThis.WebQARules={run,axeFindings,resolvedTargetState,validateResolvedTarget,auditLinks,recheckLink,applyExternalProbeResults,reconcileGatewayLinkTargets,merge,recordRuntimeErrors,hydrateLinkCache,exportLinkCache,clearLinkCache(){linkVerificationCache.clear()},selectorFor,resolveTarget,performanceSignals,preparePerformanceSignals,prepareSafeInteractions,semanticContextFor,targetContextFor(targetId,selector='',ruleId=''){
     const validated=validateResolvedTarget(targetId,selector,{ruleId});
     if(!validated.found)return {found:false,targetStatus:validated.targetStatus,reason:validated.reason};
     const el=validated.el;

@@ -114,7 +114,21 @@ test('the brief reads across areas instead of leading with the noisiest one', ()
 test('the brief keeps unverified links as coverage rather than defects', () => {
   const brief = composedBrief(composeAttention([]), { linkAudit: { checked: 12, inconclusive: 2 } });
   assert.match(brief, /2 of 12/);
-  assert.match(brief, /not count those URLs as broken links/i);
+  assert.match(brief, /were not counted as broken links/i);
+});
+
+test('multiple confirmed broken links cluster at the top ahead of unrelated lower-priority classes', () => {
+  const brokenLinks = [...Array(3)].map((_, i) => ({
+    ...brokenLink(),
+    id: `navigation.link-404:${i}`,
+    link: { ...brokenLink().link, url: `https://example.com/dead-${i}/`, prominence: 'normal' },
+    frankPriority: 'high' // the real policy.js mapping for a confirmed 404, not the 'blocker' test shorthand
+  }));
+  const findings = [noindex(), slowLcp(), ...brokenLinks];
+  const composition = composeAttention(findings, { limit: 8 });
+  const classes = composition.groups.map(g => g.impactClass);
+  assert.deepEqual(classes.slice(0, 3), ['availability', 'availability', 'availability'],
+    'all three confirmed broken links lead the brief, not just the single best-scoring one');
 });
 
 test('prominent navigation raises materiality over an equivalent body link', () => {

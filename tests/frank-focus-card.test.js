@@ -97,10 +97,10 @@ test('the card carries the finding verdict, step rail and provenance', async () 
 
   assert.equal(shadow.querySelector('.verdict').textContent, 'Verified finding');
   assert.equal(shadow.querySelectorAll('.rail button').length, 3);
-  assert.equal(shadow.querySelector('.rail button[data-state="current"]').textContent.trim(), 'Meaning');
+  assert.equal(shadow.querySelector('.rail button[data-state="current"]').textContent.trim(), 'Interpret');
   assert.deepEqual([...shadow.querySelectorAll('.sources span')].map(s => s.textContent), ['Axe', 'Browser']);
   assert.match(shadow.querySelector('.sources em').textContent, /2 supporting evidence items for this step/);
-  assert.equal(shadow.querySelector('.return-qa').textContent, 'Return to QA');
+  assert.equal(shadow.querySelector('.return-qa').textContent, 'Back to findings');
   assert.equal(shadow.querySelector('.next').textContent, 'Next');
 });
 
