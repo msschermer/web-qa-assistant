@@ -50,13 +50,15 @@ test('current-step evidence can be visually traced back to walkthrough reasoning
   assert.match(panelCss, /evidence-row\[data-active=(?:"true"|true)\]/);
 });
 
-test('Lumen visual identity compiles Tailwind from component classes rather than utility soup', () => {
+test('Lumen visual identity is one violet voice over dark grounds, from semantic classes', () => {
   assert.match(tokens, /--wqa-accent:/);
   assert.match(tokens, /--wqa-accent-soft:/);
-  // The operator took the standing exit from the direction round: the product
-  // now follows the category standard, with one indigo primary carrying the
-  // product voice. Still pinned, so the identity cannot drift silently.
-  assert.match(tokens, /--wqa-brand:#4F46E5/);
+  // The operator pinned a replacement world with mockups, which is the exit
+  // the previous 'category standard, played straight' commitment reserved for
+  // them. Still pinned, so the identity cannot drift silently.
+  assert.match(tokens, /--wqa-brand:#7350F5/, 'one violet primary carries the product voice');
+  assert.match(tokens, /--wqa-canvas:#0E0E14/, 'dark grounds, by decision');
+  assert.match(tokens, /--wqa-ink:#E9E9F2/);
   assert.doesNotMatch(panelCss, /linear-gradient/);
   assert.match(content, /linear-gradient/);
   // No utility soup — the reason Tailwind was removed rather than adopted. It
@@ -102,4 +104,41 @@ test('the severity ramp stays fills-only once it reaches the overlay', () => {
   assert.match(content, /--sa-warn:var\(--wqa-warn\)/);
   assert.match(content, /--sa-sev-critical:var\(--wqa-sev-critical\)/, 'fills use the ramp');
   assert.match(content, /\.badge\.sev-low\{background:var\(--sa-warn-soft\);color:var\(--sa-warn\)/);
+});
+
+test('the dark world keeps its contrast floors, computed rather than asserted by eye', () => {
+  // DESIGN.md's Computed Contrast Rule survives the world change: text clears
+  // 4.5:1 on every ground, semantic text clears it on its own wash, white
+  // clears it on the primary, and the severity ramp — fills only — clears 3:1.
+  const hex = (h) => h.replace('#', '').match(/../g).map((x) => parseInt(x, 16));
+  const lin = (c) => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
+  const lum = (h) => { const [r, g, b] = hex(h); return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b); };
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const token = (name) => {
+    const m = tokens.match(new RegExp(`--wqa-${name}\s*:\s*(#[0-9A-Fa-f]{6})`));
+    assert.ok(m, `--wqa-${name} should be a literal colour in tokens.css`);
+    return m[1];
+  };
+  const grounds = ['canvas', 'surface', 'sunken', 'surface-raised'].map(token);
+
+  for (const name of ['ink', 'ink-soft', 'ink-faint']) {
+    for (const ground of grounds) {
+      const r = ratio(token(name), ground);
+      assert.ok(r >= 4.5, `--wqa-${name} is ${r.toFixed(2)}:1 on ${ground}, below the 4.5 floor`);
+    }
+  }
+  for (const name of ['critical', 'warn', 'ok', 'info']) {
+    const fg = token(name);
+    const own = ratio(fg, token(`${name}-soft`));
+    assert.ok(own >= 4.5, `--wqa-${name} is ${own.toFixed(2)}:1 on its own wash`);
+    for (const ground of grounds) {
+      assert.ok(ratio(fg, ground) >= 4.5, `--wqa-${name} fails on ${ground}`);
+    }
+  }
+  const white = ratio('#FFFFFF', token('brand'));
+  assert.ok(white >= 4.5, `white on the primary is ${white.toFixed(2)}:1 — a primary button cannot carry its own label`);
+  for (const step of ['critical', 'high', 'medium', 'low', 'info']) {
+    const r = ratio(token(`sev-${step}`), token('surface'));
+    assert.ok(r >= 3, `--wqa-sev-${step} is ${r.toFixed(2)}:1 against the surface, below the 3:1 fill floor`);
+  }
 });

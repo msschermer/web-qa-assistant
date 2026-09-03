@@ -156,15 +156,15 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   const SIMPLE_SPOTLIGHT_CSS = `
     :host{all:initial}
     .ring{position:fixed;z-index:1;border-radius:10px;border:2px solid rgba(255,255,255,.95);
-      box-shadow:0 0 0 4px rgba(180,35,24,.35),0 0 0 8px rgba(180,35,24,.16),0 0 26px 4px rgba(180,35,24,.35);
+      box-shadow:0 0 0 4px rgba(225,67,86,.35),0 0 0 8px rgba(225,67,86,.16),0 0 26px 4px rgba(225,67,86,.35);
       pointer-events:none;opacity:0;transform:scale(.96);
       transition:opacity .22s ease,transform .22s ease,top .16s ease,left .16s ease,width .16s ease,height .16s ease}
     .ring.in{opacity:1;transform:scale(1)}
     .ring.pulse{animation:webqa-hl-pulse 900ms ease-out 2}
     @keyframes webqa-hl-pulse{
-      0%{box-shadow:0 0 0 4px rgba(180,35,24,.6),0 0 0 8px rgba(180,35,24,.28),0 0 40px 6px rgba(180,35,24,.55)}
-      70%{box-shadow:0 0 0 9px rgba(180,35,24,.1),0 0 0 15px rgba(180,35,24,.05),0 0 44px 6px rgba(180,35,24,.2)}
-      100%{box-shadow:0 0 0 4px rgba(180,35,24,.35),0 0 0 8px rgba(180,35,24,.16),0 0 26px 4px rgba(180,35,24,.35)}
+      0%{box-shadow:0 0 0 4px rgba(225,67,86,.6),0 0 0 8px rgba(225,67,86,.28),0 0 40px 6px rgba(225,67,86,.55)}
+      70%{box-shadow:0 0 0 9px rgba(225,67,86,.1),0 0 0 15px rgba(225,67,86,.05),0 0 44px 6px rgba(225,67,86,.2)}
+      100%{box-shadow:0 0 0 4px rgba(225,67,86,.35),0 0 0 8px rgba(225,67,86,.16),0 0 26px 4px rgba(225,67,86,.35)}
     }
     @media(prefers-reduced-motion:reduce){.ring{transition:opacity .12s linear}.ring.pulse{animation:none}}
   `;
@@ -848,9 +848,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         --sa-warn-soft:var(--wqa-warn-soft);
         --sa-success:var(--wqa-ok);
         --sa-success-soft:var(--wqa-ok-soft);
-        --sa-success-line:#ABEFC6;
+        --sa-success-line:color-mix(in srgb,var(--wqa-ok) 40%,transparent);
         
-        --sa-info-soft:#F2F4F7;
+        --sa-info-soft:var(--wqa-sunken);
 
         /* Severity ramp — FILLS ONLY: bars, rails, dots, legend swatches.
            Bright by design and not cleared for text on a tint, which is why
@@ -874,7 +874,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
          actually puts Lumen's face on the overlay. */
       *{box-sizing:border-box;font-family:var(--sa-sans)}
       [hidden]{display:none!important}
-      .backdrop{position:fixed;inset:0;background:rgba(16,24,40,.55);z-index:1;backdrop-filter:blur(2px)}
+      .backdrop{position:fixed;inset:0;background:rgba(7,7,11,.72);z-index:1;backdrop-filter:blur(2px)}
 
       .workspace{position:fixed;inset:24px;z-index:2;background:var(--sa-canvas);border-radius:12px;box-shadow:var(--sa-shadow-lg);display:flex;flex-direction:column;overflow:hidden;color:var(--sa-ink)}
 
@@ -1111,7 +1111,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .cond-mark::after{content:"";position:absolute;inset:5px;border-radius:50%;background:var(--sa-ink-faint)}
       .cond-row[data-state=ok] .cond-mark{background:var(--sa-success-soft);border-color:var(--sa-success-line)}
       .cond-row[data-state=ok] .cond-mark::after{background:var(--sa-success)}
-      .cond-row[data-state=attention] .cond-mark{background:var(--sa-critical-soft);border-color:#FECDCA}
+      .cond-row[data-state=attention] .cond-mark{background:var(--sa-critical-soft);border-color:color-mix(in srgb,var(--wqa-sev-high) 40%,transparent)}
       .cond-row[data-state=attention] .cond-mark::after{background:var(--sa-sev-high)}
       .cond-row[data-state=unknown] .cond-mark::after{background:transparent;border:2px dashed var(--sa-ink-faint);inset:3px}
       .cond-label{font-size:13px;font-weight:600;color:var(--sa-ink)}
@@ -1165,9 +1165,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .badge.fix{background:var(--sa-critical-soft);color:var(--sa-critical)}
       .badge.review{background:var(--sa-warn-soft);color:var(--sa-warn)}
       .badge.sev-critical{background:var(--sa-sev-critical);color:#fff}
-      .badge.sev-high{background:var(--sa-critical-soft);color:var(--sa-critical);border-color:#FECDCA}
-      .badge.sev-medium{background:var(--sa-warn-soft);color:var(--sa-warn);border-color:#FEDF89}
-      .badge.sev-low{background:var(--sa-warn-soft);color:var(--sa-warn);border-color:#FEDF89}
+      .badge.sev-high{background:var(--sa-critical-soft);color:var(--sa-critical);border-color:color-mix(in srgb,var(--wqa-sev-high) 40%,transparent)}
+      .badge.sev-medium{background:var(--sa-warn-soft);color:var(--sa-warn);border-color:color-mix(in srgb,var(--wqa-sev-medium) 40%,transparent)}
+      .badge.sev-low{background:var(--sa-warn-soft);color:var(--sa-warn);border-color:color-mix(in srgb,var(--wqa-sev-medium) 40%,transparent)}
       .badge.sev-info{background:var(--sa-info-soft);color:var(--sa-ink-faint);border-color:var(--sa-line-strong)}
 
       .confidence-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:0 0 auto}
@@ -1195,7 +1195,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
          share and squeezing the pill; the URL columns absorb the slack. */
       .data-table td.col-status,.data-table th.col-status{width:1%;white-space:nowrap}
       .status-pill.healthy{background:var(--sa-success-soft);color:var(--sa-success);border-color:var(--sa-success-line)}
-      .status-pill.broken{background:var(--sa-critical-soft);color:var(--sa-critical);border-color:#FECDCA}
+      .status-pill.broken{background:var(--sa-critical-soft);color:var(--sa-critical);border-color:color-mix(in srgb,var(--wqa-sev-high) 40%,transparent)}
       .status-pill.inconclusive,.status-pill.blocked{background:var(--sa-info-soft);color:var(--sa-ink-faint);border-color:var(--sa-line-strong)}
 
       /* Controls ------------------------------------------------------------ */
@@ -1205,7 +1205,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .btn:disabled{opacity:.5;cursor:default}
       .btn.primary{background:var(--sa-primary);border-color:var(--sa-primary);color:#fff}
       .btn.primary:hover:not(:disabled){background:var(--sa-primary-hover);border-color:var(--sa-primary-hover)}
-      .btn.danger{border-color:#FDA29B;color:var(--sa-critical);background:var(--sa-surface)}
+      .btn.danger{border-color:color-mix(in srgb,var(--wqa-critical) 45%,transparent);color:var(--sa-critical);background:var(--sa-surface)}
       .btn.danger:hover:not(:disabled){background:var(--sa-critical-soft)}
       .btn .departs{width:13px;height:13px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;opacity:.8}
 
@@ -1387,7 +1387,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
            actions used to be the last flex item inside it — reachable only by
            scrolling past every section. Pinned to the visible right edge, they
            stay put while the sections scroll underneath. */
-        .nav-foot{margin:0 0 0 auto;flex-direction:row;padding:0 12px 0 10px;flex:0 0 auto;position:sticky;right:0;background:var(--sa-nav);box-shadow:-10px 0 10px -8px rgba(16,24,40,.18)}
+        .nav-foot{margin:0 0 0 auto;flex-direction:row;padding:0 12px 0 10px;flex:0 0 auto;position:sticky;right:0;background:var(--sa-nav);box-shadow:-10px 0 10px -8px rgba(0,0,0,.62)}
         .main{padding:16px 14px 22px}
         h2{font-size:19px}
         .cond-head{grid-template-columns:22px minmax(0,1fr);gap:8px 12px}
