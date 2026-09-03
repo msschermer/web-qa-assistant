@@ -54,7 +54,7 @@ test('a failed audit status read cannot zero an already-populated results header
   const content = fs.readFileSync('apps/extension/content.js', 'utf8');
   assert.match(
     content,
-    /if \(audit\) \{\s*renderSummaryHeader\(groupsResult\?\.groups \|\| \[\], audit\);/,
+    /if \(audit\) \{\s*renderSummaryHeader\(groupsResult\?\.groups \|\|[^;]*, audit\);/,
     'renderSummaryHeader must only run when an audit was actually read'
   );
   assert.match(

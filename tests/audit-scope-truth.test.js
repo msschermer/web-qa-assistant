@@ -51,7 +51,20 @@ test('a partial crawl is stated in the results header and survives a tab change'
   assert.ok(bannerIdx > 0 && panelIdx > 0, 'both elements should exist');
   assert.ok(bannerIdx < panelIdx, 'the scope banner must sit outside (before) the tab panels');
   // It repaints while a crawl is still running, not only on first render.
-  assert.match(overlay, /renderSiteAuditRenderSection\(audit\); renderScopeBanner\(audit\);/);
+  const poll = overlay.match(/async function pollSiteAuditOnce\(\)[\s\S]*?\n  \}/);
+  assert.ok(poll, 'pollSiteAuditOnce should exist');
+  assert.match(poll[0], /loadAndPaintResults\(\)/, 'the results view repaints while a crawl runs');
+  // And it repaints as one thing. A banner on a faster beat than the tiles put
+  // two different numbers for the same fact on screen at once — first 40 above
+  // 20, then 39 above 32 — which is precisely what the banner exists to stop.
+  // The whole view comes from one read of the audit, or from none.
+  assert.doesNotMatch(poll[0], /renderScopeBanner\(audit\)/, 'the banner must not repaint on its own cadence');
+  const paint = overlay.match(/async function loadAndPaintResults\([\s\S]*?\n  \}/);
+  assert.ok(paint, 'loadAndPaintResults should exist');
+  assert.match(paint[0], /renderScopeBanner\(audit\)/, 'it repaints inside the single results paint instead');
+  assert.match(paint[0], /renderSiteAuditRenderSection\(audit\)/);
+  // A finished crawl gets a last repaint, or the final figures never land.
+  assert.match(poll[0], /due \|\| finished/);
   // Coverage is hatched, never coloured as a defect.
   assert.match(overlay, /\.scope-banner::before\{[^}]*var\(--sa-hatch\)/);
 });
@@ -143,5 +156,118 @@ test('an unknown status filter is dropped rather than reaching SQL', () => {
   assert.equal(store.listUrls(id, { statuses: 'nonsense' }).length, 1);
   assert.equal(store.listUrls(id, { statuses: "a'); DROP TABLE audit_urls;--" }).length, 1);
   assert.equal(store.listUrls(id).length, 1, 'the table is still there');
+  store.close();
+});
+
+/**
+ * A check that has already run must never be reported as one that has not.
+ *
+ * robots.txt, the XML sitemap and llms.txt are all fetched in the discovering
+ * phase, before a single page is crawled. But stats_json was written only by
+ * finishAudit(), so for the whole length of a crawl the results view had no
+ * access to answers the audit had settled minutes earlier — and said so, in
+ * those words: "Not checked in this audit".
+ */
+test('site signals are readable while the crawl is still running', () => {
+  const store = openAuditStore(':memory:');
+  const id = store.createAudit({ siteOrigin: 'https://example.com', startUrl: 'https://example.com/', config: {} });
+  // The audit is still running: nothing has called finishAudit.
+  assert.equal(store.getAudit(id).stats, null);
+  const signals = { origin: 'https://example.com', robots: { present: true, status: 200 }, sitemap: { present: true, urlCount: 106 }, llmsTxt: { present: true, status: 200, bytes: 1576 } };
+  store.mergeAuditStats(id, { siteSignals: signals });
+  assert.deepEqual(store.getAudit(id).stats.siteSignals, signals, 'a settled fact is readable the moment it is settled');
+  // The merge is additive: a later write must not drop what is already there.
+  store.mergeAuditStats(id, { pagesProcessed: 3 });
+  assert.equal(store.getAudit(id).stats.siteSignals.sitemap.urlCount, 106);
+  assert.equal(store.getAudit(id).stats.pagesProcessed, 3);
+  store.close();
+});
+
+test('the crawl records its site signals before it starts crawling', () => {
+  const crawler = fs.readFileSync('packages/crawl/crawler.js', 'utf8');
+  const collect = crawler.indexOf('const siteSignals = await collectSiteSignals(');
+  const persist = crawler.indexOf('store.mergeAuditStats(auditId, { siteSignals })');
+  const firstFetch = crawler.indexOf("store.setPhase(auditId, 'analyzing')");
+  assert.ok(collect > 0 && persist > 0, 'signals should be collected and persisted');
+  assert.ok(persist > collect, 'persisted after collection');
+  assert.ok(persist < firstFetch, 'and long before the crawl finishes');
+});
+
+test('a pending check is never worded as a skipped one', () => {
+  // Three surfaces reported "not checked" for work that was either already
+  // done or still in flight. Each now distinguishes the two.
+  assert.match(overlay, /Being fetched — this audit reads (it|them) before it crawls/);
+  const signals = overlay.match(/function renderSiteSignals\(audit\)[\s\S]*?\n  \}/);
+  assert.ok(signals, 'renderSiteSignals should exist');
+  assert.match(signals[0], /running\s*\?/, 'a running audit is told apart from a finished one');
+  assert.match(signals[0], /Not collected for this audit/, 'and a finished audit with no signals still says so plainly');
+});
+
+/**
+ * The reverse failure: a check that did NOT run must never be reported as a
+ * clean result. seo.js withholds "sitemap URL never reached" when the page
+ * limit cut the crawl short, because unreached would only mean "not gotten to
+ * yet". The Sitemaps tile rendered that silence as a confident 0.
+ */
+test('a withheld sitemap comparison reads as not compared, never as zero', () => {
+  const builder = overlay.match(/    sitemaps\(\) \{[\s\S]*?\n    \},/);
+  assert.ok(builder, 'the sitemaps section builder should exist');
+  const body = builder[0];
+  assert.match(body, /pageLimitStopped\(audit\)/, 'the page limit is what withholds the comparison');
+  assert.match(body, /label: 'Never reached', value: '—'/, 'an em-dash, not a zero');
+  assert.match(body, /not compared/);
+  assert.match(body, /have not been compared against the crawl, because/, 'and the coverage line says why');
+  // The gate it mirrors must still exist on the scanner side.
+  const seo = fs.readFileSync('packages/crawl/scanners/seo.js', 'utf8');
+  assert.match(seo, /if \(unreachedCount > 0 && !ctx\.maxPagesReached\)/);
+});
+
+test('pageLimitStopped is derived from the crawl, not assumed', () => {
+  const fn = overlay.match(/function pageLimitStopped\(audit\)[\s\S]*?\n  \}/);
+  assert.ok(fn, 'pageLimitStopped should exist');
+  assert.match(fn[0], /counts\.queued/, 'a queued backlog is what "the limit stopped it" means');
+});
+
+test('the three published documents have a home on the Overview', () => {
+  // llms.txt previously appeared nowhere in the overlay's own code: it reached
+  // the screen only as a generic row inside the completion-time summary.
+  assert.match(overlay, /<section class="signals" hidden>/);
+  assert.match(overlay, /What this site publishes about itself/);
+  for (const doc of ['robots.txt', 'XML sitemap', 'llms.txt']) {
+    assert.ok(overlay.includes(`name: '${doc}'`), `${doc} needs its own row`);
+  }
+  // A proposed convention's absence is context, never a defect.
+  const llms = overlay.match(/function llmsRow\(llms\)[\s\S]*?\n  \}/)[0];
+  assert.match(llms, /present === false[\s\S]*state: 'ok'/, 'no llms.txt is not a fault');
+  assert.match(llms, /not a defect/);
+  // Each row offers the document itself, so the claim can be checked.
+  assert.match(overlay, /open\.className = 'signal-open'/);
+});
+
+test('indexability is visible per page, not only as an aggregate', () => {
+  // audit_urls.indexable was recorded on every crawled page and shown nowhere,
+  // so "20 of 20 indexable" could not be checked against a single row.
+  assert.match(overlay, /<th data-sort="indexable" class="col-status">Indexable<\/th>/);
+  assert.match(overlay, /pill\.textContent = 'noindex'/);
+  // And both indexability tiles open the pages behind their number.
+  assert.match(overlay, /openUrlsScoped\(\{ indexable: 'no' \}\)/);
+  assert.match(overlay, /openUrlsScoped\(\{ indexable: 'yes' \}\)/);
+});
+
+test('the indexable filter is tri-state, so an unread page is neither', () => {
+  const store = openAuditStore(':memory:');
+  const id = store.createAudit({ siteOrigin: 'https://example.com', startUrl: 'https://example.com/', config: {} });
+  store.enqueueUrl(id, 'https://example.com/a', 'link', 1);
+  store.recordUrlResult(id, 'https://example.com/a', { status: 'fetched', httpStatus: 200, indexable: true });
+  store.enqueueUrl(id, 'https://example.com/b', 'link', 1);
+  store.recordUrlResult(id, 'https://example.com/b', { status: 'fetched', httpStatus: 200, indexable: false });
+  // Never fetched, so its indexability was never read.
+  store.enqueueUrl(id, 'https://example.com/c', 'link', 1);
+
+  assert.equal(store.listUrls(id, { indexable: 'yes' }).length, 1);
+  assert.equal(store.listUrls(id, { indexable: 'no' }).length, 1);
+  // The unread page appears in neither, and is not swept into either bucket.
+  assert.equal(store.listUrls(id).length, 3);
+  assert.equal(store.listUrls(id, { indexable: 'maybe' }).length, 3, 'an unusable value widens rather than errors');
   store.close();
 });

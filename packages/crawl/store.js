@@ -129,6 +129,11 @@ export const HTTP_STATUS_CLASS_RANGE = Object.freeze({
   '2xx': [200, 299], '3xx': [300, 399], '4xx': [400, 499], '5xx': [500, 599]
 });
 
+/** The two indexability states a page can be listed by. `indexable IS NULL`
+ * (never read) is deliberately not selectable: it is a coverage gap, and the
+ * crawl-state filters already describe those pages. */
+export const INDEXABLE_FILTERS = Object.freeze({ yes: 1, no: 0 });
+
 /** Depth is a non-negative integer or nothing. Anything else is dropped rather
  * than rejected, matching how listUrls already treats an unknown status. */
 export function normalizeUrlDepth(input) {
@@ -199,6 +204,7 @@ export function openAuditStore(dbPath) {
     updateAuditStatus: db.prepare('UPDATE audits SET status = ?, phase = ?, error = ?, started_at = COALESCE(started_at, ?), completed_at = ?, stats_json = ? WHERE id = ?'),
     setAuditPhase: db.prepare('UPDATE audits SET phase = ? WHERE id = ?'),
     markRunning: db.prepare("UPDATE audits SET status = 'running', started_at = COALESCE(started_at, ?) WHERE id = ?"),
+    setAuditStats: db.prepare('UPDATE audits SET stats_json = ? WHERE id = ?'),
     listByStatus: db.prepare('SELECT id FROM audits WHERE status = ?'),
     upsertUrl: db.prepare(`
       INSERT INTO audit_urls (audit_id, url, normalized_url, discovered_via, status, http_status, final_url, redirected, collection_method, title, meta_description, canonical, indexable, h1_count, h1_text, word_count, error, fetched_at, schema_types)
@@ -293,6 +299,28 @@ export function openAuditStore(dbPath) {
     markRunning(id) {
       stmt.markRunning.run(nowIso(), id);
     },
+    /**
+     * Merges facts into a running audit's stats blob.
+     *
+     * stats_json used to be written only by finishAudit(), which meant every
+     * fact the crawl establishes early was unreadable until the whole crawl
+     * ended. The site signals are the ones that hurt: robots.txt, the sitemap
+     * and llms.txt are all fetched in the discovering phase, before a single
+     * page is crawled, yet an operator watching the run saw "Not checked in
+     * this audit" for all three — the audit had checked them minutes earlier
+     * and simply had nowhere to put the answer. Reporting a completed check as
+     * unchecked is the exact failure this product exists to avoid.
+     *
+     * A shallow merge is enough: callers own whole top-level keys, and
+     * finishAudit still writes the complete stats at the end.
+     */
+    mergeAuditStats(id, patch = {}) {
+      const row = stmt.getAudit.get(id);
+      if (!row) return null;
+      const merged = { ...safeParse(row.stats_json, {}), ...patch };
+      stmt.setAuditStats.run(JSON.stringify(merged), id);
+      return merged;
+    },
     /** A 'running' audit with no worker left (e.g. a server restart) never
      * finishes on its own — call once at startup so it fails honestly instead
      * of appearing to hang forever. */
@@ -351,11 +379,14 @@ export function openAuditStore(dbPath) {
      * a tile that says 178 must be able to show those 178. Values are checked
      * against URL_STATUSES before they reach SQL, so the interpolated part of
      * the query is only ever a run of '?' placeholders. */
-    listUrls(auditId, { limit = 100, offset = 0, statuses = null, depth = null, httpClass = null } = {}) {
+    listUrls(auditId, { limit = 100, offset = 0, statuses = null, depth = null, httpClass = null, indexable = null } = {}) {
       const wanted = normalizeUrlStatuses(statuses);
       const depthValue = normalizeUrlDepth(depth);
       const range = HTTP_STATUS_CLASS_RANGE[String(httpClass || '').toLowerCase()] || null;
-      if (!wanted.length && depthValue === null && !range) return stmt.listUrls.all(auditId, limit, offset);
+      // Tri-state on purpose: a page whose indexability was never read is
+      // neither indexable nor noindex, and must not be swept into either.
+      const indexableFlag = INDEXABLE_FILTERS[String(indexable || '').toLowerCase()] ?? null;
+      if (!wanted.length && depthValue === null && !range && indexableFlag === null) return stmt.listUrls.all(auditId, limit, offset);
       const where = ['audit_id = ?'];
       const params = [auditId];
       if (wanted.length) {
@@ -366,6 +397,7 @@ export function openAuditStore(dbPath) {
       // A status class is two integer bounds, never an interpolated string:
       // the caller's value only ever selects one of four fixed ranges.
       if (range) { where.push('http_status BETWEEN ? AND ?'); params.push(range[0], range[1]); }
+      if (indexableFlag !== null) { where.push('indexable = ?'); params.push(indexableFlag); }
       return db
         .prepare(`SELECT * FROM audit_urls WHERE ${where.join(' AND ')} ORDER BY id ASC LIMIT ? OFFSET ?`)
         .all(...params, limit, offset);

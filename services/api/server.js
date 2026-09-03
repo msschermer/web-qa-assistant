@@ -501,7 +501,8 @@ app.get('/api/audits/:id/urls', requireExtensionKey, (req, res) => {
   // erroring — same contract as `status`.
   const depth = req.query?.depth === undefined ? null : req.query.depth;
   const httpClass = String(req.query?.httpClass || '').trim() || null;
-  res.json({ ok: true, requestId: req.webQaRequestId, urls: auditStore.listUrls(req.params.id, { ...paginationOf(req), statuses, depth, httpClass }) });
+  const indexable = String(req.query?.indexable || '').trim() || null;
+  res.json({ ok: true, requestId: req.webQaRequestId, urls: auditStore.listUrls(req.params.id, { ...paginationOf(req), statuses, depth, httpClass, indexable }) });
 });
 
 // The distributions the report's discipline sections are drawn from: GROUP BY

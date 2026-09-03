@@ -228,6 +228,10 @@ export async function runAudit({
     fetchSitemapUrls,
     sitemapReadCap: SITEMAP_READ_CAP
   });
+  // Persist them immediately. Everything below this line can take minutes, and
+  // these three facts are already settled — an operator watching the run is
+  // entitled to see them now rather than at the end.
+  store.mergeAuditStats(auditId, { siteSignals });
   const robots = config.respectRobots
     ? await fetchRobotsRules(origin, { userAgent: config.userAgent })
     : { disallow: [], sitemaps: [] };

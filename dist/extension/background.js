@@ -295,7 +295,7 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
     return{findings:result.findings,groups:result.groups};
   }
   if(msg.type==='SITE_AUDIT_URLS'){
-    const qs=new URLSearchParams({limit:String(msg.limit||100),offset:String(msg.offset||0),...(msg.status?{status:msg.status}:{}),...(msg.depth!=null&&msg.depth!==''?{depth:String(msg.depth)}:{}),...(msg.httpClass?{httpClass:msg.httpClass}:{})});
+    const qs=new URLSearchParams({limit:String(msg.limit||100),offset:String(msg.offset||0),...(msg.status?{status:msg.status}:{}),...(msg.depth!=null&&msg.depth!==''?{depth:String(msg.depth)}:{}),...(msg.httpClass?{httpClass:msg.httpClass}:{}),...(msg.indexable?{indexable:msg.indexable}:{})});
     const result=await gatewayGet(`/api/audits/${encodeURIComponent(msg.auditId)}/urls?${qs}`,15000,'SITE_AUDIT_URLS');
     return{urls:result.urls};
   }

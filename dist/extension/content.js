@@ -1096,6 +1096,32 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .cond-confidence{display:inline-block;margin-top:6px;font-size:11.5px;color:var(--sa-ink-faint);background:var(--sa-subtle);border-radius:999px;padding:2px 9px}
       .conditions-note{margin:0;padding:0 16px 14px;font-size:12px;line-height:1.5;color:var(--sa-ink-faint)}
 
+      /* Published documents ------------------------------------------------
+         robots.txt, the XML sitemap and llms.txt are fetched once at the start
+         of the audit, before a page is crawled, and are settled facts from
+         that moment. They get their own readout on the Overview because they
+         are statements the site makes about itself rather than findings, and
+         because a healthy one produces no finding at all — which is why all
+         three previously looked unchecked. Same mark/label/state vocabulary as
+         the Site conditions rows above them. */
+      .signals{margin:0 0 18px;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);overflow:hidden}
+      .signals>.feed-heading{padding:14px 16px 0;margin:0}
+      .signals-list{list-style:none;margin:10px 0 0;padding:0}
+      .signal-row{display:grid;grid-template-columns:22px 128px minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:11px 16px;border-top:1px solid var(--sa-line);font-size:13px}
+      .signal-row .cond-mark{margin:0}
+      .signal-name{font-size:13px;font-weight:600;color:var(--sa-ink);font-family:var(--sa-mono)}
+      .signal-headline{color:var(--sa-ink-soft);overflow-wrap:anywhere}
+      .signal-open{flex:0 0 auto;font-size:12.5px;color:var(--sa-primary);background:none;border:0;padding:4px 2px;cursor:pointer;text-decoration:underline;font-family:inherit}
+      .signal-open:hover{color:var(--sa-primary-hover)}
+      .signal-open:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
+      .signals-note{margin:0;padding:12px 16px 14px;font-size:12px;line-height:1.5;color:var(--sa-ink-faint);border-top:1px solid var(--sa-line)}
+
+      @media(max-width:900px){
+        .signal-row{grid-template-columns:22px minmax(0,1fr) auto;gap:8px 12px}
+        .signal-headline{grid-column:2/-1}
+        .signal-row .cond-state{grid-column:2}
+      }
+
       /* Findings ------------------------------------------------------------ */
       .findings-list{list-style:none;margin:0;padding:0;display:grid;gap:10px;counter-reset:keynote}
       .finding-row{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);overflow:hidden;counter-increment:keynote}
@@ -1624,6 +1650,11 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             <ul class="conditions-list"></ul>
             <p class="conditions-note">Each line states what was observed and the confidence that observation supports. There is no score: a single number would hide the evidence a client is entitled to see.</p>
           </section>
+          <section class="signals" hidden>
+            <h3 class="feed-heading">What this site publishes about itself</h3>
+            <ul class="signals-list"></ul>
+            <p class="signals-note">Fetched directly at the start of this audit, independently of the crawl and of whether the crawl obeys them — so these are settled before the first page is checked. A healthy one raises no finding, which is why they are stated here rather than left to the findings list.</p>
+          </section>
           <!-- The shape of what was crawled: how deep the site goes and what
                it answered. Both open the pages behind any bar. -->
           <div class="section-grid crawl-shape"></div>
@@ -1677,7 +1708,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             </div>
             <div class="scoped-note" role="status" hidden><span class="scoped-text"></span><button type="button" class="link-btn scoped-clear">Show all pages</button></div>
             <nav class="section-index" aria-label="Site sections"></nav>
-            <table class="data-table urls-table"><thead><tr><th data-sort="url">Page</th><th data-sort="status" class="col-status">Status</th><th data-sort="title">Title</th><th data-sort="word_count">Words</th><th data-sort="schema">Structured data</th></tr></thead><tbody class="urls-body"></tbody></table>
+            <table class="data-table urls-table"><thead><tr><th data-sort="url">Page</th><th data-sort="status" class="col-status">Status</th><th data-sort="indexable" class="col-status">Indexable</th><th data-sort="title">Title</th><th data-sort="word_count">Words</th><th data-sort="schema">Structured data</th></tr></thead><tbody class="urls-body"></tbody></table>
             <div class="pager"><button type="button" class="btn pager-prev urls-prev">Prev</button><span class="pager-label urls-label"></span><button type="button" class="btn pager-next urls-next">Next</button></div>
           </div>
           <div class="tab-panel links-panel" hidden>
@@ -1748,7 +1779,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     siteAudit = {
       host, shadow, auditId: null, pollTimer: null, startedAt: 0, view: 'setup', tab: 'overview', siteOrigin: origin, renderRunning: false,
       urlsOffset: 0, urlsSearch: '', urlsSort: { key: 'url', dir: 'asc' }, totalUrls: 0, expandedUrl: null,
-      urlsStatus: '', urlsDepth: null, urlsHttpClass: '', urlCounts: {}, distributions: null, audit: null,
+      urlsStatus: '', urlsDepth: null, urlsHttpClass: '', urlsIndexable: '', urlCounts: {}, distributions: null, audit: null,
       linksOffset: 0, linksSearch: '', linksStatus: '', totalLinksByStatus: {}, urlsSection: '',
       findingsSearch: '', findingsCategory: '', findingsHideUnconfirmed: false, findingsImpactClass: '', expandedFindingKey: null, tabDefault: 'overview', findingsSort: 'severity'
     };
@@ -1783,6 +1814,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       siteAudit.urlsStatus = '';
       siteAudit.urlsDepth = null;
       siteAudit.urlsHttpClass = '';
+      siteAudit.urlsIndexable = '';
       siteAudit.urlsOffset = 0;
       loadSiteAuditUrls();
     });
@@ -1934,6 +1966,13 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     await chrome.runtime.sendMessage({ type: 'SITE_AUDIT_CANCEL', auditId: siteAudit.auditId }).catch(() => {});
   }
 
+  /** How often the results view repaints while a crawl runs. It is the only
+   * cadence that view has — nothing repaints on its own faster beat, because
+   * two cadences means two numbers for the same fact. Fast enough that nothing
+   * on screen is visibly stale, slow enough not to hammer the gateway for the
+   * length of a crawl. */
+  const SITE_AUDIT_RESULTS_REFRESH_MS = 3000;
+
   function beginPolling() {
     stopPolling();
     pollSiteAuditOnce();
@@ -1946,8 +1985,24 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const audit = r?.audit;
     if (!audit || !siteAudit) return;
     if (siteAudit.view === 'progress') renderSiteAuditProgress(audit);
-    if (siteAudit.view === 'results') { renderSiteAuditRenderSection(audit); renderScopeBanner(audit); }
-    if (['complete', 'cancelled', 'failed'].includes(audit.status) && siteAudit.view === 'progress') {
+    const finished = ['complete', 'cancelled', 'failed'].includes(audit.status);
+    if (siteAudit.view === 'results') {
+      // ONE cadence for the whole view. Repainting the banner every 2s while
+      // the tiles waited for a slower beat was the same bug in smaller form:
+      // the banner said 39 fetched above tiles that said 32, because the two
+      // came from different reads. Every number on this screen now comes from
+      // a single read of the audit, or from none.
+      const now = Date.now();
+      const due = now - (siteAudit.lastResultsPaint || 0) >= SITE_AUDIT_RESULTS_REFRESH_MS;
+      // A finished crawl gets one last unconditional repaint: polling stops on
+      // the same tick, so without this the final figures never land and the
+      // header sits on "Still running" over a completed audit.
+      if (due || finished) {
+        siteAudit.lastResultsPaint = now;
+        loadAndPaintResults();
+      }
+    }
+    if (finished && siteAudit.view === 'progress') {
       stopPolling();
       showSiteAuditResults();
       return;
@@ -2126,21 +2181,39 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
   async function showSiteAuditResults() {
     setSiteAuditView('results');
+    await loadAndPaintResults({ switchTab: true });
+  }
+
+  /**
+   * Reads the audit and repaints every part of the results view from it.
+   *
+   * This is one function rather than an initial paint plus a partial refresh
+   * because the partial refresh was the bug: while a crawl ran, polling
+   * repainted only the scope banner and the render panel, so the banner
+   * announced "40 of 113 discovered pages were fetched" directly above tiles
+   * that still said 20 and a nav that still said 20. Two numbers for the same
+   * fact on one screen, and the banner's whole purpose is to stop exactly that.
+   * Everything on this view now moves together or not at all.
+   */
+  async function loadAndPaintResults({ switchTab = false } = {}) {
     const shadow = siteAudit.shadow;
     // Distributions travel with the status read: every discipline section and
     // both Overview charts are drawn from them, so fetching them lazily per
     // section would make the nav's own state chips lag behind the nav.
-    const [statusResult, renderStateResult, distributionsResult] = await Promise.all([
+    const [statusResult, renderStateResult, distributionsResult, groupsResult] = await Promise.all([
       chrome.runtime.sendMessage({ type: 'SITE_AUDIT_STATUS', auditId: siteAudit.auditId }).catch(() => null),
       chrome.runtime.sendMessage({ type: 'SITE_AUDIT_RENDER_STATE', auditId: siteAudit.auditId }).catch(() => null),
-      chrome.runtime.sendMessage({ type: 'SITE_AUDIT_DISTRIBUTIONS', auditId: siteAudit.auditId }).catch(() => null)
+      chrome.runtime.sendMessage({ type: 'SITE_AUDIT_DISTRIBUTIONS', auditId: siteAudit.auditId }).catch(() => null),
+      chrome.runtime.sendMessage({ type: 'SITE_AUDIT_FINDINGS', auditId: siteAudit.auditId, groupByRule: true }).catch(() => null)
     ]);
     if (!siteAudit) return; // closeSiteAudit() may have run while the messages were in flight
+    siteAudit.lastResultsPaint = Date.now();
     const audit = statusResult?.audit;
     siteAudit.renderRunning = Boolean(renderStateResult?.running);
     // Keep the last successful read: a failed refresh must not blank sections
     // that were correctly drawn a moment ago.
     if (distributionsResult?.distributions) siteAudit.distributions = distributionsResult.distributions;
+    if (groupsResult?.groups) siteAudit.rawFindingGroups = groupsResult.groups;
     if (audit) {
       siteAudit.audit = audit;
       const counts = audit.urlCounts || {};
@@ -2151,17 +2224,15 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       renderScopeBanner(audit);
       renderCoverageBanner(audit, counts);
       siteAudit.urlCounts = counts;
-      siteAudit.totalUrls = urlTotalForStatus(siteAudit.urlsStatus);
+      siteAudit.totalUrls = urlTotalForScope(currentUrlScope());
       siteAudit.totalLinksByStatus = linkCounts;
     }
-    const groupsResult = await chrome.runtime.sendMessage({ type: 'SITE_AUDIT_FINDINGS', auditId: siteAudit.auditId, groupByRule: true }).catch(() => null);
-    if (!siteAudit) return;
-    if (groupsResult?.groups) siteAudit.rawFindingGroups = groupsResult.groups;
     // The nav's state chips depend on both the audit facts and the finding
     // groups, so they are painted once both have landed.
     renderNavStates();
     if (audit) {
-      renderSummaryHeader(groupsResult?.groups || [], audit);
+      renderSummaryHeader(groupsResult?.groups || siteAudit.rawFindingGroups || [], audit);
+      renderSiteSignals(audit);
       renderCrawlShape();
     } else {
       // Say so rather than showing zeros: an unreachable audit is a coverage
@@ -2175,7 +2246,19 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     // need live updates while this view is open, even though the crawl-done
     // branch in pollSiteAuditOnce already stopped the original poll timer.
     if (siteAudit.renderRunning || audit?.status === 'running') beginPolling();
-    await switchSiteAuditTab(siteAudit.tab || 'findings');
+    if (switchTab) return switchSiteAuditTab(siteAudit.tab || 'findings');
+    // A refresh must not move the operator: repaint whatever they are looking
+    // at, in place.
+    return repaintCurrentTab();
+  }
+
+  /** Repaints the open tab without changing which tab is open. */
+  function repaintCurrentTab() {
+    const tab = siteAudit.tab;
+    if (SITE_AUDIT_DISCIPLINE_META[tab]) return renderDisciplineSection(tab);
+    if (tab === 'findings') return renderFindingsList();
+    if (tab === 'urls') return loadSiteAuditUrls();
+    if (tab === 'links') return loadSiteAuditLinks();
   }
 
   const SITE_AUDIT_SEVERITY_RANK = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
@@ -2396,6 +2479,145 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       li.appendChild(button);
       list.appendChild(li);
     }
+  }
+
+  /** Whether the crawl stopped because it ran out of page budget rather than
+   * because it ran out of site. Several readouts have to qualify themselves
+   * when this is true — a comparison against a crawl that was cut short is a
+   * statement about the budget, not about the site. */
+  function pageLimitStopped(audit) {
+    const counts = audit?.urlCounts || {};
+    return Number(counts.queued || 0) > 0;
+  }
+
+  /**
+   * The three documents a site publishes about itself: robots.txt, the XML
+   * sitemap, and llms.txt.
+   *
+   * They are collected once, before the crawl, and are settled from that
+   * moment — so this renders during a running audit as well as a finished one.
+   * They previously reached the screen only through the Site conditions
+   * summary, which is composed at completion, so an operator watching a run
+   * was told all three were "not checked" minutes after they had been fetched.
+   *
+   * Each row offers to open the document itself: the operator can check our
+   * claim against the file in one click, which is the difference between a
+   * report and an assertion.
+   */
+  function renderSiteSignals(audit) {
+    const shadow = siteAudit.shadow;
+    const section = shadow.querySelector('.signals');
+    const list = shadow.querySelector('.signals-list');
+    if (!section || !list) return;
+    const signals = audit?.stats?.siteSignals;
+    const running = audit?.status === 'running';
+    const origin = signals?.origin || siteAudit.siteOrigin || '';
+
+    if (!signals) {
+      // Distinguish "not collected yet" from "never collected". The first is a
+      // moment in a running audit; the second is a coverage gap in a finished
+      // one, and they must not read alike.
+      section.hidden = false;
+      list.innerHTML = '';
+      list.appendChild(signalRow({
+        name: 'robots.txt, sitemap, llms.txt',
+        state: 'unknown',
+        headline: running
+          ? 'Being fetched — this audit reads them before it crawls.'
+          : 'Not collected for this audit, so nothing about them was established.'
+      }));
+      return;
+    }
+
+    section.hidden = false;
+    list.innerHTML = '';
+    const robots = signals.robots || {};
+    const sitemap = signals.sitemap || {};
+    const llms = signals.llmsTxt || {};
+
+    list.appendChild(signalRow(robotsRow(robots), origin ? `${origin}/robots.txt` : ''));
+    list.appendChild(signalRow(sitemapRow(sitemap, audit), sitemap.source || ''));
+    list.appendChild(signalRow(llmsRow(llms), origin ? `${origin}/llms.txt` : ''));
+  }
+
+  function robotsRow(robots) {
+    if (robots.present === true && robots.blocksEverything) {
+      return { name: 'robots.txt', state: 'attention', label: 'Disallows the whole site', headline: `HTTP ${robots.status} — contains "Disallow: /" for every user agent, so search engines that respect it will not crawl any page here.` };
+    }
+    if (robots.present === true) {
+      const n = Number(robots.disallowCount || 0);
+      const declared = (robots.sitemaps || []).length;
+      return {
+        name: 'robots.txt',
+        state: 'ok',
+        label: 'Allows crawling',
+        headline: `HTTP ${robots.status} · ${n} disallow rule${n === 1 ? '' : 's'}, no site-wide block · ${declared ? `declares ${declared} sitemap${declared === 1 ? '' : 's'}` : 'declares no sitemap'}`
+      };
+    }
+    if (robots.present === false) {
+      return { name: 'robots.txt', state: 'ok', label: 'Not published', headline: `HTTP ${robots.status} — with no file present, crawlers treat the whole site as allowed.` };
+    }
+    return { name: 'robots.txt', state: 'unknown', label: 'Could not be read', headline: robots.error ? `Request failed: ${robots.error}` : `HTTP ${robots.status || 0} — whether crawling is disallowed could not be established.` };
+  }
+
+  function sitemapRow(sitemap, audit) {
+    if (sitemap.present) {
+      const n = Number(sitemap.urlCount || 0);
+      const parts = [`${n} URL${n === 1 ? '' : 's'} read`];
+      parts.push(sitemap.declaredInRobots ? 'declared in robots.txt' : 'found at the conventional path');
+      if (sitemap.truncated) parts.push('longer than this audit reads');
+      // The comparison against the crawl is only meaningful when the crawl
+      // finished on its own. Saying so here stops the Sitemaps section's zeros
+      // from being read as agreement.
+      if (pageLimitStopped(audit)) parts.push('not yet compared against the crawl — the page limit stopped it first');
+      return { name: 'XML sitemap', state: 'ok', label: 'Published', headline: parts.join(' · ') };
+    }
+    if (sitemap.declaredInRobots) {
+      return { name: 'XML sitemap', state: 'attention', label: 'Declared but unreadable', headline: `robots.txt declares ${(sitemap.declared || []).length} sitemap${(sitemap.declared || []).length === 1 ? '' : 's'}, but no URLs could be read from ${(sitemap.declared || []).slice(0, 2).join(', ')}. A search engine following that declaration would find nothing.` };
+    }
+    return { name: 'XML sitemap', state: 'attention', label: 'None found', headline: 'Nothing declared in robots.txt and /sitemap.xml returned no URLs, so discovery depends entirely on internal linking.' };
+  }
+
+  function llmsRow(llms) {
+    if (llms.present === true) {
+      return { name: 'llms.txt', state: 'ok', label: 'Published', headline: `HTTP ${llms.status} · ${llms.bytes} bytes. A proposed convention for describing a site to language models — publishing one is a deliberate choice.` };
+    }
+    if (llms.present === false) {
+      // Never a defect: a proposed convention's absence is context, not fault.
+      return { name: 'llms.txt', state: 'ok', label: 'Not published', headline: `HTTP ${llms.status}. A proposed convention, not a standard — its absence is not a defect and is reported here as context only.` };
+    }
+    return { name: 'llms.txt', state: 'unknown', label: 'Could not be read', headline: `HTTP ${llms.status || 0} — whether one is published could not be established.` };
+  }
+
+  /** One published-document row. Every value is set as text: robots.txt error
+   * strings and sitemap URLs are remote content and never reach markup. */
+  function signalRow({ name, state, label = '', headline = '' }, openUrl = '') {
+    const li = document.createElement('li');
+    li.className = 'cond-row signal-row';
+    li.dataset.state = state;
+    const mark = document.createElement('span');
+    mark.className = 'cond-mark';
+    mark.setAttribute('aria-hidden', 'true');
+    const nameEl = document.createElement('span');
+    nameEl.className = 'signal-name';
+    nameEl.textContent = name;
+    const headlineEl = document.createElement('span');
+    headlineEl.className = 'signal-headline';
+    headlineEl.textContent = headline;
+    const stateEl = document.createElement('span');
+    stateEl.className = 'cond-state';
+    stateEl.textContent = label || SITE_AUDIT_STATE_WORD[state] || state;
+    li.append(mark, nameEl, headlineEl, stateEl);
+    if (openUrl) {
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'signal-open';
+      open.textContent = 'Open';
+      open.title = openUrl;
+      open.addEventListener('click', () => window.open(openUrl, '_blank', 'noopener'));
+      li.appendChild(open);
+    }
+    return li;
   }
 
   const SITE_AUDIT_HTTP_CLASSES = [
@@ -2819,9 +3041,12 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         : { state: 'unknown', text: 'No page was fetched, so no indexability directive was read.' };
       return {
         coverage,
+        // Both indexability tiles open the pages behind them. An aggregate an
+        // operator cannot check against actual rows is an assertion, not a
+        // report — and the Pages table now carries the per-page answer.
         tiles: [
-          { label: 'Indexable', value: Number(pages.indexable || 0), sub: fetched ? `of ${fetched} fetched pages` : '' },
-          { label: 'noindex', value: Number(pages.noindex || 0), sub: 'excluded from search results' },
+          { label: 'Indexable', value: Number(pages.indexable || 0), sub: fetched ? `of ${fetched} fetched pages` : '', open: () => openUrlsScoped({ indexable: 'yes' }), openLabel: 'View the indexable pages' },
+          { label: 'noindex', value: Number(pages.noindex || 0), sub: 'excluded from search results', open: () => openUrlsScoped({ indexable: 'no' }), openLabel: 'View the pages that ask not to be indexed' },
           { label: 'Redirected', value: Number(pages.redirected || 0), sub: 'resolved to a different URL' },
           { label: 'No canonical', value: Number(canonical.missing || 0), sub: 'declare none at all' }
         ],
@@ -2849,7 +3074,10 @@ if (!globalThis.__WEB_QA_CONTENT__) {
                 ['Confidence', robots.confidence]
               ]
             })
-            : readoutBlock({ title: 'robots.txt', rows: [['Present', 'Not checked in this audit']] })
+            // "Not checked" was wrong twice over: robots.txt is fetched before
+            // the crawl starts, and while a crawl runs the answer simply has
+            // not been read back yet. A pending check is not a skipped one.
+            : readoutBlock({ title: 'robots.txt', rows: [['Present', siteAudit.audit?.status === 'running' ? 'Being fetched — this audit reads it before it crawls' : 'Not checked in this audit']] })
         ]
       };
     },
@@ -2988,16 +3216,45 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     },
 
     sitemaps() {
-      const signals = siteAudit.audit?.stats?.siteSignals || null;
+      const audit = siteAudit.audit || {};
+      const signals = audit.stats?.siteSignals || null;
       const sitemap = signals?.sitemap || null;
       const robots = signals?.robots || null;
+      const running = audit.status === 'running';
       const orphan = ruleInstances(/^seo\.sitemap-orphan/);
       const unreached = ruleInstances(/^seo\.sitemap-unreached/);
       const blocked = ruleInstances(/^seo\.sitemap-blocked-by-robots/);
+      // "Never reached" is only computed when the crawl exhausted its frontier
+      // on its own (packages/crawl/scanners/seo.js gates it on maxPagesReached),
+      // because otherwise "unreached" just means "not gotten to yet". The check
+      // is correctly withheld — but this tile used to render that silence as a
+      // confident 0, which reports a coverage gap as agreement. On any crawl
+      // that hits its page limit, which is most of them.
+      const reconciled = Boolean(sitemap?.present) && !sitemap.truncated && !pageLimitStopped(audit) && !running;
+      const withheldReason = !sitemap?.present ? ''
+        : running ? 'the crawl is still running'
+          : sitemap.truncated ? 'the sitemap is longer than this audit reads'
+            : pageLimitStopped(audit) ? 'the page limit stopped the crawl first'
+              : '';
       const coverage = !signals
-        ? { state: 'unknown', text: 'Site signals were not collected for this audit, so the presence of a sitemap was never established.' }
+        ? {
+          state: 'unknown',
+          text: running
+            ? 'The sitemap is being fetched — this audit reads it before it crawls.'
+            : 'Site signals were not collected for this audit, so the presence of a sitemap was never established.'
+        }
         : sitemap?.present
-          ? { state: (orphan || unreached || blocked) ? 'attention' : 'ok', text: `Read <b>${sitemap.urlCount}</b> URL${sitemap.urlCount === 1 ? '' : 's'} from the sitemap and compared them against what the crawl reached.${sitemap.truncated ? ' The sitemap is longer than this audit reads, so the comparison is partial.' : ''}` }
+          ? {
+            // Reading the sitemap is itself an established fact — 106 URLs is
+            // not "not established". Only the comparison against the crawl was
+            // withheld, and the coverage sentence and the em-dash tile below
+            // both say so. Marking the whole section unknown overstated the gap.
+            state: (orphan || unreached || blocked) ? 'attention' : 'ok',
+            text: `Read <b>${Number(sitemap.urlCount || 0)}</b> URL${Number(sitemap.urlCount) === 1 ? '' : 's'} from the sitemap.`,
+            extra: reconciled
+              ? 'Every one of them was compared against what the crawl reached.'
+              : `They have not been compared against the crawl, because ${withheldReason}. Sitemap URLs the crawl never got to are not evidence of a problem, so this audit does not report any.`
+          }
           : { state: 'attention', text: 'No sitemap could be read, so discovery depends entirely on internal linking.' };
       return {
         coverage,
@@ -3007,7 +3264,10 @@ if (!globalThis.__WEB_QA_CONTENT__) {
           ? [
             { label: 'Sitemap URLs', value: Number(sitemap.urlCount || 0), sub: sitemap.truncated ? 'read up to this audit’s cap' : 'listed by the site' },
             { label: 'Not in the sitemap', value: orphan, sub: 'crawled but unlisted' },
-            { label: 'Never reached', value: unreached, sub: 'listed but not crawlable' },
+            // An em-dash, never a zero: this comparison did not run.
+            reconciled
+              ? { label: 'Never reached', value: unreached, sub: 'listed but not crawlable' }
+              : { label: 'Never reached', value: '—', sub: 'not compared' },
             { label: 'Blocked by robots', value: blocked, sub: 'listed and disallowed' }
           ]
           : [],
@@ -3020,9 +3280,10 @@ if (!globalThis.__WEB_QA_CONTENT__) {
                 ['Read from', sitemap.source || 'Nothing could be read'],
                 ['URLs read', sitemap.urlCount],
                 ['Truncated', sitemap.truncated ? 'Yes — longer than this audit reads' : 'No'],
+                ['Compared against the crawl', reconciled ? 'Yes' : `No — ${withheldReason || 'nothing was read to compare'}`],
                 ['Confidence', sitemap.confidence]
               ]
-              : [['Checked', 'No']]
+              : [['Checked', running ? 'Not yet — the crawl is still running' : 'No']]
           }),
           readoutBlock({
             title: 'What robots.txt declares',
@@ -3031,7 +3292,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
                 ['robots.txt', robots.present === true ? `HTTP ${robots.status}` : robots.present === false ? `Absent (HTTP ${robots.status})` : 'Could not be read'],
                 ['Sitemaps listed', robots.sitemaps?.length ? robots.sitemaps.join(', ') : 'None']
               ]
-              : [['robots.txt', 'Not checked']]
+              : [['robots.txt', running ? 'Being fetched' : 'Not checked in this audit']]
           })
         ]
       };
@@ -3647,7 +3908,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
    * one is the honest ceiling — the store intersects them, and this is a
    * pager label, not a claim about how many rows matched.
    */
-  function urlTotalForScope({ statuses = '', depth = null, httpClass = '' } = {}) {
+  function urlTotalForScope({ statuses = '', depth = null, httpClass = '', indexable = '' } = {}) {
     const counts = siteAudit.urlCounts || {};
     const all = Object.values(counts).reduce((s, n) => s + Number(n || 0), 0);
     const totals = [];
@@ -3665,6 +3926,10 @@ if (!globalThis.__WEB_QA_CONTENT__) {
           .reduce((s, r) => s + r.n, 0)
         : all);
     }
+    if (indexable) {
+      const pages = siteAudit.distributions?.pages || {};
+      totals.push(Number(indexable === 'no' ? pages.noindex || 0 : pages.indexable || 0));
+    }
     return totals.length ? Math.min(...totals) : all;
   }
 
@@ -3674,26 +3939,31 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   }
 
   function currentUrlScope() {
-    return { statuses: siteAudit.urlsStatus || '', depth: siteAudit.urlsDepth ?? null, httpClass: siteAudit.urlsHttpClass || '' };
+    return { statuses: siteAudit.urlsStatus || '', depth: siteAudit.urlsDepth ?? null, httpClass: siteAudit.urlsHttpClass || '', indexable: siteAudit.urlsIndexable || '' };
   }
 
   function renderScopedNote() {
     const note = siteAudit.shadow.querySelector('.scoped-note');
     if (!note) return;
     const scope = currentUrlScope();
-    const active = Boolean(scope.statuses || scope.depth !== null || scope.httpClass);
+    const active = Boolean(scope.statuses || scope.depth !== null || scope.httpClass || scope.indexable);
     if (!active) { note.hidden = true; return; }
     const total = urlTotalForScope(scope);
-    const copy = scope.statuses && scope.depth === null && !scope.httpClass ? URL_STATUS_SCOPE_COPY[scope.statuses] : null;
+    const only = (key) => Object.entries(scope).every(([k, v]) => (k === key ? true : v === '' || v === null));
+    const copy = scope.statuses && only('statuses') ? URL_STATUS_SCOPE_COPY[scope.statuses] : null;
     let text;
     if (copy) text = copy(total);
     else if (scope.depth !== null && !scope.statuses && !scope.httpClass) {
       text = Number(scope.depth) === 0
         ? `Showing the <b>${total}</b> page${total === 1 ? '' : 's'} the crawl started from, including everything the sitemap named.`
         : `Showing the <b>${total}</b> page${total === 1 ? '' : 's'} discovered <b>${Number(scope.depth)}</b> link hop${Number(scope.depth) === 1 ? '' : 's'} from the start URL.`;
-    } else if (scope.httpClass && !scope.statuses && scope.depth === null) {
+    } else if (scope.httpClass && only('httpClass')) {
       // The class id is one of four fixed literals, never crawl output.
       text = `Showing the <b>${total}</b> page${total === 1 ? '' : 's'} that answered <b>${scope.httpClass}</b>.`;
+    } else if (scope.indexable && only('indexable')) {
+      text = scope.indexable === 'no'
+        ? `Showing the <b>${total}</b> page${total === 1 ? '' : 's'} that ask search engines not to index them.`
+        : `Showing the <b>${total}</b> page${total === 1 ? '' : 's'} that are indexable.`;
     } else {
       text = `Showing <b>${total}</b> of ${urlTotalForScope({})} pages.`;
     }
@@ -3709,7 +3979,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       limit: SITE_AUDIT_PAGE_SIZE, offset: siteAudit.urlsOffset,
       ...(scope.statuses ? { status: scope.statuses } : {}),
       ...(scope.depth !== null ? { depth: scope.depth } : {}),
-      ...(scope.httpClass ? { httpClass: scope.httpClass } : {})
+      ...(scope.httpClass ? { httpClass: scope.httpClass } : {}),
+      ...(scope.indexable ? { indexable: scope.indexable } : {})
     }).catch(() => null);
     if (!siteAudit) return;
     siteAudit.rawUrls = r?.urls || [];
@@ -3725,10 +3996,11 @@ if (!globalThis.__WEB_QA_CONTENT__) {
    * intersected with whatever filter the last drill-in left behind. Offset
    * resets too, because page 3 of the unfiltered list is not page 3 of this one.
    */
-  function openUrlsScoped({ statuses = '', depth = null, httpClass = '' } = {}) {
+  function openUrlsScoped({ statuses = '', depth = null, httpClass = '', indexable = '' } = {}) {
     siteAudit.urlsStatus = statuses || '';
     siteAudit.urlsDepth = depth === null || depth === '' ? null : Number(depth);
     siteAudit.urlsHttpClass = httpClass || '';
+    siteAudit.urlsIndexable = indexable || '';
     siteAudit.urlsOffset = 0;
     siteAudit.urlsSearch = '';
     siteAudit.urlsSection = '';
@@ -3805,7 +4077,12 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       th.classList.toggle('sorted-desc', th.dataset.sort === siteAudit.urlsSort.key && siteAudit.urlsSort.dir === 'desc');
     }
     const search = String(siteAudit.urlsSearch || '').trim().toLowerCase();
-    const sortValue = (u, key) => key === 'status' ? (u.http_status || u.status || '') : key === 'schema' ? (u.schema_types || '') : (u[key] || '');
+    const sortValue = (u, key) => key === 'status' ? (u.http_status || u.status || '')
+      : key === 'schema' ? (u.schema_types || '')
+        // Sort noindex to one end rather than mixing it through: the point of
+        // sorting this column is to gather the exceptions.
+        : key === 'indexable' ? (u.indexable === null || u.indexable === undefined ? 2 : Number(u.indexable))
+          : (u[key] || '');
     const { key, dir } = siteAudit.urlsSort;
     const rows = (siteAudit.rawUrls || [])
       .filter((u) => !siteAudit.urlsSection || urlSection(u.url) === siteAudit.urlsSection)
@@ -3818,7 +4095,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     for (const u of rows) {
       let schemaLabel = '—';
       try { const types = JSON.parse(u.schema_types || '[]'); if (types.length) schemaLabel = types.join(', '); } catch {}
-      const tr = siteAuditRow([shortUrl(u.url), '', u.title || '', u.word_count ?? '—', schemaLabel], { mono: [0] });
+      const tr = siteAuditRow([shortUrl(u.url), '', '', u.title || '', u.word_count ?? '—', schemaLabel], { mono: [0] });
       tr.cells[0].title = u.url;
       // Status carries a pill so a 404 among two hundred 200s is findable
       // by scanning rather than by reading every row.
@@ -3830,17 +4107,40 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       tr.cells[1].textContent = '';
       tr.cells[1].className = 'col-status';
       tr.cells[1].appendChild(statusPill);
+      // Indexability was stored on every crawled page and shown nowhere, so
+      // "20 of 20 indexable" could not be checked against any actual page.
+      // Only the exception gets a pill: noindex is what an operator scans for,
+      // and a page being indexable is the unremarkable case.
+      tr.cells[2].className = 'col-status';
+      tr.cells[2].textContent = '';
+      if (u.indexable === null || u.indexable === undefined) {
+        tr.cells[2].textContent = '—';
+        tr.cells[2].title = 'Not read — this page was never fetched.';
+      } else if (Number(u.indexable) === 1) {
+        tr.cells[2].textContent = 'Yes';
+      } else {
+        const pill = document.createElement('span');
+        pill.className = 'status-pill blocked';
+        pill.textContent = 'noindex';
+        pill.title = 'This page asks search engines not to index it.';
+        tr.cells[2].appendChild(pill);
+      }
       tr.classList.add('row-expand');
       tr.addEventListener('click', () => toggleUrlDetail(u.url, tr));
       body.appendChild(tr);
-      if (siteAudit.expandedUrl === u.url) body.appendChild(buildUrlDetailRow(u.url, 5));
+      if (siteAudit.expandedUrl === u.url) body.appendChild(buildUrlDetailRow(u.url, 6));
     }
     const shown = siteAudit.rawUrls?.length || 0;
     const from = shown ? siteAudit.urlsOffset + 1 : 0;
     const to = siteAudit.urlsOffset + shown;
-    shadow.querySelector('.urls-label').textContent = siteAudit.totalUrls ? `${from}–${to} of ${siteAudit.totalUrls}` : '';
+    // The scope total is derived from the distributions, which are read on the
+    // refresh beat, while these rows are read on demand. During a running
+    // crawl the rows can legitimately arrive first, and "1–40 of 32" is not a
+    // position anyone can act on. The rows in hand are the floor.
+    const total = Math.max(Number(siteAudit.totalUrls || 0), to);
+    shadow.querySelector('.urls-label').textContent = total ? `${from}–${to} of ${total}` : '';
     shadow.querySelector('.urls-prev').disabled = siteAudit.urlsOffset === 0;
-    shadow.querySelector('.urls-next').disabled = to >= siteAudit.totalUrls || shown < SITE_AUDIT_PAGE_SIZE;
+    shadow.querySelector('.urls-next').disabled = to >= total || shown < SITE_AUDIT_PAGE_SIZE;
   }
 
   /** A narrow side panel has no room for a true split-pane "detail drawer" —
