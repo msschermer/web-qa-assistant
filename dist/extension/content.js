@@ -1063,19 +1063,27 @@ if (!globalThis.__WEB_QA_CONTENT__) {
          stranding the fourth card beside two cards' worth of empty canvas,
          and a bar row gets the width to hold its label without truncating. */
       .section-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:14px;margin:0 0 16px;align-items:start}
+      /* The crawl row carries three short cards — depth, status, coverage —
+         which fit across where a discipline's four long ones would not. */
+      .crawl-shape{grid-template-columns:repeat(auto-fit,minmax(290px,1fr));margin-bottom:18px}
       .section-findings{margin:18px 0 0}
       .section-findings h3{margin:0 0 4px;font-size:14px;font-weight:600;color:var(--sa-ink)}
       .section-findings .hint{margin:0 0 10px}
 
       /* Overview grid ------------------------------------------------------- */
-      .overview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin:0 0 18px;align-items:start}
+
       .panel-card{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);padding:14px 16px 16px}
 
       /* Site conditions ----------------------------------------------------- */
       .conditions{margin:0 0 18px;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);overflow:hidden}
       .conditions>.feed-heading{padding:14px 16px 0;margin:0}
       .conditions-list{list-style:none;margin:10px 0 0;padding:0}
-      .cond-row{border-top:1px solid var(--sa-line)}
+      /* The row is the grid; the toggle and the document link are siblings in
+         it, and the evidence spans both. */
+      .cond-row{border-top:1px solid var(--sa-line);display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}
+      .cond-row>.cond-head{grid-column:1}
+      .cond-row>.cond-open{grid-column:2;margin-right:16px}
+      .cond-row>.cond-evidence{grid-column:1/-1}
       .cond-head{display:grid;grid-template-columns:22px 150px minmax(0,1fr) auto;gap:12px;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:11px 16px;font:inherit;color:inherit;cursor:pointer}
       .cond-head:hover{background:var(--sa-subtle)}
       .cond-head:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
@@ -1096,31 +1104,20 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .cond-confidence{display:inline-block;margin-top:6px;font-size:11.5px;color:var(--sa-ink-faint);background:var(--sa-subtle);border-radius:999px;padding:2px 9px}
       .conditions-note{margin:0;padding:0 16px 14px;font-size:12px;line-height:1.5;color:var(--sa-ink-faint)}
 
-      /* Published documents ------------------------------------------------
-         robots.txt, the XML sitemap and llms.txt are fetched once at the start
-         of the audit, before a page is crawled, and are settled facts from
-         that moment. They get their own readout on the Overview because they
-         are statements the site makes about itself rather than findings, and
-         because a healthy one produces no finding at all — which is why all
-         three previously looked unchecked. Same mark/label/state vocabulary as
-         the Site conditions rows above them. */
-      .signals{margin:0 0 18px;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);overflow:hidden}
-      .signals>.feed-heading{padding:14px 16px 0;margin:0}
-      .signals-list{list-style:none;margin:10px 0 0;padding:0}
-      .signal-row{display:grid;grid-template-columns:22px 128px minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:11px 16px;border-top:1px solid var(--sa-line);font-size:13px}
-      .signal-row .cond-mark{margin:0}
-      .signal-name{font-size:13px;font-weight:600;color:var(--sa-ink);font-family:var(--sa-mono)}
-      .signal-headline{color:var(--sa-ink-soft);overflow-wrap:anywhere}
-      .signal-open{flex:0 0 auto;font-size:12.5px;color:var(--sa-primary);background:none;border:0;padding:4px 2px;cursor:pointer;text-decoration:underline;font-family:inherit}
-      .signal-open:hover{color:var(--sa-primary-hover)}
-      .signal-open:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
-      .signals-note{margin:0;padding:12px 16px 14px;font-size:12px;line-height:1.5;color:var(--sa-ink-faint);border-top:1px solid var(--sa-line)}
+      /* The three published documents (robots.txt, sitemap, llms.txt) are rows
+         in the conditions readout, and each offers to open the file itself. */
+      .cond-open{flex:0 0 auto;font-size:12.5px;color:var(--sa-primary);background:none;border:0;padding:4px 2px;margin-left:2px;cursor:pointer;text-decoration:underline;font-family:inherit}
+      .cond-open:hover{color:var(--sa-primary-hover)}
+      .cond-open:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
 
-      @media(max-width:900px){
-        .signal-row{grid-template-columns:22px minmax(0,1fr) auto;gap:8px 12px}
-        .signal-headline{grid-column:2/-1}
-        .signal-row .cond-state{grid-column:2}
-      }
+      /* Severity and the ranked issues, one card. The legend sits on the
+         heading line so the bar reads as a caption to the list beneath it
+         rather than as a chart in its own panel. */
+      .attention-card{margin:0 0 18px}
+      .attention-head{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin:0 0 10px}
+      .attention-head .feed-heading{margin:0}
+      .attention-card .severity-bar{margin:0 0 12px}
+      .attention-card .severity-legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin-left:auto;font-size:12.5px}
 
       /* Findings ------------------------------------------------------------ */
       .findings-list{list-style:none;margin:0;padding:0;display:grid;gap:10px;counter-reset:keynote}
@@ -1258,12 +1255,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .severity-legend li{display:flex;align-items:center;gap:8px;font-variant-numeric:tabular-nums}
       .severity-legend .sw{width:10px;height:10px;border-radius:12px;flex:0 0 auto}
 
-      .impact-breakdown{display:grid;gap:2px;margin:0}
-      .impact-chip{display:flex;align-items:center;gap:10px;border:1px solid transparent;background:transparent;border-radius:var(--sa-radius-sm);padding:8px 10px;cursor:pointer;font-size:13px;text-align:left;width:100%;color:var(--sa-ink-soft)}
-      .impact-chip:hover{background:var(--sa-subtle)}
-      .impact-chip.active{background:var(--sa-primary-soft);border-color:var(--sa-primary-line);color:var(--sa-primary)}
-      .impact-chip .ic-count{font-weight:650;font-size:15px;color:var(--sa-ink);font-variant-numeric:tabular-nums;min-width:38px;text-align:right}
-      .impact-chip.active .ic-count{color:var(--sa-primary)}
+
 
       .top-issues{list-style:none;margin:0;padding:0;display:grid;gap:2px}
       .top-issues li{min-width:0}
@@ -1277,8 +1269,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .top-issues .ti-scope{flex:0 0 auto;color:var(--sa-ink-faint);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
 
       /* Coverage ------------------------------------------------------------- */
-      .coverage-banner{border:0;border-radius:0;padding:0;margin:0;font-size:13px;color:var(--sa-ink-soft);display:block}
-      .coverage-banner strong{color:var(--sa-ink);font-variant-numeric:tabular-nums}
+
       .cov-plan{display:flex;height:10px;border-radius:999px;overflow:hidden;margin:0 0 12px;background:var(--sa-info-soft)}
       .cov-surveyed{background:var(--sa-primary)}
       .cov-unsurveyed{background-image:var(--sa-hatch);flex:1 1 auto}
@@ -1645,25 +1636,29 @@ if (!globalThis.__WEB_QA_CONTENT__) {
               <button type="button" class="btn danger render-stop-btn" hidden>Stop rendering</button>
             </div>
           </section>
+          <!-- One readout for the site's own state. The three documents it
+               publishes (robots.txt, sitemap, llms.txt) are rows in here with a
+               link to open them — they used to be a second block restating the
+               same three facts in different words. -->
           <section class="conditions" hidden>
             <h3 class="feed-heading">Site conditions</h3>
             <ul class="conditions-list"></ul>
-            <p class="conditions-note">Each line states what was observed and the confidence that observation supports. There is no score: a single number would hide the evidence a client is entitled to see.</p>
+            <p class="conditions-note">Each line states what this audit observed and the confidence that observation supports. There is no score: a single number would hide the evidence a client is entitled to see.</p>
           </section>
-          <section class="signals" hidden>
-            <h3 class="feed-heading">What this site publishes about itself</h3>
-            <ul class="signals-list"></ul>
-            <p class="signals-note">Fetched directly at the start of this audit, independently of the crawl and of whether the crawl obeys them — so these are settled before the first page is checked. A healthy one raises no finding, which is why they are stated here rather than left to the findings list.</p>
+          <!-- Severity and the ranked issues in one card. They were two cards
+               slicing the same findings, beside a third ("Findings by area")
+               that restated the counts already on every nav row. -->
+          <section class="panel-card attention-card" hidden>
+            <div class="attention-head">
+              <h3 class="feed-heading">What needs attention</h3>
+              <ul class="severity-legend"></ul>
+            </div>
+            <div class="severity-bar" aria-hidden="true"></div>
+            <ul class="top-issues"></ul>
           </section>
-          <!-- The shape of what was crawled: how deep the site goes and what
-               it answered. Both open the pages behind any bar. -->
+          <!-- What the crawl covered: how deep it went, what the site answered,
+               and what it could not establish. -->
           <div class="section-grid crawl-shape"></div>
-          <div class="overview-grid">
-            <section class="panel-card"><h3 class="feed-heading">Severity</h3><div class="severity-block"><div class="severity-bar" aria-hidden="true"></div></div><ul class="severity-legend"></ul></section>
-            <section class="panel-card"><h3 class="feed-heading">Findings by area</h3><div class="impact-breakdown"></div></section>
-            <section class="panel-card"><h3 class="feed-heading">Top issues</h3><ul class="top-issues"></ul></section>
-            <section class="panel-card"><h3 class="feed-heading">Coverage</h3><div class="coverage-banner"></div></section>
-          </div>
           <section class="deliver">
             <div class="deliver-main">
               <div class="deliver-copy">
@@ -1686,6 +1681,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             <div class="toolbar">
               <input type="search" class="findings-search" placeholder="Search findings…" />
               <select class="findings-category" aria-label="Filter by category"><option value="">All categories</option><option value="fix">Fix</option><option value="review">Review</option><option value="context">Context</option></select>
+              <select class="findings-impact" aria-label="Filter by impact area"><option value="">All areas</option></select>
               <select class="findings-sort" aria-label="Sort findings">
                 <option value="severity">Sort: severity</option>
                 <option value="pages">Sort: pages affected</option>
@@ -1841,6 +1837,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const onFindingsSearch = debounce((value) => { siteAudit.findingsSearch = value; renderFindingsList(); }, 150);
     shadow.querySelector('.findings-search').addEventListener('input', (e) => onFindingsSearch(e.target.value));
     shadow.querySelector('.findings-category').addEventListener('change', (e) => { siteAudit.findingsCategory = e.target.value; renderFindingsList(); });
+    shadow.querySelector('.findings-impact').addEventListener('change', (e) => { siteAudit.findingsImpactClass = e.target.value; renderFindingsList(); });
     shadow.querySelector('.findings-hide-unconfirmed').addEventListener('change', (e) => { siteAudit.findingsHideUnconfirmed = e.target.checked; renderFindingsList(); });
     shadow.querySelector('.findings-sort').addEventListener('change', (e) => { siteAudit.findingsSort = e.target.value; renderFindingsList(); });
     const onUrlsSearch = debounce((value) => { siteAudit.urlsSearch = value; renderUrlsTable(); }, 150);
@@ -2027,6 +2024,34 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
   // The title block is the sheet's provenance: which project, at what scale,
   // on what date. It carries the facts a client asks about first.
+  /** How long ago, in the coarsest unit that is still true. */
+  function relativeTime(iso) {
+    const then = Date.parse(iso || '');
+    if (!Number.isFinite(then)) return '';
+    const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
+    if (seconds < 60) return 'just now';
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    const days = Math.round(hours / 24);
+    return `${days} day${days === 1 ? '' : 's'} ago`;
+  }
+
+  /** Where this audit started and when it ran — the two facts about the run
+   * itself that no tile, nav row or chart on this screen carries. */
+  function auditProvenanceLine(audit) {
+    const start = audit?.config?.startUrl || audit?.startUrl || siteAudit.siteOrigin || '';
+    const from = start ? `Crawled from ${start}` : 'Crawled from this site';
+    if (audit?.status === 'running') {
+      const since = relativeTime(audit.startedAt);
+      return `${from} · running${since && since !== 'just now' ? `, started ${since}` : ' now'}`;
+    }
+    const when = relativeTime(audit?.completedAt || audit?.startedAt);
+    const state = audit?.status === 'complete' ? 'finished' : String(audit?.status || 'finished');
+    return `${from} · ${state}${when ? ` ${when}` : ''}`;
+  }
+
   function paintTitleBlock(audit) {
     const shadow = siteAudit.shadow;
     let project = '';
@@ -2037,7 +2062,10 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const date = new Date(siteAudit.startedAt || Date.now());
     for (const el of shadow.querySelectorAll('.tb-project')) el.textContent = project || '—';
     for (const el of shadow.querySelectorAll('.tb-date')) el.textContent = date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-    for (const el of shadow.querySelectorAll('.tb-scale')) el.textContent = discovered ? `${fetched} of ${discovered} pages surveyed` : (fetched ? `${fetched} pages surveyed` : String.fromCharCode(8212));
+    const pageWord = (n) => `${n} ${n === 1 ? 'page' : 'pages'}`;
+    for (const el of shadow.querySelectorAll('.tb-scale')) {
+      el.textContent = discovered ? `${fetched} of ${pageWord(discovered)} surveyed` : (fetched ? `${pageWord(fetched)} surveyed` : String.fromCharCode(8212));
+    }
     const scale = shadow.querySelector('.run-scale');
     if (scale) {
       scale.textContent = discovered
@@ -2218,11 +2246,14 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       siteAudit.audit = audit;
       const counts = audit.urlCounts || {};
       const linkCounts = audit.linkCounts || {};
-      shadow.querySelector('.results-summary').textContent =
-        `${audit.status === 'running' ? 'Still running — showing progress so far. ' : ''}${counts.fetched || 0} pages crawled, ${linkCounts.broken || 0} broken links, ${linkCounts.inconclusive || 0} links could not be independently verified, ${audit.findingsCount || 0} findings.`;
+      // Every figure this sentence used to carry — pages, broken links,
+      // findings — sits in a tile directly beneath it or on a nav row beside
+      // it. What is not stated anywhere else is where the audit started and
+      // when it ran, so that is what it says now.
+      shadow.querySelector('.results-summary').textContent = auditProvenanceLine(audit);
       renderSiteAuditRenderSection(audit);
       renderScopeBanner(audit);
-      renderCoverageBanner(audit, counts);
+
       siteAudit.urlCounts = counts;
       siteAudit.totalUrls = urlTotalForScope(currentUrlScope());
       siteAudit.totalLinksByStatus = linkCounts;
@@ -2232,7 +2263,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     renderNavStates();
     if (audit) {
       renderSummaryHeader(groupsResult?.groups || siteAudit.rawFindingGroups || [], audit);
-      renderSiteSignals(audit);
+
       renderCrawlShape();
     } else {
       // Say so rather than showing zeros: an unreachable audit is a coverage
@@ -2280,35 +2311,36 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   const SITE_AUDIT_IMPACT_ORDER = ['availability', 'discoverability', 'accessibility', 'performance', 'security', 'implementation', 'coverage'];
   const SITE_AUDIT_IMPACT_LABEL = { availability: 'Availability', discoverability: 'Discoverability', accessibility: 'Accessibility', performance: 'Performance', security: 'Security', implementation: 'Web quality', coverage: 'Coverage' };
 
-  function renderImpactBreakdown(groups) {
-    const container = siteAudit.shadow.querySelector('.impact-breakdown');
-    container.innerHTML = '';
+  /**
+   * Impact-area filtering, as a control on the list it filters.
+   *
+   * This was a card on the Overview holding one row per impact class — the
+   * same counts every nav row already carries, on a different tab from the
+   * findings it narrowed. The counts were redundant; the filter was not, so
+   * the filter moved to the Findings toolbar and the card went away.
+   */
+  function renderImpactFilter(groups) {
+    const select = siteAudit.shadow.querySelector('.findings-impact');
+    if (!select) return;
     const counts = {};
     for (const g of groups) {
       const cls = g.impact_class || 'implementation';
       counts[cls] = (counts[cls] || 0) + g.instances;
     }
     const present = SITE_AUDIT_IMPACT_ORDER.filter((cls) => counts[cls]);
-    if (!present.length) { container.hidden = true; return; }
-    container.hidden = false;
+    select.innerHTML = '';
+    const all = document.createElement('option');
+    all.value = '';
+    all.textContent = 'All areas';
+    select.appendChild(all);
     for (const cls of present) {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = `impact-chip${siteAudit.findingsImpactClass === cls ? ' active' : ''}`;
-      const count = document.createElement('span');
-      count.className = 'ic-count';
-      count.textContent = String(counts[cls]);
-      const label = document.createElement('span');
-      label.className = 'ic-label';
-      label.textContent = SITE_AUDIT_IMPACT_LABEL[cls] || cls;
-      chip.append(count, label);
-      chip.addEventListener('click', () => {
-        siteAudit.findingsImpactClass = siteAudit.findingsImpactClass === cls ? '' : cls;
-        renderImpactBreakdown(groups);
-        switchSiteAuditTab('findings');
-      });
-      container.appendChild(chip);
+      const option = document.createElement('option');
+      option.value = cls;
+      option.textContent = `${SITE_AUDIT_IMPACT_LABEL[cls] || cls} (${counts[cls]})`;
+      select.appendChild(option);
     }
+    select.value = siteAudit.findingsImpactClass || '';
+    select.disabled = !present.length;
   }
 
   function renderSeverityBar(groups) {
@@ -2350,16 +2382,28 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
   const CONDITION_STATE_WORD = { ok: 'Observed', attention: 'Needs attention', unknown: 'Not established' };
 
-  /** The factual state readout. Composed server-side by the crawl so every
-   * surface reports the same states from the same evidence, rather than each
-   * one deriving its own idea of "healthy". */
+  /**
+   * The factual state readout — the one place this screen says what is true of
+   * the site.
+   *
+   * Composed by the crawl when the audit finishes, so every surface reports the
+   * same states from the same evidence. Until then the three documents fetched
+   * before the crawl started stand in, which is why this block is populated
+   * from the first moment there is anything to say rather than staying blank
+   * for the length of the run.
+   *
+   * A row whose state is `attention` opens with its evidence showing. What is
+   * wrong is what the reader came for, and making them click for it is a
+   * disclosure that protects nothing.
+   */
   function renderAuditSummary(audit) {
     const shadow = siteAudit.shadow;
     const section = shadow.querySelector('.conditions');
     const list = shadow.querySelector('.conditions-list');
     if (!section || !list) return;
-    const summary = audit?.stats?.auditSummary;
-    const rows = summary?.rows || [];
+    const signals = audit?.stats?.siteSignals || null;
+    const composed = audit?.stats?.auditSummary?.rows || [];
+    const rows = composed.length ? composed : (signals ? provisionalConditionRows(signals) : []);
     if (!rows.length) { section.hidden = true; return; }
     section.hidden = false;
     list.innerHTML = '';
@@ -2368,10 +2412,11 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       li.className = 'cond-row';
       li.dataset.state = r.state;
       const evidenceId = `cond-ev-${r.id}`;
+      const open = r.state === 'attention';
       const head = document.createElement('button');
       head.type = 'button';
       head.className = 'cond-head';
-      head.setAttribute('aria-expanded', 'false');
+      head.setAttribute('aria-expanded', String(open));
       head.setAttribute('aria-controls', evidenceId);
       head.innerHTML = '<span class="cond-mark" aria-hidden="true"></span><span class="cond-label"></span><span class="cond-headline"></span><span class="cond-state"></span>';
       head.querySelector('.cond-label').textContent = r.label;
@@ -2380,7 +2425,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       const evidence = document.createElement('ul');
       evidence.className = 'cond-evidence';
       evidence.id = evidenceId;
-      evidence.hidden = true;
+      evidence.hidden = !open;
       for (const line of r.evidence || []) {
         const item = document.createElement('li');
         item.textContent = line;
@@ -2391,15 +2436,30 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       conf.textContent = `Confidence: ${r.confidence}`;
       evidence.appendChild(conf);
       head.addEventListener('click', () => {
-        const open = evidence.hidden;
-        evidence.hidden = !open;
-        head.setAttribute('aria-expanded', String(open));
+        const showing = evidence.hidden;
+        evidence.hidden = !showing;
+        head.setAttribute('aria-expanded', String(showing));
       });
-      li.append(head, evidence);
+      li.appendChild(head);
+      // The three rows backed by a document the reader can open for themselves.
+      // A sibling of the row's toggle, never a child of it: a button inside a
+      // button is invalid, unreachable for half of assistive technology, and
+      // was what pushed this link onto a line of its own.
+      const docUrl = conditionDocumentUrl(r.id, signals, siteAudit.siteOrigin);
+      if (docUrl) {
+        const openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.className = 'cond-open';
+        openBtn.textContent = 'Open';
+        openBtn.title = docUrl;
+        openBtn.setAttribute('aria-label', `Open ${r.label === 'Indexable' ? 'robots.txt' : r.label === 'Sitemap' ? 'the sitemap' : r.label} in a new tab`);
+        openBtn.addEventListener('click', () => window.open(docUrl, '_blank', 'noopener'));
+        li.appendChild(openBtn);
+      }
+      li.appendChild(evidence);
       list.appendChild(li);
     }
   }
-
   function renderSummaryHeader(groups, audit) {
     if (!audit) return;
     const shadow = siteAudit.shadow;
@@ -2433,8 +2493,13 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     for (const btn of shadow.querySelectorAll('.stat-open')) {
       btn.disabled = !tileCounts[btn.dataset.open];
     }
+    // Nothing to attend to means no card, rather than a card saying so — the
+    // conditions readout above already states the site's state, and an empty
+    // panel holding one sentence was most of what made this screen feel sparse.
+    const attention = shadow.querySelector('.attention-card');
+    if (attention) attention.hidden = !groups.length;
     renderSeverityBar(groups);
-    renderImpactBreakdown(groups);
+    renderImpactFilter(groups);
 
     const top = [...groups]
       .sort((a, b) => (SITE_AUDIT_SEVERITY_RANK[b.severity] ?? -1) - (SITE_AUDIT_SEVERITY_RANK[a.severity] ?? -1) || b.affected_urls - a.affected_urls)
@@ -2491,133 +2556,73 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   }
 
   /**
-   * The three documents a site publishes about itself: robots.txt, the XML
-   * sitemap, and llms.txt.
+   * The document behind a site-conditions row, where there is one.
    *
-   * They are collected once, before the crawl, and are settled from that
-   * moment — so this renders during a running audit as well as a finished one.
-   * They previously reached the screen only through the Site conditions
-   * summary, which is composed at completion, so an operator watching a run
-   * was told all three were "not checked" minutes after they had been fetched.
-   *
-   * Each row offers to open the document itself: the operator can check our
-   * claim against the file in one click, which is the difference between a
-   * report and an assertion.
+   * robots.txt, the sitemap and llms.txt are the three rows a reader can check
+   * for themselves, and one click to the file is the difference between a
+   * report and an assertion. They briefly had a second block of their own,
+   * which restated the same three facts in different words directly beneath
+   * the rows that already carried them; the link is what that block was
+   * actually for, so it moved here and the block went away.
    */
-  function renderSiteSignals(audit) {
-    const shadow = siteAudit.shadow;
-    const section = shadow.querySelector('.signals');
-    const list = shadow.querySelector('.signals-list');
-    if (!section || !list) return;
-    const signals = audit?.stats?.siteSignals;
-    const running = audit?.status === 'running';
-    const origin = signals?.origin || siteAudit.siteOrigin || '';
+  function conditionDocumentUrl(rowId, signals, origin) {
+    if (!origin && !signals) return '';
+    const base = signals?.origin || origin || '';
+    if (rowId === 'indexable') return base ? `${base}/robots.txt` : '';
+    if (rowId === 'llms') return base ? `${base}${'/llms.txt'}` : '';
+    if (rowId === 'sitemap') return signals?.sitemap?.source || '';
+    return '';
+  }
 
-    if (!signals) {
-      // Distinguish "not collected yet" from "never collected". The first is a
-      // moment in a running audit; the second is a coverage gap in a finished
-      // one, and they must not read alike.
-      section.hidden = false;
-      list.innerHTML = '';
-      list.appendChild(signalRow({
-        name: 'robots.txt, sitemap, llms.txt',
-        state: 'unknown',
-        headline: running
-          ? 'Being fetched — this audit reads them before it crawls.'
-          : 'Not collected for this audit, so nothing about them was established.'
-      }));
-      return;
-    }
-
-    section.hidden = false;
-    list.innerHTML = '';
+  /**
+   * Site-conditions rows synthesised from the site signals alone.
+   *
+   * The server composes the real readout when the audit finishes. These three
+   * are settled before the crawl starts, so during a run they stand in — same
+   * ids, same labels, same vocabulary, so the server's rows replace them
+   * without the readout appearing to change its mind.
+   */
+  function provisionalConditionRows(signals) {
     const robots = signals.robots || {};
     const sitemap = signals.sitemap || {};
     const llms = signals.llmsTxt || {};
+    const rows = [];
 
-    list.appendChild(signalRow(robotsRow(robots), origin ? `${origin}/robots.txt` : ''));
-    list.appendChild(signalRow(sitemapRow(sitemap, audit), sitemap.source || ''));
-    list.appendChild(signalRow(llmsRow(llms), origin ? `${origin}/llms.txt` : ''));
-  }
-
-  function robotsRow(robots) {
     if (robots.present === true && robots.blocksEverything) {
-      return { name: 'robots.txt', state: 'attention', label: 'Disallows the whole site', headline: `HTTP ${robots.status} — contains "Disallow: /" for every user agent, so search engines that respect it will not crawl any page here.` };
+      rows.push({ id: 'indexable', label: 'Indexable', state: 'attention', headline: 'robots.txt disallows the whole site', confidence: 'confirmed',
+        evidence: [`robots.txt returned HTTP ${robots.status} and contains "Disallow: /" for all user agents.`, 'Search engines that respect robots.txt will not crawl any page here.'] });
+    } else if (robots.present === true) {
+      rows.push({ id: 'indexable', label: 'Indexable', state: 'ok', headline: 'robots.txt allows crawling', confidence: 'confirmed',
+        evidence: [`robots.txt returned HTTP ${robots.status} with ${robots.disallowCount} disallow rule${robots.disallowCount === 1 ? '' : 's'} and no site-wide block.`] });
+    } else if (robots.present === false) {
+      rows.push({ id: 'indexable', label: 'Indexable', state: 'ok', headline: 'No robots.txt, so nothing is disallowed', confidence: 'confirmed',
+        evidence: [`robots.txt returned HTTP ${robots.status}. With no file present, crawlers treat the whole site as allowed.`] });
+    } else {
+      rows.push({ id: 'indexable', label: 'Indexable', state: 'unknown', headline: 'robots.txt could not be read', confidence: 'inconclusive',
+        evidence: [robots.error ? `Request failed: ${robots.error}` : `robots.txt returned HTTP ${robots.status || 0}.`] });
     }
-    if (robots.present === true) {
-      const n = Number(robots.disallowCount || 0);
-      const declared = (robots.sitemaps || []).length;
-      return {
-        name: 'robots.txt',
-        state: 'ok',
-        label: 'Allows crawling',
-        headline: `HTTP ${robots.status} · ${n} disallow rule${n === 1 ? '' : 's'}, no site-wide block · ${declared ? `declares ${declared} sitemap${declared === 1 ? '' : 's'}` : 'declares no sitemap'}`
-      };
-    }
-    if (robots.present === false) {
-      return { name: 'robots.txt', state: 'ok', label: 'Not published', headline: `HTTP ${robots.status} — with no file present, crawlers treat the whole site as allowed.` };
-    }
-    return { name: 'robots.txt', state: 'unknown', label: 'Could not be read', headline: robots.error ? `Request failed: ${robots.error}` : `HTTP ${robots.status || 0} — whether crawling is disallowed could not be established.` };
-  }
 
-  function sitemapRow(sitemap, audit) {
     if (sitemap.present) {
-      const n = Number(sitemap.urlCount || 0);
-      const parts = [`${n} URL${n === 1 ? '' : 's'} read`];
-      parts.push(sitemap.declaredInRobots ? 'declared in robots.txt' : 'found at the conventional path');
-      if (sitemap.truncated) parts.push('longer than this audit reads');
-      // The comparison against the crawl is only meaningful when the crawl
-      // finished on its own. Saying so here stops the Sitemaps section's zeros
-      // from being read as agreement.
-      if (pageLimitStopped(audit)) parts.push('not yet compared against the crawl — the page limit stopped it first');
-      return { name: 'XML sitemap', state: 'ok', label: 'Published', headline: parts.join(' · ') };
+      rows.push({ id: 'sitemap', label: 'Sitemap', state: 'ok', confidence: sitemap.truncated ? 'inferred' : 'confirmed',
+        headline: sitemap.declaredInRobots ? 'Declared in robots.txt and readable' : 'Found at the conventional path',
+        evidence: [`Read ${sitemap.urlCount} URL${sitemap.urlCount === 1 ? '' : 's'} from ${sitemap.source}.`, sitemap.truncated ? 'The sitemap is longer than this audit reads.' : null].filter(Boolean) });
+    } else if (sitemap.declaredInRobots) {
+      rows.push({ id: 'sitemap', label: 'Sitemap', state: 'attention', headline: 'Declared in robots.txt but nothing could be read from it', confidence: 'confirmed',
+        evidence: [`robots.txt declares ${(sitemap.declared || []).length} sitemap${(sitemap.declared || []).length === 1 ? '' : 's'}, but no URLs were read from ${(sitemap.declared || []).slice(0, 3).join(', ')}.`] });
+    } else {
+      rows.push({ id: 'sitemap', label: 'Sitemap', state: 'attention', headline: 'No sitemap found', confidence: 'confirmed',
+        evidence: ['Nothing was declared in robots.txt and /sitemap.xml returned no URLs.', 'Discovery then depends entirely on internal linking.'] });
     }
-    if (sitemap.declaredInRobots) {
-      return { name: 'XML sitemap', state: 'attention', label: 'Declared but unreadable', headline: `robots.txt declares ${(sitemap.declared || []).length} sitemap${(sitemap.declared || []).length === 1 ? '' : 's'}, but no URLs could be read from ${(sitemap.declared || []).slice(0, 2).join(', ')}. A search engine following that declaration would find nothing.` };
-    }
-    return { name: 'XML sitemap', state: 'attention', label: 'None found', headline: 'Nothing declared in robots.txt and /sitemap.xml returned no URLs, so discovery depends entirely on internal linking.' };
-  }
 
-  function llmsRow(llms) {
+    // A proposed convention's absence is context, never a defect.
     if (llms.present === true) {
-      return { name: 'llms.txt', state: 'ok', label: 'Published', headline: `HTTP ${llms.status} · ${llms.bytes} bytes. A proposed convention for describing a site to language models — publishing one is a deliberate choice.` };
+      rows.push({ id: 'llms', label: 'llms.txt', state: 'ok', headline: 'Published', confidence: 'confirmed',
+        evidence: [`Served ${llms.bytes} byte${llms.bytes === 1 ? '' : 's'} at /llms.txt.`, 'A proposed convention for describing a site to language models. Publishing one is a deliberate choice, not a requirement.'] });
+    } else if (llms.present === false) {
+      rows.push({ id: 'llms', label: 'llms.txt', state: 'ok', headline: 'Not published', confidence: 'confirmed',
+        evidence: [`/llms.txt returned HTTP ${llms.status}. This is a proposed convention, not a standard — its absence is not a defect and is reported here as context only.`] });
     }
-    if (llms.present === false) {
-      // Never a defect: a proposed convention's absence is context, not fault.
-      return { name: 'llms.txt', state: 'ok', label: 'Not published', headline: `HTTP ${llms.status}. A proposed convention, not a standard — its absence is not a defect and is reported here as context only.` };
-    }
-    return { name: 'llms.txt', state: 'unknown', label: 'Could not be read', headline: `HTTP ${llms.status || 0} — whether one is published could not be established.` };
-  }
-
-  /** One published-document row. Every value is set as text: robots.txt error
-   * strings and sitemap URLs are remote content and never reach markup. */
-  function signalRow({ name, state, label = '', headline = '' }, openUrl = '') {
-    const li = document.createElement('li');
-    li.className = 'cond-row signal-row';
-    li.dataset.state = state;
-    const mark = document.createElement('span');
-    mark.className = 'cond-mark';
-    mark.setAttribute('aria-hidden', 'true');
-    const nameEl = document.createElement('span');
-    nameEl.className = 'signal-name';
-    nameEl.textContent = name;
-    const headlineEl = document.createElement('span');
-    headlineEl.className = 'signal-headline';
-    headlineEl.textContent = headline;
-    const stateEl = document.createElement('span');
-    stateEl.className = 'cond-state';
-    stateEl.textContent = label || SITE_AUDIT_STATE_WORD[state] || state;
-    li.append(mark, nameEl, headlineEl, stateEl);
-    if (openUrl) {
-      const open = document.createElement('button');
-      open.type = 'button';
-      open.className = 'signal-open';
-      open.textContent = 'Open';
-      open.title = openUrl;
-      open.addEventListener('click', () => window.open(openUrl, '_blank', 'noopener'));
-      li.appendChild(open);
-    }
-    return li;
+    return rows;
   }
 
   const SITE_AUDIT_HTTP_CLASSES = [
@@ -2701,6 +2706,10 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       rows: statusRows,
       empty: 'No response was recorded — no URL was fetched.'
     }));
+
+    // Third in the same row rather than alone in a grid of its own: all three
+    // answer "what did this crawl actually cover", and all three are short.
+    grid.appendChild(buildCoverageCard(siteAudit.audit || {}, siteAudit.audit?.urlCounts || {}));
   }
 
   // --- Discipline section rendering -----------------------------------------
@@ -3603,36 +3612,68 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     banner.querySelector('.scope-text').innerHTML = `${lead} ${reasons.join('; ')}. ${tail}`;
   }
 
-  function renderCoverageBanner(audit, counts) {
-    const banner = siteAudit.shadow.querySelector('.coverage-banner');
+  /**
+   * What this audit could not establish, as a card in the crawl-shape row.
+   *
+   * It used to sit alone in a four-card grid restating facts that were already
+   * on screen: the queued count is the "Coverage gaps" tile and the scope
+   * banner, and the browser-checked ratio is the render panel's entire subject.
+   * What only this card carries is the hatched survey plan and the coverage
+   * sentences the crawl composes for itself — unverifiable destinations, a
+   * truncated sitemap — so that is what is left.
+   */
+  function buildCoverageCard(audit, counts) {
+    const box = document.createElement('section');
+    box.className = 'dist';
+    const head = document.createElement('div');
+    head.className = 'dist-head';
+    const h3 = document.createElement('h3');
+    h3.textContent = 'What was not established';
+    head.appendChild(h3);
+    box.appendChild(head);
+
     const queued = Number(counts.queued || 0);
     const errored = Number(counts.error || 0);
     const skipped = Number(counts.skipped || 0);
-    const rp = audit.renderProgress || { total: 0, rendered: 0 };
-    const parts = [];
-    if (queued > 0) parts.push(`<span><strong>${queued}</strong> page${queued === 1 ? '' : 's'} still queued (page limit reached before the crawl finished)</span>`);
-    if (errored > 0) parts.push(`<span><strong>${errored}</strong> page${errored === 1 ? '' : 's'} could not be fetched</span>`);
-    if (skipped > 0) parts.push(`<span><strong>${skipped}</strong> skipped by robots.txt</span>`);
-    if (rp.total > 0) parts.push(`<span><strong>${rp.rendered}</strong> of ${rp.total} browser-checked</span>`);
-    // Drafting convention: area outside the survey is hatched, never left blank
-    // and never coloured as a defect. The hatch is also stated in words, because
-    // no graphic in this system carries meaning on its own.
     const fetched = Number(counts.fetched || 0);
     const total = Math.max(1, fetched + queued + errored + skipped);
     const surveyedPct = Math.round((fetched / total) * 100);
-    const plan = `<div class="cov-plan" role="img" aria-label="${surveyedPct}% of discovered pages surveyed; the remainder is outside this survey"><div class="cov-surveyed" style="width:${surveyedPct}%"></div><div class="cov-unsurveyed"></div></div>`;
-    const note = parts.length ? parts.join('') : '<span>Crawl finished with no coverage gaps.</span>';
-    banner.innerHTML = plan + '<div class="cov-note">' + note + '</div>';
-    // The crawl composes its own coverage sentences (unverifiable destinations,
-    // truncated sitemaps). They are appended as text nodes: these strings carry
-    // host names and other crawl output, and must never be interpolated as markup.
-    const noteBox = banner.querySelector('.cov-note');
-    for (const line of audit?.stats?.auditSummary?.coverage || []) {
-      if (/still queued/i.test(line)) continue; // already stated by the queued part above
+
+    // Drafting convention: area outside the survey is hatched, never left blank
+    // and never coloured as a defect. The hatch is also stated in words,
+    // because no graphic in this system carries meaning on its own.
+    const plan = document.createElement('div');
+    plan.className = 'cov-plan';
+    plan.setAttribute('role', 'img');
+    plan.setAttribute('aria-label', `${surveyedPct}% of discovered pages surveyed; the remainder is outside this survey`);
+    const surveyed = document.createElement('div');
+    surveyed.className = 'cov-surveyed';
+    surveyed.style.width = `${surveyedPct}%`;
+    const unsurveyed = document.createElement('div');
+    unsurveyed.className = 'cov-unsurveyed';
+    plan.append(surveyed, unsurveyed);
+    box.appendChild(plan);
+
+    const note = document.createElement('div');
+    note.className = 'cov-note';
+    const lines = [];
+    if (errored > 0) lines.push(`${errored} page${errored === 1 ? '' : 's'} could not be fetched.`);
+    if (skipped > 0) lines.push(`${skipped} page${skipped === 1 ? '' : 's'} skipped by robots.txt.`);
+    // Whatever the crawl itself could not settle. These carry host names and
+    // other crawl output, so they are set as text, never interpolated.
+    for (const line of audit?.stats?.auditSummary?.coverage || []) lines.push(line);
+    if (!lines.length) {
+      lines.push(queued > 0
+        ? `${surveyedPct}% of the pages this crawl discovered were surveyed. Everything else on this screen describes that share.`
+        : 'Every page this crawl discovered was surveyed, and nothing was left unverified.');
+    }
+    for (const line of lines) {
       const span = document.createElement('span');
       span.textContent = line;
-      noteBox.appendChild(span);
+      note.appendChild(span);
     }
+    box.appendChild(note);
+    return box;
   }
 
   async function switchSiteAuditTab(tab) {
@@ -3777,8 +3818,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const shadow = siteAudit.shadow;
     shadow.querySelector('.findings-search').value = '';
     shadow.querySelector('.findings-category').value = '';
+    shadow.querySelector('.findings-impact').value = '';
     shadow.querySelector('.findings-hide-unconfirmed').checked = false;
-    renderImpactBreakdown(siteAudit.rawFindingGroups || []);
+    renderImpactFilter(siteAudit.rawFindingGroups || []);
     renderFindingsList();
   }
 

@@ -102,13 +102,13 @@ test('an unrun render pass reads as not established, never as clean', () => {
   assert.match(overlay, /That is a gap in coverage, not a clean result/);
   // A finished pass is the only state allowed to read as Observed.
   assert.match(overlay, /stateEl\.textContent = 'Observed'/);
-  // The panel sits above Site conditions, not below the overview grid.
+  // The panel sits above Site conditions and above the crawl-shape charts.
   const renderIdx = overlay.indexOf('<section class="render-section"');
   const conditionsIdx = overlay.indexOf('<section class="conditions"');
-  const gridIdx = overlay.indexOf('<div class="overview-grid">');
-  assert.ok(renderIdx > 0 && conditionsIdx > 0 && gridIdx > 0);
+  const shapeIdx = overlay.indexOf('<div class="section-grid crawl-shape">');
+  assert.ok(renderIdx > 0 && conditionsIdx > 0 && shapeIdx > 0);
   assert.ok(renderIdx < conditionsIdx, 'render pass state belongs above Site conditions');
-  assert.ok(renderIdx < gridIdx, 'render pass state belongs above the overview grid');
+  assert.ok(renderIdx < shapeIdx, 'render pass state belongs above the crawl charts');
   // Unrun is a coverage fact, so it is hatched rather than given a severity colour.
   assert.match(overlay, /\.render-section\[data-state=none\][^}]*var\(--sa-hatch\)/);
 });
@@ -196,11 +196,19 @@ test('the crawl records its site signals before it starts crawling', () => {
 test('a pending check is never worded as a skipped one', () => {
   // Three surfaces reported "not checked" for work that was either already
   // done or still in flight. Each now distinguishes the two.
-  assert.match(overlay, /Being fetched — this audit reads (it|them) before it crawls/);
-  const signals = overlay.match(/function renderSiteSignals\(audit\)[\s\S]*?\n  \}/);
-  assert.ok(signals, 'renderSiteSignals should exist');
-  assert.match(signals[0], /running\s*\?/, 'a running audit is told apart from a finished one');
-  assert.match(signals[0], /Not collected for this audit/, 'and a finished audit with no signals still says so plainly');
+  assert.match(overlay, /Being fetched — this audit reads it before it crawls/);
+  // The conditions readout is populated from the signals while the crawl is
+  // still running, rather than staying blank until the server composes it.
+  const summary = overlay.match(/function renderAuditSummary\(audit\)[\s\S]*?\n  \}/);
+  assert.ok(summary, 'renderAuditSummary should exist');
+  assert.match(summary[0], /composed\.length \? composed : \(signals \? provisionalConditionRows\(signals\)/,
+    'a running audit stands in the settled signals rather than showing nothing');
+  const provisional = overlay.match(/function provisionalConditionRows\(signals\)[\s\S]*?\n  \}/);
+  assert.ok(provisional, 'provisionalConditionRows should exist');
+  // Same ids as the server composes, so its rows replace these seamlessly.
+  for (const id of ['indexable', 'sitemap', 'llms']) {
+    assert.ok(provisional[0].includes(`id: '${id}'`), `${id} must use the composed row's own id`);
+  }
 });
 
 /**
@@ -228,20 +236,49 @@ test('pageLimitStopped is derived from the crawl, not assumed', () => {
   assert.match(fn[0], /counts\.queued/, 'a queued backlog is what "the limit stopped it" means');
 });
 
-test('the three published documents have a home on the Overview', () => {
-  // llms.txt previously appeared nowhere in the overlay's own code: it reached
-  // the screen only as a generic row inside the completion-time summary.
-  assert.match(overlay, /<section class="signals" hidden>/);
-  assert.match(overlay, /What this site publishes about itself/);
-  for (const doc of ['robots.txt', 'XML sitemap', 'llms.txt']) {
-    assert.ok(overlay.includes(`name: '${doc}'`), `${doc} needs its own row`);
-  }
+test('the three published documents are stated once, and can be opened', () => {
+  // They were briefly a second Overview block restating the three facts the
+  // conditions rows above them already carried, in different words. One
+  // readout now owns them, and the link that block existed for came with it.
+  assert.doesNotMatch(overlay, /class="signals"/, 'the duplicate block is gone');
+  // The Sitemaps section legitimately keeps that phrase in its own lede; what
+  // must not come back is a second Overview block headed with it.
+  assert.doesNotMatch(overlay, /feed-heading">What this site publishes/);
+  const url = overlay.match(/function conditionDocumentUrl\(rowId, signals, origin\)[\s\S]*?\n  \}/);
+  assert.ok(url, 'conditionDocumentUrl should exist');
+  assert.match(url[0], /robots\.txt/);
+  assert.match(url[0], /llms\.txt/);
+  assert.match(url[0], /signals\?\.sitemap\?\.source/);
   // A proposed convention's absence is context, never a defect.
-  const llms = overlay.match(/function llmsRow\(llms\)[\s\S]*?\n  \}/)[0];
-  assert.match(llms, /present === false[\s\S]*state: 'ok'/, 'no llms.txt is not a fault');
-  assert.match(llms, /not a defect/);
-  // Each row offers the document itself, so the claim can be checked.
-  assert.match(overlay, /open\.className = 'signal-open'/);
+  const provisional = overlay.match(/function provisionalConditionRows\(signals\)[\s\S]*?\n  \}/)[0];
+  assert.match(provisional, /llms\.present === false[\s\S]*?state: 'ok'/, 'no llms.txt is not a fault');
+  assert.match(provisional, /its absence is not a defect/);
+  assert.match(overlay, /openBtn\.className = 'cond-open'/);
+});
+
+test('the Overview states each fact once', () => {
+  // The complaint that prompted this: the same three documents in two blocks,
+  // three cards slicing one set of findings, and several cards holding a
+  // single line each.
+  const panel = overlay.slice(
+    overlay.indexOf('<div class="tab-panel overview-panel">'),
+    overlay.indexOf('<div class="tab-panel findings-panel"')
+  );
+  assert.ok(panel.length > 0, 'the overview panel should exist');
+  // "Findings by area" repeated the count already on every nav row, on a
+  // different tab from the findings it filtered. The filter moved to the list.
+  assert.doesNotMatch(panel, /impact-breakdown/, 'the impact card is gone from the Overview');
+  assert.match(overlay, /<select class="findings-impact"/, 'and survives as a control on the Findings list');
+  assert.match(overlay, /function renderImpactFilter\(groups\)/);
+  // Severity and Top issues were two cards over one set of findings.
+  assert.match(panel, /class="panel-card attention-card"/);
+  assert.ok(panel.indexOf('severity-bar') > 0 && panel.indexOf('top-issues') > panel.indexOf('severity-bar'),
+    'severity and the ranked issues share one card');
+  // Four separate cards no longer stand where three short ones belong.
+  assert.doesNotMatch(panel, /overview-grid/);
+  // And the header stopped restating the tiles directly beneath it.
+  assert.match(overlay, /function auditProvenanceLine\(audit\)/);
+  assert.doesNotMatch(overlay, /pages crawled, \$\{linkCounts\.broken/);
 });
 
 test('indexability is visible per page, not only as an aggregate', () => {
