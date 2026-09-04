@@ -977,7 +977,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .run-feed .recent-feed{flex:1 1 auto;min-height:120px;overflow:auto}
       .run-feed .recent-feed:empty::after{content:"Waiting for the first page to come back…";display:block;padding:14px;font-size:13px;color:var(--sa-ink-faint)}
       .page-head{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin:0 0 18px}
-      h2{margin:0;font-size:22px;font-weight:650;letter-spacing:-.02em;line-height:1.2}
+      h2{margin:0;font-size:18px;font-weight:650;letter-spacing:-.02em;line-height:1.2}
       .results-summary{margin:6px 0 0;color:var(--sa-ink-soft);font-size:13.5px;line-height:1.55;max-width:82ch}
 
       /* Scope banner: sits outside the tab panels so it stays on screen on
@@ -1192,7 +1192,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .section-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0 0 16px}
       .section-stats>div{position:relative;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);padding:11px 13px}
       .section-stats dt{font-size:12px;font-weight:500;color:var(--sa-ink-faint);margin:0 0 5px}
-      .section-stats dd{margin:0;font-size:21px;font-weight:650;letter-spacing:-.02em;line-height:1.1;color:var(--sa-ink);font-variant-numeric:tabular-nums}
+      .section-stats dd{margin:0;font-size:22px;font-weight:650;letter-spacing:-.02em;line-height:1.1;color:var(--sa-ink);font-variant-numeric:tabular-nums}
       .section-stats .stat-sub{margin-top:3px;font-size:11.5px}
 
 
@@ -1263,7 +1263,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .summary-stats>div{border:0;border-right:1px solid var(--sa-line);border-radius:0;box-shadow:none;background:transparent;padding:13px 16px 14px}
       .summary-stats>div:last-child{border-right:0}
       .summary-stats dt{font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase}
-      .summary-stats dd{font-size:24px}
+      .summary-stats dd{font-size:26px}
       .tile-track{height:4px;margin-top:9px;border-radius:999px;background:var(--sa-subtle);overflow:hidden}
       .tile-fill{display:block;height:100%;border-radius:999px;background:var(--sa-primary)}
 
@@ -1274,7 +1274,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .brief-kicker span{margin:0 5px;opacity:.6}
       .brief-body{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:0;align-items:stretch}
       .brief-lead{padding:10px 16px 16px;min-width:0}
-      .brief-lead h3{margin:0 0 7px;font-size:17px;font-weight:650;color:var(--sa-ink)}
+      .brief-lead h3{margin:0 0 7px;font-size:18px;font-weight:650;color:var(--sa-ink)}
       .brief-summary{margin:0 0 10px;font-size:13.5px;line-height:1.6;color:var(--sa-ink-soft);max-width:64ch}
       .brief-scope{margin:0 0 12px;font-size:12px;color:var(--sa-ink-faint)}
       .brief-list{list-style:none;margin:0;padding:0;display:grid;gap:4px;counter-reset:brief}
@@ -1437,7 +1437,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
       .fx-detail{align-self:start}
       .fx-kicker{margin:0 0 5px;font-size:11px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--sa-primary-text)}
-      .fx-detail-title{margin:0 0 10px;font-size:17px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
+      .fx-detail-title{margin:0 0 10px;font-size:18px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
       .fx-tabs{display:flex;gap:2px;margin:12px 0 12px;border-bottom:1px solid var(--sa-line)}
       .fx-tab{padding:7px 11px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--sa-ink-faint);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;margin-bottom:-1px}
       .fx-tab:hover{color:var(--sa-ink)}
@@ -1543,7 +1543,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
       /* Progress ------------------------------------------------------------ */
       .progress-bar{height:8px;border-radius:999px;background:var(--sa-info-soft);overflow:hidden;margin-bottom:22px}
-      .progress-fill{height:100%;background:var(--sa-primary);width:4%;transition:width .3s ease;border-radius:999px}
+      .progress-fill{height:100%;background:var(--sa-primary);width:100%;transform:scaleX(.04);transform-origin:left center;transition:transform .3s ease;border-radius:999px}
       .recent-feed{list-style:none;margin:0;padding:0;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);overflow:hidden;box-shadow:var(--sa-shadow-sm)}
       .recent-feed li{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:9px 12px;border-bottom:1px solid var(--sa-line)}
       .recent-feed li:last-child{border-bottom:0}
@@ -1669,9 +1669,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
            actions used to be the last flex item inside it — reachable only by
            scrolling past every section. Pinned to the visible right edge, they
            stay put while the sections scroll underneath. */
-        .nav-foot{margin:0 0 0 auto;flex-direction:row;padding:0 12px 0 10px;flex:0 0 auto;position:sticky;right:0;background:var(--sa-nav);box-shadow:-10px 0 10px -8px rgba(0,0,0,.62)}
+        .nav-foot{margin:0 0 0 auto;flex-direction:row;padding:0 12px 0 10px;flex:0 0 auto;position:sticky;right:0;background:var(--sa-nav);box-shadow:-10px 0 10px -8px rgba(0,0,0,.45)}
         .main{padding:16px 14px 22px}
-        h2{font-size:19px}
+        h2{font-size:18px}
         .cond-head{grid-template-columns:22px minmax(0,1fr);gap:8px 12px}
         .cond-headline,.cond-state{grid-column:2}
         .cond-state{justify-self:start}
@@ -2714,7 +2714,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     shadow.querySelector('.phase-name').textContent = paused ? 'Paused' : SITE_AUDIT_PHASES[active].name;
     const pct = budget ? Math.min(100, Math.round((fetched / budget) * 100)) : 0;
     shadow.querySelector('.phase-count').textContent = budget ? `${fetched} of ${budget} page budget · ${pct}%` : `${fetched} fetched`;
-    shadow.querySelector('.progress-fill').style.width = `${Math.max(2, pct)}%`;
+    shadow.querySelector('.progress-fill').style.transform = `scaleX(${Math.max(2, pct) / 100})`;
 
     const rate = paused || finished ? null : crawlRate(audit);
     const remaining = Math.max(0, budget - fetched);
@@ -3075,7 +3075,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const stateEl = shadow.querySelector('.render-state');
     const fill = shadow.querySelector('.render-progress-fill');
     const pct = Math.round((rp.rendered / rp.total) * 100);
-    fill.style.width = `${rp.rendered ? Math.max(4, pct) : 0}%`;
+    fill.style.transform = `scaleX(${(rp.rendered ? Math.max(4, pct) : 0) / 100})`;
     if (rp.remaining === 0) {
       section.dataset.state = 'done';
       stateEl.textContent = 'Observed';

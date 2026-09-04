@@ -18,6 +18,7 @@ colors:
   brand-line: "#3A2E6B"
   brand-text: "#A896FF"
   focus: "#7350F5"
+  on-primary: "#FFFFFF"
   critical: "#FF6B78"
   critical-soft: "#2A1418"
   warn: "#F0A93A"
@@ -38,9 +39,15 @@ typography:
     fontWeight: 650
     lineHeight: 1.1
     letterSpacing: "-0.03em"
+  display-compact:
+    fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "22px"
+    fontWeight: 650
+    lineHeight: 1.1
+    letterSpacing: "-0.02em"
   headline:
     fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
-    fontSize: "19px"
+    fontSize: "18px"
     fontWeight: 650
     lineHeight: 1.2
     letterSpacing: "-0.02em"
@@ -61,6 +68,30 @@ typography:
     fontSize: "16px"
     fontWeight: 400
     lineHeight: 1.55
+    letterSpacing: "normal"
+  headline-panel:
+    fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "15px"
+    fontWeight: 650
+    lineHeight: 1.25
+    letterSpacing: "-0.01em"
+  display-panel:
+    fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "20px"
+    fontWeight: 650
+    lineHeight: 1.15
+    letterSpacing: "-0.02em"
+  body-coach:
+    fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "14.5px"
+    fontWeight: 400
+    lineHeight: 1.55
+    letterSpacing: "normal"
+  body-panel:
+    fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontSize: "14px"
+    fontWeight: 400
+    lineHeight: 1.5
     letterSpacing: "normal"
   meta:
     fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
@@ -85,6 +116,7 @@ rounded:
   xs: "6px"
   sm: "8px"
   md: "10px"
+  float: "12px"
   lg: "14px"
   pill: "999px"
 spacing:
@@ -260,11 +292,17 @@ None. Lumen has exactly one accent. The semantic and severity colours below are 
 This replaced Inter, which was serviceable and anonymous: it is on every tool in the category and on the detector's own list of faces that no longer read as a choice.
 
 ### Hierarchy
-- **Display** (650, 24–26px, 1.1, −0.03em, tabular): stat-strip figures. The largest type in the product is a number.
-- **Headline** (650, 17–19px, 1.2, −0.02em): the page title in the main column, the inspected pattern's title.
+- **Display** (650, 26px, 1.1, −0.03em, tabular): the figure in a strip where the figure is the point — the Overview and Findings stat strips.
+- **Display, compact** (650, 22px, 1.1, −0.02em, tabular): the same figure where it shares a dense grid — the progress view's six tiles, the discipline section stats. The largest type in the product is still a number.
+- **Headline** (650, 18px, 1.2, −0.02em): the page title in the main column, the inspected pattern's title, the side panel's idle heading, the exported report's masthead. One step: the build carried 17px, 18px and 19px within two pixels of each other, which is an accumulation rather than a hierarchy.
 - **Title** (600, 13–13.5px, 1.35): card heads, section headings, finding titles, button labels.
 - **Body** (400, 12.5–13px, 1.55–1.6): lede and descriptive copy in the console surfaces, capped at 74ch.
 - **Body, public** (400, 16px, 1.55): the public scanner at `apps/web/public/`, and the finding headlines on it at 16px. A landing page is read at arm's length by someone deciding whether to use the product; an operator console is scanned by someone working. The two densities are deliberate and the public page does not inherit the console's 13px.
+- **Panel headline** (650, 15px) and **panel display** (650, 20px): the side panel is a 300–420px column and cannot spend 19px and 26px on a heading and a figure, so it has its own two steps at the top of the ramp. Everything below the top is shared with the console.
+- **Coach body** (400, 14.5px, 1.55): the walkthrough is read, not scanned — one step up from the console’s working density.
+- **Panel body** (400, 14px, 1.5): the side panel's root size, which most of its own text then steps down from.
+
+*Known gap:* the side panel still carries ten distinct sizes between 11px and 20px, several of them half-pixel neighbours (12 vs 12.5, 13 vs 13.5). That is an accumulation rather than a hierarchy and wants a dedicated pass over that surface; it is recorded here rather than quietly tolerated.
 - **Meta** (500, 11.5–12.5px, 1.45): counts, hints, table heads, foot notes.
 - **Label** (650, 11px, 0.07–0.09em, uppercase): provenance micro-labels only — SCANNER EVIDENCE, LUMEN INTERPRETATION, RECOMMENDED NEXT MOVE, EXPLORE, VALIDATE.
 - **Mono** (400, 11–12.5px): URLs, rule ids, coverage detail, evidence values.

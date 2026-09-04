@@ -289,7 +289,7 @@ export function renderAuditReportHtml({ audit, urls, links, findings, findingGro
     main{padding:24px 28px 56px;min-width:0;border-left:1px solid var(--wqa-line)}
     section{display:none}
     section.active{display:block}
-    h2{margin:0 0 6px;font-size:19px;font-weight:650;letter-spacing:-.02em}
+    h2{margin:0 0 6px;font-size:18px;font-weight:650;letter-spacing:-.02em}
     h2+.lede{margin-top:0}
     h2:not(:first-child){margin-top:32px}
     h3{margin:26px 0 8px;font-size:14px;font-weight:650;letter-spacing:-.01em}

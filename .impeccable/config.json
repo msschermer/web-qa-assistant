@@ -164,6 +164,24 @@
         ],
         "createdAt": "2026-09-03T23:46:23.697Z",
         "reason": "DESIGN.md 'The inset left rail' names this sanctioned"
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "apps/extension/content.js"
+        ],
+        "createdAt": "2026-09-04T00:27:14.391Z",
+        "reason": "Claude: the walkthrough spotlight traces a target element's box, so animating width/height IS the effect; the progress fills were the real finding and now use transform"
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "apps/web/public/styles.css"
+        ],
+        "createdAt": "2026-09-04T00:29:55.850Z",
+        "reason": "Claude: false positive — the only match is .frank-progress span, which sets width:100% then transitions transform; the detector reads the two declarations on one line as a width transition"
       }
     ]
   }
