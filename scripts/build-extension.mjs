@@ -85,6 +85,7 @@ const bugReportSource=fs.readFileSync(path.join(root,'packages/support/bug-repor
 fs.writeFileSync(path.join(out,'bug-report.js'),bugReportSource);
 fs.copyFileSync(path.join(root,'packages/ui/tokens.css'),path.join(out,'ui-tokens.css'));
 fs.copyFileSync(path.join(root,'packages/ai/evidence-contract.js'),path.join(out,'evidence-contract.js'));
+fs.copyFileSync(path.join(root,'packages/ai/brief-provider.js'),path.join(out,'brief-provider.js'));
 fs.copyFileSync(path.join(root,'packages/rules/browser-rules.js'),path.join(out,'browser-rules.js'));
 fs.copyFileSync(path.join(root,'packages/rules/image-purpose.js'),path.join(out,'image-purpose.js'));
 fs.copyFileSync(path.join(root,'packages/integrity/target-integrity.js'),path.join(out,'target-integrity.js'));

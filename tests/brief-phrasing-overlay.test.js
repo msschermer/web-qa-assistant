@@ -29,7 +29,7 @@ function lift(names) {
   return parts.join('\n') + '\nreturn { ' + names.join(', ') + ' };';
 }
 
-function harness({ languageModel = undefined, kicker = null } = {}) {
+function harness({ languageModel = undefined, kicker = null, provider = 'on-device', byoReady = false, byoReply = null } = {}) {
   const scope = {};
   new Function('globalThis', fs.readFileSync(BUNDLE, 'utf8'))(scope);
   const repaints = [];
@@ -39,16 +39,28 @@ function harness({ languageModel = undefined, kicker = null } = {}) {
     audit: {},
     shadow: { querySelector: (sel) => (sel.includes('brief-source') ? kicker : null) }
   };
-  const globals = { LumenBriefPhrasing: scope.LumenBriefPhrasing, LanguageModel: languageModel };
+  const sent = [];
+  const chrome = {
+    runtime: {
+      sendMessage: async (msg) => {
+        sent.push(msg);
+        if (msg.type === 'BRIEF_AI_SETTINGS') return { ok: true, provider, byo: { configured: byoReady } };
+        if (msg.type === 'BRIEF_AI_PHRASE') return byoReply || { ok: false, code: 'BYO_AI_FAILED' };
+        return {};
+      }
+    }
+  };
+  const globals = { LumenBriefPhrasing: scope.LumenBriefPhrasing, LanguageModel: languageModel, chrome };
   const api = new Function(
-    'globalThis', 'siteAudit', 'BRIEF_PROVENANCE', 'renderLumenBrief',
-    lift(['phraseBriefOnDevice', 'requestBriefPhrasing', 'renderBriefProvenance'])
+    'globalThis', 'siteAudit', 'BRIEF_PROVENANCE', 'renderLumenBrief', 'chrome',
+    lift(['briefPromptFor', 'acceptBriefPhrasing', 'phraseBriefWithOwnAi', 'phraseBriefOnDevice', 'briefPhrasingProvider', 'requestBriefPhrasing', 'renderBriefProvenance'])
   )(globals, siteAudit, {
     deterministic: 'grounded in scan evidence',
-    pending: 'grounded in scan evidence · asking on-device AI',
-    model: 'scan evidence · wording by on-device AI'
-  }, () => repaints.push('repaint'));
-  return { api, siteAudit, repaints };
+    pending: 'grounded in scan evidence · asking AI for wording',
+    model: 'scan evidence · wording by on-device AI',
+    byo: 'scan evidence · wording by your own AI'
+  }, () => repaints.push('repaint'), chrome);
+  return { api, siteAudit, repaints, sent };
 }
 
 const brief = () => ({
@@ -172,4 +184,94 @@ test('provenance names the author of the words, not the source of the facts', { 
   siteAudit.briefPhrasing = { auditId: 'audit-1', status: 'model' };
   api.renderBriefProvenance();
   assert.match(kicker.textContent, /on-device AI/, 'the reader must be told when a model wrote the words');
+});
+
+// --- bring your own AI ------------------------------------------------------
+
+const byoGood = () => ({
+  ok: true,
+  text: JSON.stringify({
+    summary: 'Two destinations fail outright for a visitor, so they come first in the order of work.',
+    areas: [{ id: 'availability', action: 'Repair the 2 dead destinations', rationale: 'A visitor following these links reaches an error the scanners reached themselves.' }]
+  })
+});
+
+test('on-device is tried before the operator endpoint, and wins when it answers', { skip: !built }, async () => {
+  // The only option where nothing leaves the machine is the one tried first.
+  const languageModel = {
+    availability: async () => 'available',
+    create: async () => ({ prompt: async () => byoGood().text, destroy() {} })
+  };
+  const { api, siteAudit, sent } = harness({ languageModel, provider: 'byo', byoReady: true, byoReply: byoGood() });
+  api.requestBriefPhrasing(brief(), audit());
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(siteAudit.briefPhrasing.status, 'model', 'on-device wording is used');
+  assert.equal(sent.some((m) => m.type === 'BRIEF_AI_PHRASE'), false, 'the endpoint is not called when on-device answered');
+});
+
+test('the operator endpoint answers when on-device cannot', { skip: !built }, async () => {
+  const { api, siteAudit, sent, repaints } = harness({
+    languageModel: undefined, provider: 'byo', byoReady: true, byoReply: byoGood()
+  });
+  api.requestBriefPhrasing(brief(), audit());
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(siteAudit.briefPhrasing.status, 'byo');
+  assert.equal(siteAudit.briefPhrasing.brief.groups[0].title, 'Repair the 2 dead destinations');
+  assert.equal(siteAudit.briefPhrasing.brief.groups[0].severity, 'high', 'the scanners still own severity');
+  assert.equal(repaints.length, 1);
+  const call = sent.find((m) => m.type === 'BRIEF_AI_PHRASE');
+  assert.ok(call, 'the service worker makes the request, not the content script');
+  assert.equal(call.provider, 'byo');
+});
+
+test('the same gate applies to the operator endpoint', { skip: !built }, async () => {
+  // A remote model gets no more latitude than the local one.
+  const invented = {
+    ok: true,
+    text: JSON.stringify({
+      summary: 'A summary that is comfortably long enough to clear the floor check.',
+      areas: [{ id: 'availability', action: 'Repair the 91 dead destinations', rationale: 'A visitor following these links reaches an error page.' }]
+    })
+  };
+  const { api, siteAudit } = harness({ provider: 'byo', byoReady: true, byoReply: invented });
+  api.requestBriefPhrasing(brief(), audit());
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(siteAudit.briefPhrasing.status, 'deterministic');
+  assert.equal(siteAudit.briefPhrasing.code, 'BRIEF_AI_INVENTED_NUMBER');
+});
+
+test('an unconfigured endpoint is never called', { skip: !built }, async () => {
+  const { api, siteAudit, sent } = harness({ provider: 'byo', byoReady: false });
+  api.requestBriefPhrasing(brief(), audit());
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(sent.some((m) => m.type === 'BRIEF_AI_PHRASE'), false);
+  assert.equal(siteAudit.briefPhrasing.status, 'deterministic');
+});
+
+test('choosing off asks nothing of anyone', { skip: !built }, async () => {
+  const languageModel = {
+    availability: async () => 'available',
+    create: async () => { throw new Error('should not be reached'); }
+  };
+  const { api, siteAudit, sent } = harness({ languageModel, provider: 'off', byoReady: true, byoReply: byoGood() });
+  api.requestBriefPhrasing(brief(), audit());
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(siteAudit.briefPhrasing.status, 'deterministic');
+  assert.equal(siteAudit.briefPhrasing.code, 'BRIEF_AI_OFF');
+  assert.equal(sent.some((m) => m.type === 'BRIEF_AI_PHRASE'), false);
+});
+
+test('every provenance state is distinguishable to a reader', { skip: !built }, () => {
+  const kicker = { textContent: '' };
+  const { api, siteAudit } = harness({ kicker });
+  const seen = new Set();
+  for (const status of ['deterministic', 'pending', 'model', 'byo']) {
+    siteAudit.briefPhrasing = { auditId: 'audit-1', status };
+    api.renderBriefProvenance();
+    seen.add(kicker.textContent);
+  }
+  assert.equal(seen.size, 4, 'a reader must be able to tell the four states apart');
+  siteAudit.briefPhrasing = { auditId: 'audit-1', status: 'byo' };
+  api.renderBriefProvenance();
+  assert.match(kicker.textContent, /your own AI/);
 });

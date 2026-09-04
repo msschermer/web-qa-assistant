@@ -1424,6 +1424,7 @@ async function loadSettings() {
     $('#gateway-key').value = r.settings?.apiKey || '';
     cloudAiFallback = Boolean(r.settings?.cloudAiFallback);
     const cloudToggle = $('#cloud-ai-fallback'); if (cloudToggle) cloudToggle.checked = cloudAiFallback;
+    loadBriefAiSettings(r.settings || {});
     if (r.tab?.id && !tab) tab = r.tab;
   }
 }
@@ -1864,3 +1865,65 @@ chrome.runtime.onMessage.addListener(msg => {
 });
 
 loadSettings().finally(() => restoreWorkspaceOrRescan({ preferRestore: true }));
+
+/**
+ * Brief wording settings.
+ *
+ * Bring-your-own AI exists because the people who audit client sites are
+ * often the people least able to send client evidence to a vendor they did
+ * not choose. The envelope that leaves the browser is already stripped of
+ * URLs, hosts, titles and markup, and the request goes from this browser
+ * straight to their endpoint — it does not pass through Lumen's servers.
+ *
+ * The host permission is requested at save time rather than mid-audit, so
+ * the Chrome prompt appears while the operator is looking at the field they
+ * just filled in.
+ */
+function loadBriefAiSettings(settings) {
+  const provider = $("#brief-ai-provider");
+  if (provider) provider.value = String(settings.briefAiProvider || "on-device");
+  const url = $("#byo-ai-url"); if (url) url.value = settings.byoAiBaseUrl || "";
+  const model = $("#byo-ai-model"); if (model) model.value = settings.byoAiModel || "";
+  const key = $("#byo-ai-key"); if (key) key.value = settings.byoAiKey || "";
+}
+
+async function saveBriefAiSettings() {
+  const status = $("#brief-ai-status");
+  const provider = $("#brief-ai-provider")?.value || "on-device";
+  const byoAiBaseUrl = ($("#byo-ai-url")?.value || "").trim();
+  const byoAiModel = ($("#byo-ai-model")?.value || "").trim();
+  const byoAiKey = $("#byo-ai-key")?.value || "";
+
+  if (provider === "byo") {
+    const check = await send({ type: "BRIEF_AI_CHECK_ENDPOINT", byoAiBaseUrl }, 5000).catch(() => null);
+    if (!check?.ok) {
+      if (status) status.textContent = check?.message || "That endpoint cannot be used.";
+      return;
+    }
+    if (!byoAiModel) {
+      if (status) status.textContent = "Set the model name your endpoint expects.";
+      return;
+    }
+    // Chrome only allows a permission request from a user gesture, which is
+    // why this happens on the save click rather than on the first audit.
+    let granted = await chrome.permissions.contains({ origins: [check.pattern] }).catch(() => false);
+    if (!granted) granted = await chrome.permissions.request({ origins: [check.pattern] }).catch(() => false);
+    if (!granted) {
+      if (status) status.textContent = "Lumen needs permission to reach " + check.origin + ". Nothing was saved.";
+      return;
+    }
+  }
+
+  const saved = await send({ type: "SAVE_BRIEF_AI_SETTINGS", briefAiProvider: provider, byoAiBaseUrl, byoAiModel, byoAiKey }, 8000).catch(() => null);
+  if (status) {
+    status.textContent = saved?.ok
+      ? (provider === "off"
+        ? "Saved. Lumen will word the brief itself."
+        : provider === "byo"
+          ? "Saved. On-device first, then your endpoint."
+          : "Saved. On-device only.")
+      : "Could not save those settings.";
+  }
+}
+
+$("#save-brief-ai")?.addEventListener("click", saveBriefAiSettings);

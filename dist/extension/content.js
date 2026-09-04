@@ -3757,8 +3757,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
    */
   const BRIEF_PROVENANCE = {
     deterministic: "grounded in scan evidence",
-    pending: "grounded in scan evidence · asking on-device AI",
-    model: "scan evidence · wording by on-device AI"
+    pending: "grounded in scan evidence · asking AI for wording",
+    model: "scan evidence · wording by on-device AI",
+    byo: "scan evidence · wording by your own AI"
   };
 
   /**
@@ -3775,6 +3776,65 @@ if (!globalThis.__WEB_QA_CONTENT__) {
    * more. A rejection is not a failure state for the operator: the
    * deterministic brief was already on screen and simply stays.
    */
+  /** The instruction and the evidence, identical for every provider. Two
+   * providers given two different prompts would be two products wearing one
+   * label. */
+  function briefPromptFor(envelope) {
+    const api = globalThis.LumenBriefPhrasing;
+    const rules = api.BRIEF_PHRASING_RULES.map((r, i) => (i + 1) + ". " + r).join("\n");
+    const shape = JSON.stringify({
+      summary: "two or three sentences",
+      areas: envelope.areas.map((a) => ({ id: a.id, action: "short imperative headline", rationale: "one or two sentences" }))
+    });
+    return {
+      system: [
+        "You word the findings of a web site audit for a professional auditing a client site.",
+        "The audit is already complete and its conclusions are fixed. You are not deciding anything.",
+        "",
+        "Rules:",
+        rules,
+        "",
+        "Reply with JSON only, in exactly this shape:",
+        shape
+      ].join("\n"),
+      user: "Evidence:\n" + JSON.stringify(envelope) + "\n\nJSON only."
+    };
+  }
+
+  /** Parse, gate and merge. Every provider ends here, so the rule that
+   * rejects an invented number applies once and applies to all of them. */
+  function acceptBriefPhrasing(raw, brief, envelope) {
+    const api = globalThis.LumenBriefPhrasing;
+    let candidate = null;
+    try { candidate = JSON.parse(String(raw).replace(/^[^{]*/, "").replace(/[^}]*$/, "")); }
+    catch { return { ok: false, code: "BRIEF_AI_INVALID_JSON" }; }
+    const verdict = api.validateBriefPhrasing(candidate, envelope);
+    if (!verdict.ok) return { ok: false, code: verdict.code, message: verdict.message };
+    return { ok: true, brief: api.mergeBriefPhrasing(brief, candidate) };
+  }
+
+  /**
+   * The operator's own endpoint.
+   *
+   * The request is made by the service worker, not here: a content script's
+   * fetch is subject to the audited page's CSP, and most sites would refuse
+   * a call to a third-party host. The response still lands in the same gate.
+   */
+  async function phraseBriefWithOwnAi(brief, audit) {
+    const api = globalThis.LumenBriefPhrasing;
+    if (!api) return { ok: false, code: "BRIEF_AI_GATE_MISSING" };
+    const envelope = api.briefEnvelope(brief, audit?.urlCounts || {});
+    if (!envelope.areas.length) return { ok: false, code: "BRIEF_AI_NOTHING_TO_SAY" };
+    const prompt = briefPromptFor(envelope);
+    let response = null;
+    try {
+      response = await chrome.runtime.sendMessage({ type: "BRIEF_AI_PHRASE", provider: "byo", system: prompt.system, user: prompt.user });
+    } catch (error) {
+      return { ok: false, code: "BYO_AI_FAILED", message: String(error?.message || error) };
+    }
+    if (!response?.ok) return { ok: false, code: response?.code || "BYO_AI_FAILED", message: response?.message || "" };
+    return acceptBriefPhrasing(response.text, brief, envelope);
+  }
   async function phraseBriefOnDevice(brief, audit) {
     const api = globalThis.LumenBriefPhrasing;
     const model = globalThis.LanguageModel;
@@ -3790,37 +3850,16 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     // not something an audit should trigger on the operator's behalf.
     if (status !== "available") return { ok: false, code: "LOCAL_AI_" + String(status).toUpperCase() };
 
-    const rules = api.BRIEF_PHRASING_RULES.map((r, i) => (i + 1) + ". " + r).join("\n");
-    const shape = JSON.stringify({
-      summary: "two or three sentences",
-      areas: envelope.areas.map((a) => ({ id: a.id, action: "short imperative headline", rationale: "one or two sentences" }))
-    });
+    const prompt = briefPromptFor(envelope);
 
     let session = null;
     try {
       session = await model.create({
         expectedInputs: [{ type: "text" }],
-        initialPrompts: [{
-          role: "system",
-          content: [
-            "You word the findings of a web site audit for a professional auditing a client site.",
-            "The audit is already complete and its conclusions are fixed. You are not deciding anything.",
-            "",
-            "Rules:",
-            rules,
-            "",
-            "Reply with JSON only, in exactly this shape:",
-            shape
-          ].join("\n")
-        }]
+        initialPrompts: [{ role: "system", content: prompt.system }]
       });
-      const raw = await session.prompt("Evidence:\n" + JSON.stringify(envelope) + "\n\nJSON only.");
-      let candidate = null;
-      try { candidate = JSON.parse(String(raw).replace(/^[^{]*/, "").replace(/[^}]*$/, "")); }
-      catch { return { ok: false, code: "BRIEF_AI_INVALID_JSON" }; }
-      const verdict = api.validateBriefPhrasing(candidate, envelope);
-      if (!verdict.ok) return { ok: false, code: verdict.code, message: verdict.message };
-      return { ok: true, brief: api.mergeBriefPhrasing(brief, candidate) };
+      const raw = await session.prompt(prompt.user);
+      return acceptBriefPhrasing(raw, brief, envelope);
     } catch (error) {
       return { ok: false, code: "LOCAL_AI_FAILED", message: String(error?.message || error) };
     } finally {
@@ -3829,22 +3868,54 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   }
 
   /** Start the phrasing once per audit, and repaint only if it is accepted. */
+  /**
+   * Ask for wording, once per audit, from whichever provider the operator
+   * chose.
+   *
+   * On-device is tried first whenever it is permitted, because it is the
+   * only option where nothing leaves the machine. Falling back to the
+   * operator's own endpoint is a deliberate second choice, not a silent
+   * upgrade: it only happens when they configured one.
+   *
+   * Every branch ends at the deterministic brief. There is no state in which
+   * a failure leaves the operator worse off than not asking.
+   */
+  async function briefPhrasingProvider() {
+    try {
+      const s = await chrome.runtime.sendMessage({ type: "BRIEF_AI_SETTINGS" });
+      return { provider: String(s?.provider || "on-device"), byoReady: Boolean(s?.byo?.configured) };
+    } catch {
+      return { provider: "on-device", byoReady: false };
+    }
+  }
+
   function requestBriefPhrasing(brief, audit) {
     const auditId = String(audit?.id || siteAudit.auditId || "");
     const state = siteAudit.briefPhrasing;
     if (state && state.auditId === auditId) return;
     siteAudit.briefPhrasing = { auditId, status: "pending" };
     renderBriefProvenance();
-    phraseBriefOnDevice(brief, audit).then((result) => {
+
+    const settle = (result, source) => {
       if (!siteAudit || String(siteAudit.auditId || "") !== auditId) return;
       siteAudit.briefPhrasing = result.ok
-        ? { auditId, status: "model", brief: result.brief }
-        : { auditId, status: "deterministic", code: result.code };
+        ? { auditId, status: source, brief: result.brief }
+        : { auditId, status: "deterministic", code: result.code, message: result.message || "" };
       if (result.ok) renderLumenBrief(siteAudit.rawFindingGroups || [], siteAudit.audit);
       else renderBriefProvenance();
-    }).catch(() => {
-      siteAudit.briefPhrasing = { auditId, status: "deterministic", code: "LOCAL_AI_FAILED" };
-      renderBriefProvenance();
+    };
+
+    briefPhrasingProvider().then(async ({ provider, byoReady }) => {
+      if (provider === "off") return settle({ ok: false, code: "BRIEF_AI_OFF" }, "deterministic");
+      if (provider === "on-device" || provider === "byo") {
+        const local = await phraseBriefOnDevice(brief, audit);
+        if (local.ok) return settle(local, "model");
+        if (provider === "byo" && byoReady) return settle(await phraseBriefWithOwnAi(brief, audit), "byo");
+        return settle(local, "deterministic");
+      }
+      return settle({ ok: false, code: "BRIEF_AI_PROVIDER_UNKNOWN" }, "deterministic");
+    }).catch((error) => {
+      settle({ ok: false, code: "BRIEF_AI_FAILED", message: String(error?.message || error) }, "deterministic");
     });
   }
 

@@ -3,6 +3,7 @@ import { buildEvidenceGraph } from './frank-evidence.js';
 import { deterministicFrankPlan, validateFrankPlan } from './frank-plan.js';
 import { attachEnvironmentContext, launchIntegrityFindings, publishedIndexSignalsFromContext, publishedIndexSignalsFromFindings, mergePublishedIndexSignals, reconcileIndexControlWithFindings, buildIndexControl, environmentNotice } from './environment.js';
 import { applyFindingPolicy, presentationPolicySummary } from './policy.js';
+import { buildByoRequest, extractByoText, validateByoEndpoint, byoOriginPattern } from './brief-provider.js';
 import { attachTargetIntegrity, finalizeBlockedTargetReport } from './apply-report.js';
 import { IMPACT_CLASSES } from './impact.js';
 import { gatewayContextEnvelope, gatewayFrankGraph } from './evidence-contract.js';
@@ -249,6 +250,10 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
     return{ok:true};
   }
   if(msg.type==='PREPARE_FRANK')return prepareFrank(msg);
+  if(msg.type==='BRIEF_AI_SETTINGS')return briefAiSettings();
+  if(msg.type==='BRIEF_AI_CHECK_ENDPOINT')return briefAiCheckEndpoint(msg);
+  if(msg.type==='SAVE_BRIEF_AI_SETTINGS')return saveBriefAiSettings(msg);
+  if(msg.type==='BRIEF_AI_PHRASE')return briefAiPhrase(msg);
   if(msg.type==='CLOUD_FRANK_PLAN')return cloudFrankPlan(msg);
   if(msg.type==='FRANK_START_PLAN')return startFrankPlan(msg);
   if(msg.type==='ASK_FRANK')return askFrank(msg);
@@ -393,7 +398,78 @@ chrome.tabs.onUpdated.addListener(async(tabId,change,updatedTab)=>{
   if(change.status!=='complete'||!/^https?:/i.test(updatedTab.url||''))return;const s=await settings();let origin;try{origin=new URL(updatedTab.url).origin}catch{return}if(s.watchedOrigins.includes(origin))await scanWatched(updatedTab);
 });
 
-async function settings(){return chrome.storage.local.get({apiBase:'',apiKey:'',cloudAiFallback:false,installationId:'',installToken:'',installTokenExpiresAt:0,watchedOrigins:[],scanState:{},siteSessions:{},ignoredRulesByOrigin:{},environmentOverridesByOrigin:{}})}
+/**
+ * Bring-your-own AI for the Lumen brief.
+ *
+ * The service worker makes this call because it is the only extension
+ * context whose fetch is not subject to the audited page's CSP — a content
+ * script asking a third-party endpoint would be refused on most sites.
+ *
+ * What crosses the wire is the envelope built by
+ * packages/findings/brief-envelope.js, which carries no URL, host, page
+ * title or markup by construction. This handler does not decide that and
+ * cannot widen it: it forwards what it is given and returns raw text. The
+ * response is parsed, validated and merged by the overlay, so every
+ * provider passes through one gate at the point of use.
+ */
+// The panel checks an endpoint before asking Chrome for permission to reach
+// it, so a typo produces a sentence rather than a permission prompt.
+function briefAiCheckEndpoint(msg){
+  const check=validateByoEndpoint(msg?.byoAiBaseUrl);
+  if(!check.ok)return{ok:false,code:check.code,message:check.message};
+  return{ok:true,origin:check.origin,pattern:byoOriginPattern(msg.byoAiBaseUrl)};
+}
+
+async function saveBriefAiSettings(msg){
+  const provider=String(msg?.briefAiProvider||"on-device");
+  if(!["off","on-device","byo"].includes(provider))return{ok:false,code:"BRIEF_AI_PROVIDER_UNKNOWN"};
+  await chrome.storage.local.set({
+    briefAiProvider:provider,
+    byoAiBaseUrl:String(msg?.byoAiBaseUrl||"").trim(),
+    byoAiModel:String(msg?.byoAiModel||"").trim(),
+    byoAiKey:String(msg?.byoAiKey||"")
+  });
+  return{ok:true};
+}
+async function briefAiSettings(){
+  const s=await settings();
+  const endpoint=validateByoEndpoint(s.byoAiBaseUrl);
+  return{ok:true,provider:s.briefAiProvider||"on-device",byo:{configured:endpoint.ok&&Boolean(String(s.byoAiModel||"").trim()),origin:endpoint.ok?endpoint.origin:"",reason:endpoint.ok?"":endpoint.message}};
+}
+
+async function briefAiPhrase(msg){
+  const s=await settings();
+  const provider=String(msg?.provider||s.briefAiProvider||"on-device");
+  if(provider!=="byo")return{ok:false,code:"BRIEF_AI_PROVIDER_NOT_BYO"};
+  const endpoint=validateByoEndpoint(s.byoAiBaseUrl);
+  if(!endpoint.ok)return{ok:false,code:endpoint.code,message:endpoint.message};
+  const model=String(s.byoAiModel||"").trim();
+  if(!model)return{ok:false,code:"BYO_AI_NO_MODEL",message:"No model name is set for your endpoint."};
+  // The endpoint is the operator's own host, so it needs an explicit grant.
+  // Asking here rather than at save time keeps the permission tied to the
+  // moment it is actually used.
+  const pattern=byoOriginPattern(s.byoAiBaseUrl);
+  const granted=await chrome.permissions.contains({origins:[pattern]}).catch(()=>false);
+  if(!granted)return{ok:false,code:"BYO_AI_NO_PERMISSION",message:"Lumen has not been granted access to "+endpoint.origin+"."};
+  let request;
+  try{request=buildByoRequest({baseUrl:s.byoAiBaseUrl,apiKey:s.byoAiKey,model,system:String(msg?.system||""),user:String(msg?.user||"")});}
+  catch(error){return{ok:false,code:"BYO_AI_BAD_REQUEST",message:String(error?.message||error)};}
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),Number(msg?.timeoutMs||20000));
+  try{
+    const res=await fetch(request.url,{...request.init,signal:controller.signal});
+    const body=await res.text();
+    if(!res.ok)return{ok:false,code:"BYO_AI_HTTP_"+res.status,message:body.slice(0,200)};
+    let payload=null;
+    try{payload=JSON.parse(body);}catch{return{ok:false,code:"BYO_AI_INVALID_JSON",message:"The endpoint did not return JSON."};}
+    const text=extractByoText(payload);
+    if(!text)return{ok:false,code:"BYO_AI_EMPTY",message:"The endpoint returned no content."};
+    return{ok:true,text,origin:endpoint.origin};
+  }catch(error){
+    return{ok:false,code:controller.signal.aborted?"BYO_AI_TIMEOUT":"BYO_AI_FAILED",message:String(error?.message||error)};
+  }finally{clearTimeout(timer);}
+}
+async function settings(){return chrome.storage.local.get({apiBase:'',apiKey:'',cloudAiFallback:false,briefAiProvider:'on-device',byoAiBaseUrl:'',byoAiKey:'',byoAiModel:'',installationId:'',installToken:'',installTokenExpiresAt:0,watchedOrigins:[],scanState:{},siteSessions:{},ignoredRulesByOrigin:{},environmentOverridesByOrigin:{}})}
 async function ensureInjected(tabId){
   try{await chrome.tabs.sendMessage(tabId,{type:'PING'});return}catch{}
   try{
