@@ -2029,7 +2029,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             <div class="stat-tile"><dt>Pages analysed</dt><dd class="sh-pages">0</dd><span class="stat-sub sh-pages-sub"></span><div class="tile-track"><span class="tile-fill"></span></div><button type="button" class="stat-open" data-open="crawled"><span class="sr-only">View the pages that were crawled</span></button></div>
             <div class="stat-tile"><dt>Findings</dt><dd class="sh-findings">0</dd><span class="stat-sub sh-findings-sub"></span><button type="button" class="stat-open" data-open="findings"><span class="sr-only">View all findings</span></button></div>
             <div class="stat-tile"><dt>Actionable</dt><dd class="sh-fix">0</dd><span class="stat-sub sh-fix-sub"></span><button type="button" class="stat-open" data-open="fix"><span class="sr-only">View the findings that need fixing</span></button></div>
-            <div class="stat-tile"><dt>Coverage gaps</dt><dd class="sh-gaps">0</dd><span class="stat-sub sh-gaps-sub"></span><button type="button" class="stat-open" data-open="gaps"><span class="sr-only">View the pages that were not fully checked</span></button></div>
+            <div class="stat-tile"><dt>Never fetched</dt><dd class="sh-gaps">0</dd><span class="stat-sub sh-gaps-sub"></span><button type="button" class="stat-open" data-open="gaps"><span class="sr-only">View the pages the crawl never fetched</span></button></div>
           </dl>
 
           <!-- The brief. Composed deterministically from the findings, which is
@@ -3419,7 +3419,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     // deliberately not folded into the findings count — see PRODUCT.md.
     const gaps = Number(counts.queued || 0) + Number(counts.error || 0) + Number(counts.skipped || 0);
 
-    shadow.querySelector('.sh-pages').textContent = String(fetched);
     shadow.querySelector('.sh-pages').textContent = discovered > fetched ? `${fetched} / ${discovered}` : String(fetched);
     shadow.querySelector('.sh-pages-sub').textContent = discovered > fetched ? `of ${discovered} discovered` : 'all discovered pages';
     const fill = shadow.querySelector('.tile-fill');
@@ -3431,7 +3430,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     // against the total is what the operator actually wants to know.
     shadow.querySelector('.sh-fix-sub').textContent = findings ? `of ${findings} findings` : '';
     shadow.querySelector('.sh-gaps').textContent = String(gaps);
-    shadow.querySelector('.sh-gaps-sub').textContent = gaps ? 'pages not fully checked' : 'every page checked';
+    shadow.querySelector('.sh-gaps-sub').textContent = gaps ? 'discovered, not crawled' : 'every page fetched';
     // A tile only offers a drill-in when there is something behind it.
     const tileCounts = { crawled: fetched, findings, fix, gaps };
     for (const btn of shadow.querySelectorAll('.stat-open')) {
@@ -4085,13 +4084,22 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       }
       // The number beside a destination is how many rows it opens on.
       const discovered = Object.values(counts).reduce((n, v) => n + Number(v || 0), 0);
-      const plain = { findings: Number(audit.findingsCount || 0), urls: discovered, links: linkTotal }[id];
+      const observations = Number(audit.findingsCount || 0);
+      const groups = siteAudit.rawFindingGroups;
+      // Findings opens on a table of patterns, not of observations. Until the
+      // groups have landed the raw count is the only honest answer.
+      const patterns = Array.isArray(groups) ? groups.length : observations;
+      const plain = { findings: patterns, urls: discovered, links: linkTotal }[id];
       if (plain === undefined) { chip.hidden = true; continue; }
       chip.hidden = false;
       delete chip.dataset.state;
       dot.hidden = true;
       num.textContent = fmtCount(plain);
-      btn.removeAttribute('title');
+      if (id === "findings" && Array.isArray(groups) && observations !== patterns) {
+        btn.title = `${observations} observations grouped into ${patterns} issue patterns`;
+      } else {
+        btn.removeAttribute("title");
+      }
     }
     renderSubnavCounts();
   }
