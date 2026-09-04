@@ -30,8 +30,14 @@ that already govern this repository — read them rather than re-deriving them:
   launch, and drive the running product.
 
 `.cursor/skills/` holds Cursor-specific workflow skills (acceptance, release,
-full-loop, autonomous improvement). They are for that tool; the `.claude/skills/`
-set below is the Claude Code equivalent. Do not port one into the other.
+full-loop). They are for that tool; the `.claude/skills/` set below is the
+Claude Code equivalent. Do not port one into the other.
+
+The single-repo autonomous improvement loop that used to sit alongside them
+was removed: it ran three cycles, produced zero accepted and zero rejected
+investigations, and the skills above had taken over the same work. What
+survives under `tools/autoqa/` is the browser harness the run skill's driver
+depends on, not a self-improvement system.
 
 ## User Intent Is the Highest Priority
 

@@ -216,6 +216,8 @@ Current delivery candidate: **1.7.5**.
 
 ## Documentation
 
-- `RELEASE_NOTES_1.7.5.md` - current release changes
-- `RELEASE_NOTES_1.7.4.md` - previous release changes
+- `docs/releases/` - release notes, newest `RELEASE_NOTES_1.7.5.md`
+- `docs/ARCHITECTURE.md` - how the extension, gateway and renderer fit together
+- `docs/TOOL-CONTRACTS.md` - the contract each connected tool is held to
+- `DESIGN.md` - the design system as built; `PRODUCT.md` - product truth and brand commitments
 - `docs/FINAL-REVIEW-1.7.0.md` - final multi-role, adversarial, security, and product review gate

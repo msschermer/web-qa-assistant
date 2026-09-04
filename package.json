@@ -16,9 +16,6 @@
     "dev:api": "node services/api/server.js",
     "release:validate": "node scripts/validate-release.mjs",
     "benchmark:corpus": "node scripts/benchmark-corpus.mjs",
-    "autoqa:activate": "node tools/autoqa/activate.mjs",
-    "autoqa:deactivate": "node tools/autoqa/deactivate.mjs",
-    "autoqa:bootstrap-proof": "node tools/autoqa/bootstrap-proof.mjs",
     "autoqa:dogfood": "node tools/autoqa/dogfood.mjs",
     "autoqa:fixture-server": "node tools/autoqa/fixture-server.mjs"
   },
