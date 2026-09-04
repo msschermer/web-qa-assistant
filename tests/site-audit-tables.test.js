@@ -60,9 +60,20 @@ test('the Pages section index only renders when it actually groups pages', () =>
 });
 
 test('link status filters are offered only when they would return rows', () => {
+  // The chip row above the table was removed: it duplicated the left rail's
+  // sub-views scope for scope and count for count, on one screen. The
+  // guarantee it carried moved with the control — a scope with nothing behind
+  // it stays visible, so the operator can see the count is zero, but stops
+  // inviting a click into an empty table.
   assert.match(
     content,
-    /if \(value && !count\) continue;/,
-    'a status chip with no links behind it is a dead end'
+    /btn\.disabled = size === 0 && btn\.dataset\.view !== 'all';/,
+    'a sub-view with nothing behind it is a dead end'
   );
+  assert.doesNotMatch(content, /class="status-chips"/, 'the duplicate chip row should be gone');
+  // Every link status the store can answer is still reachable from the rail.
+  const links = content.slice(content.indexOf('links: ['), content.indexOf('links: [') + 400);
+  for (const status of ['broken', 'blocked', 'inconclusive', 'healthy']) {
+    assert.ok(links.includes(`status: '${status}'`), `${status} must stay reachable from the rail`);
+  }
 });

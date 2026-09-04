@@ -856,13 +856,18 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   function siteAuditCss() {
     return `
       :host{all:initial;
-        /* Lumen Site Audit — the category standard, executed straight.
-           Reference bar: Sitebulb's density and severity discipline, Semrush's
-           polish and colour confidence. Light theme only, by decision.
+        /* Lumen Site Audit — the operator's console. Near-black grounds,
+           violet as the single product voice, one sealed severity ramp, and
+           structure carried by hairlines rather than shadow.
+
+           all:initial means an unstyled size is the browser's 16px rather than
+           the product's, so the body step is declared here and inherited. The
+           Overview's coverage note rendered at 16px for exactly that reason.
 
            Every value below is an alias of packages/ui/tokens.css, which is
            injected directly above them. Nothing here may name a colour of its
            own: a second definition is how the ramp drifted the first time. */
+        font-size:13px;
         ${lumenTokens()}
 
         --sa-canvas:var(--wqa-canvas);      /* app background behind panels */
@@ -929,8 +934,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .mark::after{content:"";position:absolute;inset:8px;border-radius:50%;border:2px solid #fff}
       .identity{display:flex;align-items:baseline;gap:8px;margin-right:auto}
       .identity .name{font-size:15px;font-weight:650;letter-spacing:-.01em;color:var(--sa-ink)}
-      .identity .device{font-size:12px;color:var(--sa-ink-faint)}
-      .close{border:1px solid var(--sa-line-strong);background:var(--sa-surface);width:32px;height:32px;display:grid;place-items:center;font-size:16px;line-height:1;color:var(--sa-ink-faint);cursor:pointer;border-radius:var(--sa-radius-sm)}
+      .identity .device{font-size:12.5px;color:var(--sa-ink-faint)}
+      .close{border:1px solid var(--sa-line-strong);background:var(--sa-surface);width:32px;height:32px;display:grid;place-items:center;color:var(--sa-ink-faint);cursor:pointer;border-radius:var(--sa-radius-sm)}
+      .close .x{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round}
       .close:hover{background:var(--sa-subtle);color:var(--sa-ink)}
 
       /* The foot note is a child of .body, so .body stacks; the view inside it
@@ -991,7 +997,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .scope-text{margin:0;padding:11px 14px;font-size:13px;line-height:1.55;color:var(--sa-ink-soft)}
       .scope-text b{color:var(--sa-ink);font-weight:650;font-variant-numeric:tabular-nums}
       .sheet-scale:empty{display:none}
-      .sheet-scale{margin-left:auto;font-size:12px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:999px;padding:4px 12px;white-space:nowrap}
+      .sheet-scale{margin-left:auto;font-size:12.5px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:999px;padding:4px 12px;white-space:nowrap}
 
       /* Cards --------------------------------------------------------------- */
       .card{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm)}
@@ -1005,9 +1011,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
          flight. Nothing here is a summary; summaries are the results view. */
       .panel-title{margin:0 0 14px;font-size:26px;font-weight:650;letter-spacing:-.025em}
       .run-identity h2{margin:0}
-      .run-identity h2 .run-target{font-family:var(--sa-mono);font-size:.72em;color:var(--sa-ink-soft);font-weight:600}
+      .run-identity h2 .run-target{font-family:var(--sa-mono);font-size:13px;color:var(--sa-ink-soft);font-weight:600}
       .chip-row{display:flex;flex-wrap:wrap;gap:8px;margin:9px 0 0}
-      .state-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--sa-line);background:var(--sa-subtle);border-radius:999px;padding:4px 11px;font-size:12px;color:var(--sa-ink-soft);white-space:nowrap}
+      .state-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--sa-line);background:var(--sa-subtle);border-radius:999px;padding:4px 11px;font-size:12.5px;color:var(--sa-ink-soft);white-space:nowrap}
       .state-chip.live{border-color:var(--sa-primary-line);background:var(--sa-primary-soft);color:var(--sa-primary-text)}
       .state-chip.provisional{border-color:color-mix(in srgb,var(--sa-warn) 40%,transparent);background:var(--sa-warn-soft);color:var(--sa-warn)}
       .pulse-dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:0 0 auto;animation:sa-pulse 1.8s ease-in-out infinite}
@@ -1044,7 +1050,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .phase-metrics dd{margin:0;font-size:15px;font-weight:600;color:var(--sa-ink);font-variant-numeric:tabular-nums}
       .now-requesting{display:flex;align-items:baseline;gap:10px;margin:14px 0 0;padding:10px 12px;background:var(--sa-subtle);border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);min-width:0}
       .nr-label{flex:0 0 auto;font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--sa-ink-faint)}
-      .nr-url{font-family:var(--sa-mono);font-size:12px;color:var(--sa-ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+      .nr-url{font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 
       .budget-callout{display:flex;align-items:center;gap:13px;margin:0 0 14px;padding:13px 15px;border:1px solid var(--sa-primary-line);background:var(--sa-primary-soft);border-radius:var(--sa-radius)}
       .callout-mark{flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:var(--sa-primary)}
@@ -1058,7 +1064,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .card-head{display:flex;align-items:center;gap:10px;margin:0 0 3px}
       .card-head .feed-heading{margin:0}
       .card-head .state-chip,.card-head .mix-total{margin-left:auto}
-      .mix-total{font-size:12px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
+      .mix-total{font-size:12.5px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
       .panel-card>.hint{margin:0 0 11px}
 
       .recent-feed li{align-items:flex-start;gap:11px;padding:10px 0;border-bottom:1px solid var(--sa-line);background:transparent}
@@ -1069,7 +1075,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .feed-mark[data-kind=bad]{background:var(--sa-critical-soft);border-color:color-mix(in srgb,var(--sa-critical) 40%,transparent);color:var(--sa-critical)}
       .feed-body{flex:1 1 auto;min-width:0}
       .feed-title{display:block;font-size:13px;color:var(--sa-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .feed-title code{font-family:var(--sa-mono);font-size:12px;color:var(--sa-ink)}
+      .feed-title code{font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-ink)}
       .feed-note{display:block;margin-top:2px;font-size:11.5px;color:var(--sa-ink-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .feed-age{flex:0 0 auto;font-size:11px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums;padding-top:2px}
 
@@ -1091,7 +1097,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .mix-fill{height:100%;border-radius:999px}
       .mix-count{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;color:var(--sa-ink)}
 
-      .run-config{display:flex;align-items:center;gap:12px;margin:0;padding:11px 14px;border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);font-size:12px;color:var(--sa-ink-faint)}
+      .run-config{display:flex;align-items:center;gap:12px;margin:0;padding:11px 14px;border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);font-size:12.5px;color:var(--sa-ink-faint)}
       .run-config-facts{flex:1 1 auto;overflow-wrap:anywhere}
       .run-config .link-btn{margin-left:0}
 
@@ -1106,7 +1112,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .stat-grid>div{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);padding:14px 16px}
       .stat-grid dt{font-size:12.5px;font-weight:500;color:var(--sa-ink-faint);margin:0 0 6px;text-transform:none;letter-spacing:0}
       .stat-grid dd{margin:0;font-size:26px;font-weight:650;letter-spacing:-.02em;line-height:1.1;color:var(--sa-ink);font-variant-numeric:tabular-nums}
-      .stat-sub{display:block;margin-top:5px;font-size:12px;line-height:1.4;color:var(--sa-ink-faint)}
+      .stat-sub{display:block;margin-top:5px;font-size:12.5px;line-height:1.4;color:var(--sa-ink-faint)}
       .tb-quantities{display:none}
 
       .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
@@ -1191,7 +1197,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
       .section-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0 0 16px}
       .section-stats>div{position:relative;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);padding:11px 13px}
-      .section-stats dt{font-size:12px;font-weight:500;color:var(--sa-ink-faint);margin:0 0 5px}
+      .section-stats dt{font-size:12.5px;font-weight:500;color:var(--sa-ink-faint);margin:0 0 5px}
       .section-stats dd{margin:0;font-size:22px;font-weight:650;letter-spacing:-.02em;line-height:1.1;color:var(--sa-ink);font-variant-numeric:tabular-nums}
       .section-stats .stat-sub{margin-top:3px;font-size:11.5px}
 
@@ -1243,7 +1249,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
          which fit across where a discipline's four long ones would not. */
       .crawl-shape{grid-template-columns:repeat(auto-fit,minmax(290px,1fr));margin-bottom:18px}
       .section-findings{margin:18px 0 0}
-      .section-findings h3{margin:0 0 4px;font-size:14px;font-weight:600;color:var(--sa-ink)}
+      .section-findings h3{margin:0 0 4px;font-size:13.5px;font-weight:600;color:var(--sa-ink)}
       .section-findings .hint{margin:0 0 10px}
 
       /* Overview grid ------------------------------------------------------- */
@@ -1276,7 +1282,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .brief-lead{padding:10px 16px 16px;min-width:0}
       .brief-lead h3{margin:0 0 7px;font-size:18px;font-weight:650;color:var(--sa-ink)}
       .brief-summary{margin:0 0 10px;font-size:13.5px;line-height:1.6;color:var(--sa-ink-soft);max-width:64ch}
-      .brief-scope{margin:0 0 12px;font-size:12px;color:var(--sa-ink-faint)}
+      .brief-scope{margin:0 0 12px;font-size:12.5px;color:var(--sa-ink-faint)}
       .brief-list{list-style:none;margin:0;padding:0;display:grid;gap:4px;counter-reset:brief}
       .brief-item{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:11px;align-items:center;width:100%;padding:9px 10px;border:1px solid transparent;border-radius:var(--sa-radius-sm);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
       .brief-item:hover{background:var(--sa-subtle)}
@@ -1288,17 +1294,17 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .brief-item-title{display:block;font-size:13.5px;font-weight:600;color:var(--sa-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .brief-item-meta{display:flex;align-items:center;gap:8px;margin-top:3px;font-size:11.5px;color:var(--sa-ink-faint)}
       .brief-item-pages{display:grid;justify-items:end;font-size:11.5px;color:var(--sa-ink-faint);white-space:nowrap}
-      .brief-item-pages b{font-size:14px;color:var(--sa-ink);font-variant-numeric:tabular-nums}
+      .brief-item-pages b{font-size:13.5px;color:var(--sa-ink);font-variant-numeric:tabular-nums}
 
       .brief-detail{padding:16px;border-left:1px solid var(--sa-line);background:var(--sa-surface);min-width:0}
       .brief-badges{display:flex;gap:8px;margin:0 0 10px;flex-wrap:wrap}
-      .brief-detail h4{margin:0 0 8px;font-size:16px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
+      .brief-detail h4{margin:0 0 8px;font-size:15px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
       .brief-why{margin:0 0 13px;font-size:13px;line-height:1.6;color:var(--sa-ink-soft)}
       .evidence-box{padding:11px 13px;border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);background:var(--sa-subtle);margin:0 0 13px}
       .evidence-label{display:block;margin-bottom:8px;font-size:11px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--sa-ink-faint)}
       .evidence-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0}
       .evidence-facts dt{font-size:11px;color:var(--sa-ink-faint);margin:0 0 2px}
-      .evidence-facts dd{margin:0;font-size:14px;font-weight:600;color:var(--sa-ink);font-variant-numeric:tabular-nums}
+      .evidence-facts dd{margin:0;font-size:13.5px;font-weight:600;color:var(--sa-ink);font-variant-numeric:tabular-nums}
       .brief-detail .actions{margin-top:0}
 
       .ov-columns{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:14px;margin:0 0 16px;align-items:start}
@@ -1345,7 +1351,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .cond-evidence{margin:0;padding:0 16px 14px 50px;list-style:none}
       .cond-evidence li{font-size:12.5px;line-height:1.55;color:var(--sa-ink-soft);margin-bottom:4px}
       .cond-confidence{display:inline-block;margin-top:6px;font-size:11.5px;color:var(--sa-ink-faint);background:var(--sa-subtle);border-radius:999px;padding:2px 9px}
-      .conditions-note{margin:0;padding:0 16px 14px;font-size:12px;line-height:1.5;color:var(--sa-ink-faint)}
+      .conditions-note{margin:0;padding:0 16px 14px;font-size:12.5px;line-height:1.5;color:var(--sa-ink-faint)}
 
       /* The three published documents (robots.txt, sitemap, llms.txt) are rows
          in the conditions readout, and each offers to open the file itself. */
@@ -1371,11 +1377,11 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .finding-row .f-top .badge{justify-self:start}
       .finding-row .f-title{min-width:0;overflow-wrap:anywhere}
       .finding-row .f-top::before{content:none}
-      .finding-row .f-title{font-weight:600;font-size:14px;color:var(--sa-ink)}
+      .finding-row .f-title{font-weight:600;font-size:13.5px;color:var(--sa-ink)}
       .finding-row .f-meta{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--sa-ink-faint);padding-left:0}
       .f-chev{flex:0 0 auto;width:16px;text-align:right;color:var(--sa-ink-faint);font-size:15px;line-height:1;transition:transform .15s ease}
       .f-toggle[aria-expanded="true"] .f-chev{transform:rotate(90deg)}
-      .finding-row .f-conf{flex:0 0 auto;width:112px;font-size:12px;color:var(--sa-ink-faint);display:flex;align-items:center;gap:6px;margin-left:auto}
+      .finding-row .f-conf{flex:0 0 auto;width:112px;font-size:12.5px;color:var(--sa-ink-faint);display:flex;align-items:center;gap:6px;margin-left:auto}
       .finding-row.sev-critical{box-shadow:inset 3px 0 0 var(--sa-sev-critical),var(--sa-shadow-sm)}
       .finding-row.sev-high{box-shadow:inset 3px 0 0 var(--sa-sev-high),var(--sa-shadow-sm)}
       .finding-row.sev-medium{box-shadow:inset 3px 0 0 var(--sa-sev-medium),var(--sa-shadow-sm)}
@@ -1452,7 +1458,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .columns-row{display:flex;align-items:center;gap:9px;padding:6px 4px;font-size:12.5px;color:var(--sa-ink-soft);cursor:pointer;border-radius:var(--sa-radius-sm)}
       .columns-row:hover{background:var(--sa-subtle)}
 
-      .fx-foot{display:flex;align-items:center;gap:14px;margin:0;padding:11px 14px;border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);font-size:12px;color:var(--sa-ink-faint)}
+      .fx-foot{display:flex;align-items:center;gap:14px;margin:0;padding:11px 14px;border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);font-size:12.5px;color:var(--sa-ink-faint)}
       .fx-foot-text{flex:1 1 auto}
       .fx-foot .link-btn{margin-left:0}
 
@@ -1462,11 +1468,11 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
       /* Tables -------------------------------------------------------------- */
       .data-table{width:100%;border-collapse:collapse;font-size:13px;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);overflow:hidden}
-      .data-table th{text-align:left;font-size:12px;font-weight:600;color:var(--sa-ink-faint);text-transform:none;letter-spacing:0;padding:10px 12px;border-bottom:1px solid var(--sa-line);background:var(--sa-subtle)}
+      .data-table th{text-align:left;font-size:12.5px;font-weight:600;color:var(--sa-ink-faint);text-transform:none;letter-spacing:0;padding:10px 12px;border-bottom:1px solid var(--sa-line);background:var(--sa-subtle)}
       .data-table td{padding:10px 12px;border-bottom:1px solid var(--sa-line);vertical-align:top;word-break:break-word;font-variant-numeric:tabular-nums;color:var(--sa-ink-soft)}
       .data-table tbody tr:hover:not(.detail-row){background:var(--sa-subtle)}
       .data-table tbody tr:nth-child(even):not(.detail-row){background:transparent}
-      .data-table td.mono{font-family:var(--sa-mono);font-size:12px;color:var(--sa-ink)}
+      .data-table td.mono{font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-ink)}
       .data-table th[data-sort]{cursor:pointer;user-select:none}
       .data-table th[data-sort]:hover{color:var(--sa-ink)}
       .data-table th.sorted-asc::after{content:' \\25B2'}
@@ -1501,17 +1507,13 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .toolbar input[type="search"]::placeholder{color:var(--sa-ink-faint)}
       .toolbar select{border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius-sm);padding:9px 12px;font-size:13.5px;background:var(--sa-surface);color:var(--sa-ink);box-shadow:var(--sa-shadow-sm)}
       /* Link status filters carry their own counts. */
-      .status-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
-      .status-chip{display:inline-flex;align-items:center;gap:8px}
       .status-chip b{font-variant-numeric:tabular-nums;font-weight:650;color:var(--sa-ink)}
-      .status-chip.active{background:var(--sa-primary-soft);border-color:var(--sa-primary-line);color:var(--sa-primary-text)}
-      .status-chip.active b{color:var(--sa-primary-text)}
       /* A run of links from one page reads as a block, not the same URL
          restated on every row. */
       .links-table .link-same-source td:first-child{border-top:0}
       .links-table tbody tr:not(.link-same-source) td{border-top:1px solid var(--sa-line)}
       .links-source-head{width:34%}
-      .urls-table td:first-child{font-family:var(--sa-mono);font-size:12px}
+      .urls-table td:first-child{font-family:var(--sa-mono);font-size:12.5px}
       .toolbar input:focus-visible,.toolbar select:focus-visible,.field input:focus-visible,.field textarea:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px;border-color:var(--sa-primary)}
       .filter-state{font-size:12.5px;color:var(--sa-ink-faint);margin-left:auto;font-variant-numeric:tabular-nums}
       .hide-unconfirmed{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--sa-ink-soft);white-space:nowrap}
@@ -1527,7 +1529,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .hint-indent{margin:-2px 0 12px 26px}
       .check{display:flex;align-items:center;gap:9px;margin:0 0 6px;font-size:13.5px;color:var(--sa-ink)}
       .actions{display:flex;align-items:center;gap:10px;margin-top:18px;flex-wrap:wrap}
-      .lede{margin:0 0 18px;color:var(--sa-ink-soft);font-size:14px;line-height:1.6;max-width:76ch}
+      .lede{margin:0 0 18px;color:var(--sa-ink-soft);font-size:13px;line-height:1.6;max-width:76ch}
       .tier-note{padding:12px 14px;background:var(--sa-primary-soft);border:1px solid var(--sa-primary-line);border-radius:var(--sa-radius);font-size:13px;color:var(--sa-ink-soft)}
       .resume-banner{display:flex;align-items:center;gap:14px;justify-content:space-between;border:1px solid var(--sa-primary-line);background:var(--sa-primary-soft);border-radius:var(--sa-radius);padding:12px 14px;margin:0 0 18px}
       .resume-text{margin:0;font-size:13px;color:var(--sa-ink-soft)}
@@ -1547,7 +1549,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .recent-feed{list-style:none;margin:0;padding:0;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);overflow:hidden;box-shadow:var(--sa-shadow-sm)}
       .recent-feed li{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:9px 12px;border-bottom:1px solid var(--sa-line)}
       .recent-feed li:last-child{border-bottom:0}
-      .recent-feed .url{flex:1 1 auto;font-family:var(--sa-mono);font-size:12px;color:var(--sa-ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .recent-feed .url{flex:1 1 auto;font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
       /* Severity + breakdown ------------------------------------------------- */
       .severity-block{margin:0}
@@ -1568,14 +1570,17 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       /* min-width:0 is what actually lets the title shrink and ellipsis inside
          a flex row; without it the row grew and pushed the count off the card. */
       .top-issues .ti-rule{font-weight:500;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sa-ink)}
-      .top-issues .ti-scope{flex:0 0 auto;color:var(--sa-ink-faint);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+      .top-issues .ti-scope{flex:0 0 auto;color:var(--sa-ink-faint);font-size:12.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
 
       /* Coverage ------------------------------------------------------------- */
 
       .cov-plan{display:flex;height:10px;border-radius:999px;overflow:hidden;margin:0 0 12px;background:var(--sa-info-soft)}
       .cov-surveyed{background:var(--sa-primary)}
       .cov-unsurveyed{background-image:var(--sa-hatch);flex:1 1 auto}
-      .cov-note{display:grid;gap:8px;line-height:1.55}
+      /* Inside all:initial an unstyled size is the browser's 16px, not the
+         product's. This block states coverage limits, so it reads at the body
+         step like every other sentence on the screen. */
+      .cov-note{display:grid;gap:8px;font-size:13px;line-height:1.55;color:var(--sa-ink-soft)}
 
       /* The render pass is where every accessibility, runtime-error and
          performance finding comes from. When it has not run, the audit is
@@ -1584,7 +1589,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
          readout uses, instead of reading as an optional extra tucked under the
          fold. */
       .render-section{border:1px solid var(--sa-primary-line);border-radius:var(--sa-radius);padding:16px;margin:0 0 18px;background:var(--sa-primary-soft)}
-      .render-section h3{margin:0;font-size:14px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--sa-ink)}
+      .render-section h3{margin:0;font-size:13.5px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--sa-ink)}
       .render-head{display:flex;align-items:center;gap:10px;margin:0 0 6px}
       .render-state{margin-left:auto;flex:0 0 auto;font-size:11.5px;font-weight:600;white-space:nowrap;border-radius:999px;padding:3px 10px;background:var(--sa-subtle);color:var(--sa-ink-faint)}
       .render-status{margin:0 0 12px;font-size:13px;line-height:1.55;color:var(--sa-ink-soft);max-width:82ch}
@@ -1602,7 +1607,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .deliver{border:1px solid var(--sa-line);border-radius:var(--sa-radius);margin:0;overflow:hidden;background:var(--sa-surface);box-shadow:var(--sa-shadow-sm)}
       .deliver-main{display:flex;align-items:center;gap:18px;padding:16px}
       .deliver-copy{flex:1 1 auto}
-      .deliver-copy h3{margin:0 0 3px;font-size:14px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--sa-ink)}
+      .deliver-copy h3{margin:0 0 3px;font-size:13.5px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--sa-ink)}
       .deliver-copy .hint{margin:0;color:var(--sa-ink-faint)}
       .deliver-data{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--sa-subtle);border-top:1px solid var(--sa-line)}
       .deliver-label{font-size:12.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--sa-ink-faint);margin-right:4px}
@@ -1627,13 +1632,13 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .history-list li:last-child{border-bottom:0}
       .history-list button{border:0;background:transparent;color:var(--sa-primary-text);font-weight:600;cursor:pointer;font-size:13px}
 
-      .foot-note{margin:0;padding:10px 16px;border-top:1px solid var(--sa-line);background:var(--sa-surface);color:var(--sa-ink-faint);font-size:12px;flex:0 0 auto;font-family:var(--sa-sans)}
+      .foot-note{margin:0;padding:10px 16px;border-top:1px solid var(--sa-line);background:var(--sa-surface);color:var(--sa-ink-faint);font-size:12.5px;flex:0 0 auto;font-family:var(--sa-sans)}
 
       .finding-detail{margin:0 14px 14px;padding-top:12px;border-top:1px solid var(--sa-line)}
       .finding-detail h4{margin:14px 0 5px;font-size:12.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--sa-ink-faint)}
       .detail-basis,.detail-explain{margin:0 0 8px;font-size:13px;line-height:1.6;color:var(--sa-ink-soft);max-width:84ch}
       .detail-rule{margin:0;font-size:12.5px;color:var(--sa-ink-faint)}
-      .detail-rule code{font-family:var(--sa-mono);font-size:12px;color:var(--sa-ink-soft)}
+      .detail-rule code{font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-ink-soft)}
       .finding-detail .url-list{max-height:220px;overflow:auto;border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);background:var(--sa-subtle);padding:6px 10px;margin:2px 0 4px}
       .finding-detail .url-item{display:block;font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-primary-text);text-decoration:none;padding:3px 0;word-break:break-all}
       .finding-detail .url-item:hover{text-decoration:underline}
@@ -1734,7 +1739,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       { id: 'all', label: 'All links', status: '' },
       { id: 'broken', label: 'Broken', status: 'broken' },
       { id: 'blocked', label: 'Blocked', status: 'blocked' },
-      { id: 'inconclusive', label: 'Unverified', status: 'inconclusive' }
+      { id: 'inconclusive', label: 'Unverified', status: 'inconclusive' },
+      { id: 'healthy', label: 'Healthy', status: 'healthy' }
     ]
   };
 
@@ -1881,7 +1887,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       FORM: The direction the operator pinned with six mockups, replacing the light category standard the previous world had taken as the standing exit.
       FINISH: unreviewed and undocumented is unfinished; DESIGN.md is written from the world that shipped, not from the one that was intended.
     --><style>${siteAuditCss()}</style><div class="backdrop"></div><section class="workspace" role="dialog" aria-modal="true" aria-labelledby="sa-title">
-      <header class="head"><span class="mark" aria-hidden="true"></span><div class="identity"><span class="name">Lumen</span><span class="device">Site Audit</span></div><button type="button" class="close" aria-label="Close site audit">&times;</button></header>
+      <header class="head"><span class="mark" aria-hidden="true"></span><div class="identity"><span class="name">Lumen</span><span class="device">Site Audit</span></div><button type="button" class="close" aria-label="Close site audit"><svg class="x" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button></header>
       <div class="body">
         <div class="view view-setup active">
           <div class="main main-narrow">
@@ -2200,7 +2206,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
               <input type="search" class="links-search" placeholder="Filter by source or target…" />
               <select class="links-status" hidden><option value="">All statuses</option><option value="broken">Broken</option><option value="blocked">Blocked</option><option value="inconclusive">Inconclusive</option><option value="healthy">Healthy</option></select>
             </div>
-            <div class="status-chips" role="group" aria-label="Filter links by status"></div>
             <table class="data-table links-table"><thead><tr><th class="links-source-head">Source page</th><th>Links to</th><th>Anchor text</th><th class="col-status">Status</th></tr></thead><tbody class="links-body"></tbody></table>
             <div class="pager"><button type="button" class="btn pager-prev links-prev">Prev</button><span class="pager-label links-label"></span><button type="button" class="btn pager-next links-next">Next</button></div>
           </div>
@@ -4089,7 +4094,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
           : `${rendered} of ${renderTotal} pages checked in this browser`;
         continue;
       }
-      const plain = { findings: Number(audit.findingsCount || 0), urls: Number(counts.fetched || 0), links: linkTotal }[id];
+      // The number beside a destination is how many rows it opens on.
+      const discovered = Object.values(counts).reduce((n, v) => n + Number(v || 0), 0);
+      const plain = { findings: Number(audit.findingsCount || 0), urls: discovered, links: linkTotal }[id];
       if (plain === undefined) { chip.hidden = true; continue; }
       chip.hidden = false;
       delete chip.dataset.state;
@@ -4109,14 +4116,16 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const links = audit.linkCounts || {};
     const pages = siteAudit.distributions?.pages || {};
     const sizes = {
-      'urls:all': Number(counts.fetched || 0),
+      // Every discovered URL, because that is what the unscoped table lists.
+      'urls:all': Object.values(counts).reduce((n, v) => n + Number(v || 0), 0),
       'urls:gaps': ['queued', 'error', 'skipped'].reduce((n, k) => n + Number(counts[k] || 0), 0),
       'urls:noindex': Number(pages.noindex || 0),
       'urls:errors': Number(counts.error || 0),
       'links:all': Object.values(links).reduce((s, n) => s + Number(n || 0), 0),
       'links:broken': Number(links.broken || 0),
       'links:blocked': Number(links.blocked || 0),
-      'links:inconclusive': Number(links.inconclusive || 0)
+      'links:inconclusive': Number(links.inconclusive || 0),
+      'links:healthy': Number(links.healthy || 0)
     };
     for (const btn of shadow.querySelectorAll('.subnav-item')) {
       const size = sizes[`${btn.dataset.tab}:${btn.dataset.view}`];
@@ -6033,35 +6042,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     ['healthy', 'Healthy']
   ];
 
-  /** Status filters that carry their own counts, so the 126 broken links are
-   * one click away instead of buried under a thousand healthy ones. */
-  function renderLinkStatusChips() {
-    const wrap = siteAudit.shadow.querySelector('.status-chips');
-    if (!wrap) return;
-    const totals = siteAudit.totalLinksByStatus || {};
-    const all = Object.values(totals).reduce((n, v) => n + Number(v || 0), 0);
-    wrap.innerHTML = '';
-    const entries = [['', 'All links', all], ...LINK_STATUS_ORDER.map(([k, label]) => [k, label, Number(totals[k] || 0)])];
-    for (const [value, label, count] of entries) {
-      if (value && !count) continue; // never offer a filter that returns nothing
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'chip status-chip' + (siteAudit.linksStatus === value ? ' active' : '');
-      b.dataset.status = value;
-      b.setAttribute('aria-pressed', String(siteAudit.linksStatus === value));
-      b.innerHTML = '<span></span><b></b>';
-      b.querySelector('span').textContent = label;
-      b.querySelector('b').textContent = String(count);
-      b.addEventListener('click', () => {
-        siteAudit.linksStatus = value;
-        siteAudit.linksOffset = 0;
-        const select = siteAudit.shadow.querySelector('.links-status');
-        if (select) select.value = value;
-        loadSiteAuditLinks();
-      });
-      wrap.appendChild(b);
-    }
-  }
 
   function renderLinksTable() {
     const shadow = siteAudit.shadow;
@@ -6069,7 +6049,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const search = String(siteAudit.linksSearch || '').trim().toLowerCase();
     const rows = (siteAudit.rawLinks || []).filter((l) => !search || l.source_url.toLowerCase().includes(search) || l.target_url.toLowerCase().includes(search) || (l.anchor_text || '').toLowerCase().includes(search));
     body.innerHTML = '';
-    renderLinkStatusChips();
     let lastSource = null;
     for (const l of rows) {
       const repeated = l.source_url === lastSource;

@@ -1,4 +1,4 @@
-import { deterministicBrief, finalizeCorrelatedFindings, composeReportAttention } from './correlate.js';
+import { deterministicBrief, finalizeCorrelatedFindings, composeReportAttention, composedBrief } from './correlate.js';
 import { buildEvidenceGraph } from './frank-evidence.js';
 import { deterministicFrankPlan, validateFrankPlan } from './frank-plan.js';
 import { attachEnvironmentContext, launchIntegrityFindings, publishedIndexSignalsFromContext, publishedIndexSignalsFromFindings, mergePublishedIndexSignals, reconcileIndexControlWithFindings, buildIndexControl, environmentNotice } from './environment.js';
@@ -559,13 +559,21 @@ async function contextualize(report,context=null){
   const announce=String(report.coverage?.links||'')!=='pending';
   if(announce)emitScanProgress('CORRELATING');
   const attention=composeReportAttention(findings,{limit:8});
-  const next={...finalized,environment,page:{...finalized.page,environment},findings,performanceAssessment,attention:{groups:attention.groups.map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead.id,selectors:g.selectors,instanceIds:g.instances.map(x=>x.id),rootCauseKey:g.lead.rootCauseKey||g.key,targetability:g.lead.targetability||'',lenses:g.lead.lenses||[]})),allGroups:(attention.allGroups||[]).map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead?.id,targetability:g.lead?.targetability||'',confidence:g.lead?.confidence||'',ruleId:g.lead?.ruleId||''})),worthChecking:(attention.worthChecking||[]).map(w=>({key:w.key,title:w.title,scope:w.scope,lens:w.lens,fixOwner:w.fixOwner,size:w.size,instanceCount:w.instanceCount,findingIds:w.findings.map(f=>f.id)})),classCounts:attention.classCounts,materialGroupCount:attention.materialGroupCount,materialFindingCount:attention.materialFindingCount,representedClasses:attention.representedClasses,classLabels:Object.fromEntries(Object.entries(IMPACT_CLASSES).map(([k,v])=>[k,v.label]))},priorityBrief:finalized.priorityBrief||report.priorityBrief||null,targetIntegrityBlocked:finalized.targetIntegrityBlocked||false};
+  const next={...finalized,environment,page:{...finalized.page,environment},findings,performanceAssessment,attention:serializeAttention(attention),priorityBrief:finalized.priorityBrief||report.priorityBrief||null,targetIntegrityBlocked:finalized.targetIntegrityBlocked||false};
   next.coverageReasons=explainCoverageReasons(next);
   const reconciled=reconcilePerformanceCoverage(next);
   const tFrank=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
   if(announce)emitScanProgress('FRANK_ANALYZING');
   reconciled.evidenceLedger=buildEvidenceLedger(reconciled,{uiLimit:8,composition:attention,findings});
-  if(!reconciled.priorityBrief)reconciled.priorityBrief=deterministicBrief(findings,{coverage:reconciled.coverage,linkAudit:reconciled.linkAudit,targetIntegrity:reconciled.page?.targetIntegrity});
+  // The brief describes the grouping the operator is shown. Anything composed
+  // upstream — the gateway writes one before this correlation pass merges
+  // findings — is restated from the composition above, or the heading and the
+  // sentence beneath it end up counting two different things.
+  if(reconciled.priorityMode!=='ai'){
+    reconciled.priorityBrief=composedBrief(attention,{coverage:reconciled.coverage,linkAudit:reconciled.linkAudit,targetIntegrity:reconciled.page?.targetIntegrity});
+  }else if(!reconciled.priorityBrief){
+    reconciled.priorityBrief=deterministicBrief(findings,{coverage:reconciled.coverage,linkAudit:reconciled.linkAudit,targetIntegrity:reconciled.page?.targetIntegrity});
+  }
   const frankReviewMs=Math.round(((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())-tFrank);
   const corrMs=Math.round(((typeof performance!=='undefined'&&performance.now)?performance.now():Date.now())-tCorr);
   reconciled.scanTimings={...(reconciled.scanTimings||{}),correlationMs:corrMs,frankReviewMs,totalMs:Number(reconciled.scanTimings?.totalMs||0)+corrMs};
@@ -617,6 +625,13 @@ async function updateState(tab,report){
 }
 
 async function scanExistingTab(tabId){if(!tabId)throw new Error('The inspected tab is no longer available.');let report;try{await chrome.tabs.sendMessage(tabId,{type:'PING'});report=await chrome.tabs.sendMessage(tabId,{type:'SCAN'})}catch{try{await ensureInjected(tabId);report=await chrome.tabs.sendMessage(tabId,{type:'SCAN'})}catch{throw new Error('This tab navigated or page access expired. Click the toolbar icon on the current page, or enable Watch this site for persistent rescans.')}}if(!report?.page?.url||!/^https?:/i.test(report.page.url))throw new Error('This browser page cannot be inspected. Open a normal HTTP or HTTPS page.');return contextualize(report)}
+// One serialized shape for the composed attention view, so the two places
+// that build it cannot drift. Everything downstream — the panel heading, the
+// brief, the markdown export — reads these counts, so they must describe the
+// same grouping of the same findings.
+function serializeAttention(attention){
+  return {groups:attention.groups.map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead.id,selectors:g.selectors,instanceIds:g.instances.map(x=>x.id),rootCauseKey:g.lead.rootCauseKey||g.key,targetability:g.lead.targetability||'',lenses:g.lead.lenses||[]})),allGroups:(attention.allGroups||[]).map(g=>({key:g.key,impactClass:g.impactClass,title:g.title,size:g.size,instanceCount:g.instanceCount,score:g.score,leadId:g.lead?.id,targetability:g.lead?.targetability||'',confidence:g.lead?.confidence||'',ruleId:g.lead?.ruleId||''})),worthChecking:(attention.worthChecking||[]).map(w=>({key:w.key,title:w.title,scope:w.scope,lens:w.lens,fixOwner:w.fixOwner,size:w.size,instanceCount:w.instanceCount,findingIds:w.findings.map(f=>f.id)})),classCounts:attention.classCounts,materialGroupCount:attention.materialGroupCount,materialFindingCount:attention.materialFindingCount,representedClasses:attention.representedClasses,classLabels:Object.fromEntries(Object.entries(IMPACT_CLASSES).map(([k,v])=>[k,v.label]))};
+}
 async function localScan(tab){if(!tab?.id)throw new Error('No active browser tab was found.');if(tab.url&&!/^https?:/i.test(tab.url))throw new Error('This browser page cannot be inspected. Open a normal HTTP or HTTPS page.');try{await ensureInjected(tab.id)}catch(error){const message=String(error?.message||error||'');if(/Cannot access|Missing host permission|activeTab|chrome:\/\/|edge:\/\/|about:/i.test(message))throw new Error('Page access expired. Click the toolbar icon on this page, then use New scan normally.');throw error}let report=await chrome.tabs.sendMessage(tab.id,{type:'SCAN'});if(!report?.page?.url||!/^https?:/i.test(report.page.url))throw new Error('This browser page cannot be inspected. Open a normal HTTP or HTTPS page.');return contextualize(report)}
 async function addLinkAudit(report,tabId,{privilegedExternal=true}={}){
   if(['complete','partial'].includes(report?.coverage?.links)&&report?.linkAudit&&!report?.externalLinkCandidates?.length)return report;if(!tabId)return report;
@@ -893,7 +908,11 @@ async function enrich(report,tabId=null){
       ai:'deterministic'
     };
     const connectedError=connectedMode==='auth-required'?'The assistant gateway requires an access key.':connectedMode==='auth-rejected'?'The saved assistant access key was rejected.':String(error?.message||error);
-    const next={...report,coverage,priorityBrief:deterministicBrief(report.findings,{coverage,linkAudit:report.linkAudit,targetIntegrity:report.page?.targetIntegrity}),priorityMode:'deterministic',connectedMode,connectedError,context:{performance:null,services:{}}};
+    // One composition, read by both the heading and the sentence under it. This
+    // path used to recompose only the brief, so a real scan printed "8 issues
+    // need attention" directly above "10 issues need attention across 5 areas".
+    const retryAttention=composeReportAttention(report.findings,{limit:8});
+    const next={...report,coverage,attention:serializeAttention(retryAttention),priorityBrief:composedBrief(retryAttention,{coverage,linkAudit:report.linkAudit,targetIntegrity:report.page?.targetIntegrity}),priorityMode:'deterministic',connectedMode,connectedError,context:{performance:null,services:{}}};
     next.publishedCoverage=buildPublishedCoverage({report:next,coverage,connectedMode,enrichmentError:connectedError,latencyMs:Date.now()-publishedStarted,attempted:true});
     next.frankReview=emptyFrankReview({reason:'not-requested'});
     next.guidanceSource=scanGuidanceSource({hasVisibleGuidance:true,priorityMode:'deterministic',coverageAi:'deterministic',frankReview:next.frankReview});

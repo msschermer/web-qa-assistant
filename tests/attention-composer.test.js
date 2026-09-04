@@ -136,3 +136,40 @@ test('prominent navigation raises materiality over an equivalent body link', () 
   const bodyLink = { ...brokenLink(), frankPriority: 'high', link: { ...brokenLink().link, prominence: 'normal' } };
   assert.ok(materialityScore(navLink) > materialityScore(bodyLink));
 });
+
+// --- The heading and the sentence beneath it count the same thing ----------
+
+test('the brief and the panel heading are composed from one grouping', () => {
+  // The real defect: a scan printed "8 issues need attention" as its heading
+  // and "10 issues need attention across 5 areas" as the sentence directly
+  // under it. The heading read `attention.materialGroupCount` from the
+  // composition made when the scan finished; the brief was recomposed later,
+  // from a finding set that had moved on. Whichever number is right, the
+  // product may not print both.
+  const findings = [
+    brokenLink(),
+    ...Array.from({ length: 6 }, (_, i) => axeFinding(i)),
+    ...Array.from({ length: 4 }, (_, i) => axeFinding(i, `seo.rule-${i}`))
+  ];
+  const composition = composeAttention(findings, { limit: 8 });
+  const brief = composedBrief(composition, {});
+
+  // The count the UI shows is the count the sentence states, and it is the
+  // real total rather than the display cap.
+  assert.ok(composition.materialGroupCount >= composition.groups.length,
+    'the total may not be smaller than the page of it that is displayed');
+  const stated = brief.match(/^(?:One issue needs|(\d+) issues need) attention/);
+  assert.ok(stated, `the brief should open with a count, got: ${brief}`);
+  const statedCount = stated[1] ? Number(stated[1]) : 1;
+  assert.equal(statedCount, composition.materialGroupCount,
+    'the brief must state the composition it was given, not a re-grouping of its own');
+
+  // And a display cap never becomes the reported total.
+  const capped = composeAttention(findings, { limit: 2 });
+  assert.equal(capped.materialGroupCount, composition.materialGroupCount,
+    'lowering the display limit must not change how many issues are reported to exist');
+  assert.equal(capped.groups.length, 2, 'the limit still caps what is displayed');
+  assert.equal(composedBrief(capped, {}).match(/^(\d+) issues need attention/)[1],
+    String(composition.materialGroupCount),
+    'the brief reports the total even when the list beneath it is capped');
+});
