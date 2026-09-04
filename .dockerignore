@@ -1,0 +1,53 @@
+# Docker build context.
+#
+# All three services build with `context: .`, so without this every image build
+# ships the whole working tree to the daemon before copying three folders out
+# of it. The local Chrome profiles under .autoqa alone were about a gigabyte,
+# and data/audits.db another hundred megabytes — none of it reachable by any
+# COPY in any Dockerfile.
+#
+# The Dockerfiles copy explicit paths rather than the whole tree, so this file
+# is about build speed and context size, not about what ends up in the image.
+
+.git
+.gitignore
+
+# QA harness state: Chrome profiles, run artifacts, screenshots. Regenerable.
+.autoqa
+
+# Server runtime state. Mounted as a volume in production, never baked in.
+data
+
+# Built extension output — the images serve the gateway and the public page.
+dist
+
+# Local tool installs and their caches.
+.claude
+.cursor
+.impeccable
+.github
+node_modules
+tools/cursor-webqa/node_modules
+
+# Tests, fixtures and developer tooling: no service imports them.
+tests
+tools
+fixtures
+qa-sites
+scripts
+
+# Documentation and release paperwork.
+docs
+*.md
+!README.md
+RELEASE_PROVENANCE.txt
+Caddyfile.snippet
+docker-compose*.yml
+
+# Environments and editor noise.
+.env
+.env.*
+!.env.example
+.cursorignore
+.cursorindexingignore
+*.log

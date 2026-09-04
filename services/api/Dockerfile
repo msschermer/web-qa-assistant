@@ -1,7 +1,12 @@
 FROM node:24-alpine
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --omit=dev --no-audit --no-fund
+# The gateway never launches a browser — rendering is the renderer service's
+# job and its own image. Omitting optional dependencies keeps Playwright and
+# its browser binaries out of this image entirely; the SKIP flag is belt and
+# braces for anyone who drops the flag above.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+RUN npm install --omit=dev --omit=optional --no-audit --no-fund
 COPY packages ./packages
 COPY services/api ./services/api
 COPY apps/web/public ./apps/web/public
