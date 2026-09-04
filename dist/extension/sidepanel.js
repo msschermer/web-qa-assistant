@@ -1,4 +1,4 @@
-globalThis.__WEBQA_BUILD_REVISION__="10e65bf54fd4";
+globalThis.__WEBQA_BUILD_REVISION__="66d298279463";
 import { localFrankRuntime, localFrankWalkthrough, probeLocalAi, setLocalAiTraceSink, localAiDiagnostics } from './local-ai.js';
 import { presentFinding, presentArea, QA_AREA_ORDER } from './presentation.js';
 import { RuntimeTrace, buildBugReport, bugReportPrivacySummary } from './bug-report.js';
@@ -943,7 +943,7 @@ function renderFrankStep(index) {
   const step = frank.plan.steps[frank.index];
   $('#frank-step-count').textContent = `Step ${frank.index + 1} of ${total}`;
   const progressPct = Math.round(((frank.index + 1) / total) * 100);
-  $('#frank-progress-bar').style.width = `${progressPct}%`;
+  $('#frank-progress-bar').style.transform = `scaleX(${progressPct / 100})`;
   const track = $('#frank-progress-track');
   if (track) { track.setAttribute('aria-valuenow', String(progressPct)); track.setAttribute('aria-valuetext', `Step ${frank.index + 1} of ${total}`); }
   const STEP_ROLE = { spotlight: 'Locate', evidence: 'Checks', interpretation: 'Interpret', comparison: 'Compare', trend: 'History', impact: 'Impact', remediation: 'Fix', verification: 'Verify', summary: 'Summary' };

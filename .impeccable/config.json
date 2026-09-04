@@ -182,6 +182,24 @@
         ],
         "createdAt": "2026-09-04T00:29:55.850Z",
         "reason": "Claude: false positive — the only match is .frank-progress span, which sets width:100% then transitions transform; the detector reads the two declarations on one line as a width transition"
+      },
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": [
+          "apps/extension/sidepanel.html"
+        ],
+        "createdAt": "2026-09-04T00:44:36.642Z",
+        "reason": "Claude: engineering judgment, disclosed — the panel is a 320-420px operator column showing dense evidence. It is down to six steps (11/12.5/13.5/15/18/20) with every half-pixel neighbour collapsed; a 1.25 ratio from an 11px floor would put its headings at 21px in a 420px column. Hierarchy there comes from weight and ink, which the system uses deliberately."
+      },
+      {
+        "rule": "tiny-text",
+        "value": "*",
+        "files": [
+          "apps/extension/sidepanel.html"
+        ],
+        "createdAt": "2026-09-04T00:44:36.772Z",
+        "reason": "Claude: 11px is the documented floor (DESIGN.md, The 11px Floor Rule) and the rule's own floor; the 41 uses are micro-labels, counts and tabular meta, not body copy"
       }
     ]
   }

@@ -87,12 +87,6 @@ typography:
     fontWeight: 400
     lineHeight: 1.55
     letterSpacing: "normal"
-  body-panel:
-    fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
-    fontSize: "14px"
-    fontWeight: 400
-    lineHeight: 1.5
-    letterSpacing: "normal"
   meta:
     fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
     fontSize: "12.5px"
@@ -300,9 +294,8 @@ This replaced Inter, which was serviceable and anonymous: it is on every tool in
 - **Body, public** (400, 16px, 1.55): the public scanner at `apps/web/public/`, and the finding headlines on it at 16px. A landing page is read at arm's length by someone deciding whether to use the product; an operator console is scanned by someone working. The two densities are deliberate and the public page does not inherit the console's 13px.
 - **Panel headline** (650, 15px) and **panel display** (650, 20px): the side panel is a 300–420px column and cannot spend 19px and 26px on a heading and a figure, so it has its own two steps at the top of the ramp. Everything below the top is shared with the console.
 - **Coach body** (400, 14.5px, 1.55): the walkthrough is read, not scanned — one step up from the console’s working density.
-- **Panel body** (400, 14px, 1.5): the side panel's root size, which most of its own text then steps down from.
 
-*Known gap:* the side panel still carries ten distinct sizes between 11px and 20px, several of them half-pixel neighbours (12 vs 12.5, 13 vs 13.5). That is an accumulation rather than a hierarchy and wants a dedicated pass over that surface; it is recorded here rather than quietly tolerated.
+**The Panel Conforms Rule.** The side panel uses seven steps and invents none of them: 11 label, 12.5 meta, 13 body, 13.5 title, 15 panel headline, 18 headline, 20 panel display. It had accumulated four of its own — 11.5, 12, 14 and 14.5 — none doing a job the ramp could not already do, half a pixel from a step that existed. When a dense surface needs separation it takes it from weight, which is why meta at 500 and title at 600 can sit a pixel apart and still read as different things. A surface that needs a size the ramp lacks changes the ramp; it does not keep a private one.
 - **Meta** (500, 11.5–12.5px, 1.45): counts, hints, table heads, foot notes.
 - **Label** (650, 11px, 0.07–0.09em, uppercase): provenance micro-labels only — SCANNER EVIDENCE, LUMEN INTERPRETATION, RECOMMENDED NEXT MOVE, EXPLORE, VALIDATE.
 - **Mono** (400, 11–12.5px): URLs, rule ids, coverage detail, evidence values.
