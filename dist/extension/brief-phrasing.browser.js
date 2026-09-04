@@ -93,14 +93,22 @@ function briefEnvelope(brief, counts = {}) {
  * be checked does not belong here — it would be a promise the product makes
  * to itself and never verifies.
  */
+/** Intensity the evidence has to earn. A brief that calls two broken links on
+ * forty pages a severe impact is the kind of overstatement a consultant gets
+ * caught on in front of a client, and it is one adjective away at all times. */
+const UNEARNED_INTENSITY = ['severely', 'severe', 'critical', 'critically', 'urgent', 'urgently', 'major', 'drastic', 'dire', 'catastrophic', 'massive'];
+
 const BRIEF_PHRASING_RULES = [
-  'Rewrite only the wording. The order of the areas, their severity, their confidence and every count are already decided and must not change.',
+  'Say what the site or its visitors actually lose. Never restate the action — an area whose reason repeats its own headline has said nothing.',
+  'Give the reason this area is ranked where it is, not merely what it is.',
+  'Keep any number that changes what someone would do — above all where many affected pages share one cause, because that is one fix rather than many.',
   'Return every area id you were given, once each, in the order you were given them.',
   'Use only numbers that appear in the evidence you were given. Do not compute new totals, percentages or comparisons.',
   'Do not use the words confirmed, corroborated, inferred or inconclusive about an area unless that is the confidence recorded for it.',
+  'Do not call anything severe, critical, urgent or major unless its severity is recorded as critical.',
   'Do not include any URL, domain, file path or code.',
   'Do not claim one area caused another. You have no evidence of causation.',
-  'Write for a professional auditing a client site: specific, plain, and free of filler.'
+  'Write plainly and directly. Say "add the missing headers", never "requiring consistent addition of headers".'
 ];
 
 /**
@@ -122,6 +130,28 @@ const BRIEF_PHRASING_RULES = [
  */
 
 
+/** The longest run of words a reply shares with the wording it was given.
+ * Three consecutive words is the point at which a sentence stops sounding
+ * like a coincidence and starts sounding like the headline read back. */
+const ECHO_RUN = 3;
+
+function wordsOf(value) {
+  return String(value || '').toLowerCase().match(/[a-z0-9]+/g) || [];
+}
+
+/** Does `text` repeat any ECHO_RUN-word run from `source`? */
+function sharedPhrase(text, source) {
+  const a = wordsOf(text);
+  const b = wordsOf(source);
+  if (a.length < ECHO_RUN || b.length < ECHO_RUN) return "";
+  const runs = new Set();
+  for (let i = 0; i + ECHO_RUN <= b.length; i++) runs.add(b.slice(i, i + ECHO_RUN).join(" "));
+  for (let i = 0; i + ECHO_RUN <= a.length; i++) {
+    const run = a.slice(i, i + ECHO_RUN).join(" ");
+    if (runs.has(run)) return run;
+  }
+  return "";
+}
 const CONFIDENCE_WORDS = ['confirmed', 'corroborated', 'inferred', 'inconclusive'];
 
 /** Boilerplate a model reaches for when it has nothing to say. Guidance that
@@ -207,6 +237,34 @@ function validateBriefPhrasing(candidate, envelope) {
   for (const word of CONFIDENCE_WORDS) {
     if (summaryLower.includes(word) && !expected.some((a) => a.confidence === word)) {
       return fail('BRIEF_AI_CONFIDENCE', `The model summary claims "${word}" evidence that no ranked area carries.`);
+    }
+  }
+
+  // Intensity the evidence did not earn. "Severely impacted" reads exactly as
+  // authoritative as an accurate sentence and is the overstatement most likely
+  // to embarrass whoever presents this.
+  const worstSeverity = expected.some((a) => a.severity === 'critical');
+  if (!worstSeverity) {
+    const loud = UNEARNED_INTENSITY.find((word) => new RegExp('\\b' + word + '\\b', 'i').test(text));
+    if (loud) {
+      return fail('BRIEF_AI_OVERSTATED', `The model called this "${loud}" when nothing in the audit is recorded as critical.`);
+    }
+  }
+
+  // A reason that reads its own headline back has said nothing, and cost a
+  // model call to say it. This is the failure the first on-device run
+  // produced: "broken destinations, addressed through repairing confirmed
+  // broken destinations".
+  for (let i = 0; i < areas.length; i++) {
+    const echoed = sharedPhrase(areas[i]?.rationale, areas[i]?.action);
+    if (echoed) {
+      return fail('BRIEF_AI_ECHO', `The reason given for ${expected[i].id} reads its own headline back ("${echoed}").`);
+    }
+  }
+  for (const area of areas) {
+    const echoed = sharedPhrase(summary, area?.action);
+    if (echoed) {
+      return fail('BRIEF_AI_ECHO', `The summary repeats a headline verbatim ("${echoed}") instead of saying why the order is what it is.`);
     }
   }
 

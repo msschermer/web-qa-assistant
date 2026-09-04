@@ -3808,7 +3808,20 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         "Reply with JSON only, in exactly this shape:",
         shape
       ].join("\n"),
-      user: "Evidence:\n" + JSON.stringify(envelope) + "\n\nJSON only."
+      // The composed brief goes in labelled, as the standard rather than as
+      // one more field of JSON. The first on-device run had it in the payload
+      // and ignored it, producing a restatement that lost both the reason for
+      // the ordering and the number that made one fix out of forty pages.
+      user: [
+        "Evidence:",
+        JSON.stringify(envelope),
+        "",
+        "Lumen already composed this summary. It is the standard to beat:",
+        envelope.deterministicSummary,
+        "",
+        "Write something a professional would rather read. If you cannot, return that summary unchanged.",
+        "JSON only."
+      ].join("\n")
     };
   }
 

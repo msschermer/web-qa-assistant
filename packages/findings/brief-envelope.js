@@ -92,12 +92,20 @@ export function briefEnvelope(brief, counts = {}) {
  * be checked does not belong here — it would be a promise the product makes
  * to itself and never verifies.
  */
+/** Intensity the evidence has to earn. A brief that calls two broken links on
+ * forty pages a severe impact is the kind of overstatement a consultant gets
+ * caught on in front of a client, and it is one adjective away at all times. */
+export const UNEARNED_INTENSITY = ['severely', 'severe', 'critical', 'critically', 'urgent', 'urgently', 'major', 'drastic', 'dire', 'catastrophic', 'massive'];
+
 export const BRIEF_PHRASING_RULES = [
-  'Rewrite only the wording. The order of the areas, their severity, their confidence and every count are already decided and must not change.',
+  'Say what the site or its visitors actually lose. Never restate the action — an area whose reason repeats its own headline has said nothing.',
+  'Give the reason this area is ranked where it is, not merely what it is.',
+  'Keep any number that changes what someone would do — above all where many affected pages share one cause, because that is one fix rather than many.',
   'Return every area id you were given, once each, in the order you were given them.',
   'Use only numbers that appear in the evidence you were given. Do not compute new totals, percentages or comparisons.',
   'Do not use the words confirmed, corroborated, inferred or inconclusive about an area unless that is the confidence recorded for it.',
+  'Do not call anything severe, critical, urgent or major unless its severity is recorded as critical.',
   'Do not include any URL, domain, file path or code.',
   'Do not claim one area caused another. You have no evidence of causation.',
-  'Write for a professional auditing a client site: specific, plain, and free of filler.'
+  'Write plainly and directly. Say "add the missing headers", never "requiring consistent addition of headers".'
 ];

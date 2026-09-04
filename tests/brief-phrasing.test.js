@@ -218,3 +218,101 @@ test('the browser bundle exposes the same gate these tests exercise', async () =
   [reordered.areas[0], reordered.areas[1]] = [reordered.areas[1], reordered.areas[0]];
   assert.equal(api.validateBriefPhrasing(reordered, env).code, 'BRIEF_AI_AREA_MISMATCH');
 });
+
+// --- the regression an on-device model actually produced --------------------
+
+/**
+ * The first live on-device run passed every check that existed and was still
+ * worse than the template it replaced. These are that exact output, so the
+ * rules added afterwards are held to the failure that motivated them rather
+ * than to an invented one.
+ */
+const OBSERVED_ON_DEVICE_OUTPUT = {
+  summary: 'The availability of your site is severely impacted by broken destinations, addressed through repairing confirmed broken destinations. Security concerns stem from insufficient response headers, requiring consistent addition. Content and indexability issues require remediation of missing on-page signals and resolution of indexability blockers.',
+  areas: [
+    { id: 'availability', action: 'Repair confirmed broken destinations', rationale: 'Broken destinations are addressed through repairing confirmed broken destinations.' },
+    { id: 'security', action: 'Add missing response headers consistently', rationale: 'Security concerns stem from insufficient response headers, requiring consistent addition.' },
+    { id: 'content', action: 'Restore missing on-page signals', rationale: 'Content issues require remediation of missing on-page signals.' }
+  ]
+};
+
+test('the output that shipped worse than the template is now rejected', () => {
+  const env = briefEnvelope(brief(), counts());
+  const result = validateBriefPhrasing(OBSERVED_ON_DEVICE_OUTPUT, env);
+  assert.equal(result.ok, false, 'this is the text that motivated the quality rules');
+  // "Severely" is caught first: nothing in this audit is recorded as critical.
+  assert.equal(result.code, 'BRIEF_AI_OVERSTATED');
+  assert.match(result.message, /severely/i);
+});
+
+test('unearned intensity is rejected, and earned intensity is not', () => {
+  const env = briefEnvelope(brief(), counts());
+  const loud = goodCandidate();
+  loud.areas[0].rationale = 'This is a critical failure for every visitor who follows the link.';
+  assert.equal(validateBriefPhrasing(loud, env).code, 'BRIEF_AI_OVERSTATED');
+
+  // When the scanners did record a critical severity, the word is available.
+  const severe = brief();
+  severe.groups[0].severity = 'critical';
+  const severeEnv = briefEnvelope(severe, counts());
+  assert.equal(validateBriefPhrasing(loud, severeEnv).ok, true, 'critical evidence may be called critical');
+});
+
+test('a reason that reads its own headline back is rejected', () => {
+  // Verbatim read-back is what the rule targets, and what the live model
+  // actually did. A paraphrased restatement can still slip through: perfect
+  // semantic echo detection is not available to a string rule, and a check
+  // that rejected good writing would cost more than the mediocre writing it
+  // saved — a rejection only ever falls back to the composed brief.
+  const env = briefEnvelope(brief(), counts());
+  const echo = goodCandidate();
+  echo.areas[0].action = 'Repair confirmed broken destinations';
+  echo.areas[0].rationale = 'These are addressed by repairing confirmed broken destinations across the estate.';
+  const result = validateBriefPhrasing(echo, env);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'BRIEF_AI_ECHO');
+  assert.match(result.message, /availability/);
+  assert.match(result.message, /confirmed broken destinations/);
+});
+
+test('the observed regression is caught by the echo rule too, not only by tone', () => {
+  // The live output tripped the overstatement rule first. With that one word
+  // removed it must still fail, or the echo rule is decorative.
+  const env = briefEnvelope(brief(), counts());
+  const quieter = JSON.parse(JSON.stringify(OBSERVED_ON_DEVICE_OUTPUT));
+  quieter.summary = quieter.summary.replace('severely impacted', 'affected');
+  const result = validateBriefPhrasing(quieter, env);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'BRIEF_AI_ECHO');
+});
+
+test('a summary that only restates its headlines is rejected', () => {
+  const env = briefEnvelope(brief(), counts());
+  const echo = goodCandidate();
+  echo.summary = 'Repair the two dead destinations, set the missing response headers site-wide, restore the missing on-page descriptions.';
+  assert.equal(validateBriefPhrasing(echo, env).code, 'BRIEF_AI_ECHO');
+});
+
+test('a reason that adds a consequence still passes', () => {
+  // The rules must reject restatement without rejecting good writing.
+  const env = briefEnvelope(brief(), counts());
+  const good = goodCandidate();
+  good.areas[0].rationale = 'A visitor following the link lands on an error instead of the destination, and the scanners reached that error themselves.';
+  assert.equal(validateBriefPhrasing(good, env).ok, true);
+});
+
+test('the deterministic summary itself would pass its own gate', () => {
+  // If the composed wording could not survive the rules, the rules would be
+  // demanding something the product does not do.
+  const env = briefEnvelope(brief(), counts());
+  const asCandidate = {
+    summary: 'Start with the destinations that fail for a visitor, which are journey failures rather than stylistic warnings. Then repair the pattern repeated across the whole estate: one shared cause is one fix, not 40.',
+    areas: [
+      { id: 'availability', action: 'Repair the broken destinations', rationale: 'Someone following the link reaches an error instead of the content they wanted.' },
+      { id: 'security', action: 'Add the missing response headers', rationale: 'The same omission repeats on 40 pages, so one deployment change closes all of them.' },
+      { id: 'content', action: 'Restore the on-page signals', rationale: 'Search results and shared links fall back to whatever the crawler can guess.' }
+    ]
+  };
+  const result = validateBriefPhrasing(asCandidate, env);
+  assert.equal(result.ok, true, result.message);
+});

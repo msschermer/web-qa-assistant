@@ -16,8 +16,30 @@
  * as "affects 32 pages", and only one of them came from the crawl.
  */
 
-import { allowedNumbers } from './brief-envelope.js';
+import { allowedNumbers, UNEARNED_INTENSITY } from './brief-envelope.js';
 
+/** The longest run of words a reply shares with the wording it was given.
+ * Three consecutive words is the point at which a sentence stops sounding
+ * like a coincidence and starts sounding like the headline read back. */
+const ECHO_RUN = 3;
+
+function wordsOf(value) {
+  return String(value || '').toLowerCase().match(/[a-z0-9]+/g) || [];
+}
+
+/** Does `text` repeat any ECHO_RUN-word run from `source`? */
+function sharedPhrase(text, source) {
+  const a = wordsOf(text);
+  const b = wordsOf(source);
+  if (a.length < ECHO_RUN || b.length < ECHO_RUN) return "";
+  const runs = new Set();
+  for (let i = 0; i + ECHO_RUN <= b.length; i++) runs.add(b.slice(i, i + ECHO_RUN).join(" "));
+  for (let i = 0; i + ECHO_RUN <= a.length; i++) {
+    const run = a.slice(i, i + ECHO_RUN).join(" ");
+    if (runs.has(run)) return run;
+  }
+  return "";
+}
 const CONFIDENCE_WORDS = ['confirmed', 'corroborated', 'inferred', 'inconclusive'];
 
 /** Boilerplate a model reaches for when it has nothing to say. Guidance that
@@ -103,6 +125,34 @@ export function validateBriefPhrasing(candidate, envelope) {
   for (const word of CONFIDENCE_WORDS) {
     if (summaryLower.includes(word) && !expected.some((a) => a.confidence === word)) {
       return fail('BRIEF_AI_CONFIDENCE', `The model summary claims "${word}" evidence that no ranked area carries.`);
+    }
+  }
+
+  // Intensity the evidence did not earn. "Severely impacted" reads exactly as
+  // authoritative as an accurate sentence and is the overstatement most likely
+  // to embarrass whoever presents this.
+  const worstSeverity = expected.some((a) => a.severity === 'critical');
+  if (!worstSeverity) {
+    const loud = UNEARNED_INTENSITY.find((word) => new RegExp('\\b' + word + '\\b', 'i').test(text));
+    if (loud) {
+      return fail('BRIEF_AI_OVERSTATED', `The model called this "${loud}" when nothing in the audit is recorded as critical.`);
+    }
+  }
+
+  // A reason that reads its own headline back has said nothing, and cost a
+  // model call to say it. This is the failure the first on-device run
+  // produced: "broken destinations, addressed through repairing confirmed
+  // broken destinations".
+  for (let i = 0; i < areas.length; i++) {
+    const echoed = sharedPhrase(areas[i]?.rationale, areas[i]?.action);
+    if (echoed) {
+      return fail('BRIEF_AI_ECHO', `The reason given for ${expected[i].id} reads its own headline back ("${echoed}").`);
+    }
+  }
+  for (const area of areas) {
+    const echoed = sharedPhrase(summary, area?.action);
+    if (echoed) {
+      return fail('BRIEF_AI_ECHO', `The summary repeats a headline verbatim ("${echoed}") instead of saying why the order is what it is.`);
     }
   }
 
