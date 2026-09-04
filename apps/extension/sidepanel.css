@@ -12,8 +12,8 @@ button,input,select,textarea{font:inherit}button{color:inherit}h1,h2,h3,p{margin
 .btn-danger:hover:not(:disabled){background:var(--wqa-critical-soft);border-color:var(--wqa-critical)}
 .btn .departs{width:11px;height:11px;flex:0 0 auto;margin-left:1px;fill:none;stroke:currentColor;stroke-width:1.35;stroke-linecap:round;stroke-linejoin:round;opacity:.72}
 .btn:has(.departs){display:inline-flex;align-items:center;gap:5px}
-.btn-brand{background:var(--wqa-brand-soft);border-color:transparent;color:var(--wqa-brand-strong)}
-.btn-brand:hover:not(:disabled){background:var(--wqa-brand-soft);border-color:var(--wqa-brand);color:var(--wqa-brand-strong)}.btn-quiet{padding:6px 9px;font-size:12px}.btn-text{display:inline-flex;align-items:center;min-height:24px;border:0;background:transparent;color:var(--wqa-brand-text);padding:4px 7px;font-size:12px}.btn-text:hover{text-decoration:underline}
+.btn-brand{background:var(--wqa-brand-soft);border-color:transparent;color:var(--wqa-brand-text)}
+.btn-brand:hover:not(:disabled){background:var(--wqa-brand-soft);border-color:var(--wqa-brand);color:var(--wqa-brand-text)}.btn-quiet{padding:6px 9px;font-size:12px}.btn-text{display:inline-flex;align-items:center;min-height:24px;border:0;background:transparent;color:var(--wqa-brand-text);padding:4px 7px;font-size:12px}.btn-text:hover{text-decoration:underline}
 
 .app-header{position:sticky;top:0;z-index:20;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 14px;background:var(--wqa-surface);color:var(--wqa-ink);border-bottom:1px solid var(--wqa-line)}
 .app-header h1{font-size:15px;font-weight:650;letter-spacing:-.01em;color:var(--wqa-ink)}

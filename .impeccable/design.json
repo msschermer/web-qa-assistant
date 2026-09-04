@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-04T00:14:03.832Z",
+  "generatedAt": "2026-09-04T00:35:25.458Z",
   "title": "Design System: Lumen",
   "extensions": {
     "colorMeta": {
@@ -260,6 +260,22 @@
           "#E8E2FD"
         ]
       },
+      "on-primary": {
+        "role": "primary",
+        "displayName": "On Primary",
+        "canonical": "#FFFFFF",
+        "purpose": "The ink that sits on a violet fill and on the solid critical severity badge. White is the only value that clears 4.5:1 on #7350F5, which is why the primary is this violet and not a brighter one.",
+        "tonalRamp": [
+          "#1A1A1A",
+          "#2E2E2E",
+          "#454545",
+          "#606060",
+          "#808080",
+          "#A6A6A6",
+          "#CCCCCC",
+          "#FFFFFF"
+        ]
+      },
       "critical": {
         "role": "tertiary",
         "displayName": "Critical Text",
@@ -472,11 +488,23 @@
     "typographyMeta": {
       "display": {
         "displayName": "Display",
-        "purpose": "Stat-strip figures, 24-26px/650 tabular with -0.03em. The largest type in the product is a number."
+        "purpose": "Stat-strip figures where the figure is the point; 26px/650 tabular at -0.03em. The largest type in the product is a number."
+      },
+      "display-compact": {
+        "displayName": "Display, compact",
+        "purpose": "The same figure in a dense grid — the progress view six-tile strip, the discipline section stats; 22px/650 at -0.02em."
       },
       "headline": {
         "displayName": "Headline",
-        "purpose": "The page title in the main column and the inspected pattern title; 17-19px/650 at -0.02em."
+        "purpose": "One step, 18px/650 at -0.02em: the main-column page title, the inspected pattern title, the side panel idle heading, the report masthead. The build had carried 17, 18 and 19px within two pixels of each other, which was accumulation rather than hierarchy."
+      },
+      "display-panel": {
+        "displayName": "Display, panel",
+        "purpose": "The side panel figure at 20px/650; a 300-420px column cannot spend 26px on a number."
+      },
+      "headline-panel": {
+        "displayName": "Headline, panel",
+        "purpose": "The side panel heading at 15px/650. The panel owns only these two top-of-ramp steps; everything below the top is shared with the console."
       },
       "title": {
         "displayName": "Title",
@@ -490,13 +518,21 @@
         "displayName": "Body, public",
         "purpose": "The public scanner reads at 16px/400. A landing page is read at arm’s length; the console does not inherit it."
       },
+      "body-coach": {
+        "displayName": "Body, coach",
+        "purpose": "The walkthrough card at 14.5px/400. The coach is read, not scanned — one step up from the console working density."
+      },
+      "body-panel": {
+        "displayName": "Body, panel",
+        "purpose": "The side panel root size at 14px/400, which most of that surface then steps down from."
+      },
       "meta": {
         "displayName": "Meta",
         "purpose": "Counts, hints, table heads, foot notes; 11.5-12.5px/500."
       },
       "label": {
         "displayName": "Label",
-        "purpose": "The only uppercase role: 11px/650 at 0.07-0.09em, provenance micro-labels only (SCANNER EVIDENCE, LUMEN INTERPRETATION)."
+        "purpose": "The only uppercase role: 11px/650 at 0.07-0.09em, provenance micro-labels only (SCANNER EVIDENCE, LUMEN INTERPRETATION). 11px is the floor and the label sits exactly on it; the step was 10.5px until a detector pass called it."
       },
       "mono": {
         "displayName": "Mono",
@@ -506,13 +542,18 @@
     "fonts": [
       {
         "name": "IBM Plex Sans",
-        "value": "self-hosted variable, 400-700 weight axis, font-display:swap",
-        "purpose": "Every surface. 650 is a real weight because the build is variable, not a synthetic bold rounded to 700."
+        "value": "self-hosted variable woff2, weight axis 400-700, font-display:swap; latin and latin-ext subsets in packages/ui/fonts/, declared once in packages/ui/fonts.css",
+        "purpose": "Every surface. 650 is a real weight because the build is variable, not a synthetic bold rounded to 700. The fallback stack is load-bearing rather than decoration: system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif."
       },
       {
         "name": "IBM Plex Mono",
-        "value": "self-hosted, 400 and 600, font-display:swap",
-        "purpose": "The sans’s own sibling: a rule id beside a sentence is one voice at a different width."
+        "value": "self-hosted woff2 at 400 and 600, latin subset, font-display:swap",
+        "purpose": "The sans’s own sibling, so a rule id beside a sentence is one voice at a different width. Fallback: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace."
+      },
+      {
+        "name": "Delivery",
+        "value": "packages/ui/fonts.css holds every src behind a __LUMEN_FONT_BASE__ placeholder; three paths substitute their own base",
+        "purpose": "Compiled sheets link fonts/ relatively. The injected overlay and coach cannot declare @font-face inside a shadow root, so the content script registers the faces on the host document via chrome.runtime.getURL() (lumenFontFaceTemplate / ensureLumenFontFaces in apps/extension/content.js) and removes the style when the last Lumen root closes. packages/crawl/report.js embeds the subsets as data: URIs. Nothing fetches a font CDN, and no surface is the only place a src is written."
       }
     ],
     "shadows": [
@@ -555,8 +596,8 @@
       },
       {
         "name": "progress",
-        "value": "width .3s ease",
-        "purpose": "Crawl progress fill."
+        "value": "transform .3s ease, scaleX from a left origin",
+        "purpose": "Crawl progress and coverage fills. Animating transform rather than width keeps the fill off the layout path; the script sets style.transform = scaleX(pct/100)."
       },
       {
         "name": "spotlight",
@@ -597,34 +638,39 @@
     ],
     "radii": [
       {
-        "name": "rail-cap",
+        "name": "xxs",
         "value": "2px",
-        "purpose": "One job only: capping the outer end of the 3px severity rail."
+        "purpose": "One job only: capping the outer end of the 3px severity rail, where any larger radius rounds a 3px bar into a lozenge."
       },
       {
-        "name": "inset-chrome",
+        "name": "xs",
         "value": "6px",
-        "purpose": "Small inset chrome."
+        "purpose": "Small inset chrome. --wqa-r-xs."
       },
       {
-        "name": "control",
+        "name": "sm",
         "value": "8px",
-        "purpose": "Buttons, inputs, selects, nav items, lens tabs."
+        "purpose": "Buttons, inputs, selects, nav items, lens tabs, sunken evidence panels. --wqa-r-sm, the most used step in the build."
       },
       {
-        "name": "container",
+        "name": "md",
         "value": "10px",
-        "purpose": "Cards, tables, panels, callouts."
+        "purpose": "Cards, tables, panels, callouts. --wqa-r, the unsuffixed default."
       },
       {
-        "name": "shell",
-        "value": "12-14px",
-        "purpose": "Floating shells: the workspace and the coach card."
+        "name": "float",
+        "value": "12px",
+        "purpose": "Floating shells: the fixed overlay workspace and the walkthrough coach card."
       },
       {
-        "name": "token",
+        "name": "lg",
+        "value": "14px",
+        "purpose": "The largest container step. --wqa-r-lg."
+      },
+      {
+        "name": "pill",
         "value": "999px",
-        "purpose": "Counters, status pills, severity badges, progress and coverage bars, filter chips."
+        "purpose": "Counters, status pills, severity badges, progress and coverage bars, filter chips — things read as tokens rather than containers. --wqa-r-pill."
       }
     ],
     "patterns": [
@@ -677,15 +723,17 @@
       }
     ],
     "knownGaps": [
-      "Confidence dots are drawn for confirmed, inferred and inconclusive; corroborated has no drawn dot and falls through unstyled.",
-      "The overlay active nav row (.tab.active) and .btn.quiet set the primary FILL value (#7350F5) as text on the violet wash, which The Computed Contrast Rule forbids. The documented value is brand-text (#A896FF), used correctly by .lens.active and .state-chip.live; the sidecar records the documented value.",
-      "Overlay data-table heads render at 12px/600 sentence case, not the 10.5px/650 uppercase DESIGN.md describes. The sentence-case build is what the sidecar records, because it is the reading that obeys The Sentence Case Rule.",
-      "status-pill.blocked shares the inconclusive treatment (info wash, ink-faint) rather than the warn wash DESIGN.md specifies. Blocked is still never coloured as broken, which is the load-bearing half of that rule.",
-      "The overlay .crumb is an uppercase tracked 11px breadcrumb above a panel title. It is a kicker, which the system prohibits; recorded here as a defect the build carries, not as a component."
+      "Confidence dots are drawn for confirmed, inferred and inconclusive only (.confidence-dot, apps/extension/content.js); corroborated has no drawn dot and falls through unstyled. DESIGN.md records the same gap inside The Closed Vocabulary Rule.",
+      "The primary as text survives in three places outside the overlay: .btn-brand and its hover in apps/extension/sidepanel.css, and .finding-actions .ask-frank in packages/ui/web.css with its mirror in apps/web/public/styles.css, all set color:var(--wqa-brand-strong) (#6741E8) on the violet wash (#1E1838), roughly 2:1. The Fill Is Not The Ink Rule names --wqa-brand-text (#A896FF) as the only violet that may follow color:, and the sidecar records the documented value.",
+      "Three frontmatter entries are documented as scale but have no custom property in packages/ui/tokens.css: rounded.float (12px, written literally on .workspace and .coach), rounded.xxs (2px, written literally on the severity rail cap), and colors.on-primary (#FFFFFF, written as the literal #fff at every use site).",
+      "The side panel carries ten distinct sizes between 11px and 20px, several of them half-pixel neighbours (11/11.5, 12/12.5, 13/13.5). DESIGN.md records this as an accumulation wanting a dedicated pass; the sidecar records the ramp, not the accumulation.",
+      "DESIGN.md still describes the stat strip as a 1px-gap grid with a 10.5px uppercase label over a 24-26px figure. The build draws a 14px-gap grid of hairlined surface cells with a 12.5px/500 sentence-case label over a 26px/650 figure, which is the reading that obeys The Sentence Case Rule and The 11px Floor Rule; the sidecar records the build.",
+      "The nav-item-active component in the DESIGN.md frontmatter sets textColor to colors.ink, and stat-tile to rounded.sm. The build draws .tab.active in --sa-primary-text (#A896FF) and the stat cell at 10px; the sidecar records the build."
     ],
     "notCanonized": [
-      "The .crumb uppercase kicker above panel titles: prohibited by The Provenance Label Rule and the craft floor, so it is not a documented component.",
-      "The primary fill used as text on the violet wash: a contrast defect, not a token pairing."
+      "The primary fill, or its deep hover value, used as text on the violet wash: a contrast defect, not a token pairing. Recorded as a gap so the remaining three sites get fixed, never as a sanctioned pairing.",
+      "The uppercase .crumb kicker above panel titles, prohibited by The Provenance Label Rule and the craft floor: it has been deleted from apps/extension/content.js, so it is neither a documented component nor a live gap.",
+      "Values seen once in the build — the 16px and 18px strays in the side panel, the 1180px and 720px reflows of the progress stat grid — are layout facts, not system steps."
     ]
   },
   "components": [
@@ -717,7 +765,7 @@
       "name": "Side Navigation",
       "kind": "nav",
       "refersTo": "nav-item",
-      "description": "The overlay 216px rail: site identity, grouped destinations with right-aligned tabular counts, primary action pinned to the foot. Active fills the violet wash.",
+      "description": "The overlay 216px rail: site identity, grouped destinations with right-aligned tabular counts, primary action pinned to the foot. Active fills the violet wash and takes the violet TEXT value (#A896FF); the fill value is never used as a label.",
       "html": "<nav class=\"ds-nav\"><div class=\"ds-nav-site\"><b>example.com</b><span>114 pages · 2h ago</span></div><button class=\"ds-nav-item ds-nav-item-active\">Overview</button><button class=\"ds-nav-item\">Findings<em>38</em></button><button class=\"ds-nav-item\">Pages<em>114</em></button><button class=\"ds-nav-item\">Links<em>612</em></button></nav>",
       "css": ".ds-nav{width:216px;background:#15151E;border-right:1px solid #2E2E3D;display:flex;flex-direction:column;gap:2px;padding:14px 12px;font-family:\"IBM Plex Sans\",system-ui,sans-serif}.ds-nav-site{padding:0 8px 12px;margin:0 0 12px;border-bottom:1px solid #2E2E3D}.ds-nav-site b{display:block;font-size:13px;font-weight:600;color:#E9E9F2}.ds-nav-site span{display:block;margin-top:2px;font-size:11.5px;color:#8B8BA3;font-variant-numeric:tabular-nums}.ds-nav-item{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;padding:8px 10px;border-radius:8px;font:inherit;font-size:13.5px;font-weight:500;color:#A8A8BD;cursor:pointer;text-align:left}.ds-nav-item em{margin-left:auto;font-style:normal;font-size:11.5px;color:#8B8BA3;font-variant-numeric:tabular-nums}.ds-nav-item:hover{background:#1B1B25;color:#E9E9F2}.ds-nav-item-active{background:#1E1838;color:#A896FF;font-weight:600}.ds-nav-item:focus-visible{outline:2px solid #7350F5;outline-offset:1px}"
     },
@@ -733,17 +781,17 @@
       "name": "Severity Badge and Status Pill",
       "kind": "chip",
       "refersTo": "badge-severity-high",
-      "description": "Pill, 11.5px/600, capitalised. High, medium and low take the semantic wash with a ramp-tinted hairline; critical is the one solid ramp fill under white. Status pills use the same silhouette for healthy, broken and blocked.",
-      "html": "<div class=\"ds-badges\"><span class=\"ds-badge ds-badge-critical\">Critical</span><span class=\"ds-badge ds-badge-high\">High</span><span class=\"ds-badge ds-badge-medium\">Medium</span><span class=\"ds-badge ds-badge-info\">Info</span><span class=\"ds-badge ds-pill-healthy\">Healthy</span><span class=\"ds-badge ds-pill-broken\">Broken</span></div>",
-      "css": ".ds-badges{display:flex;gap:8px;flex-wrap:wrap;font-family:\"IBM Plex Sans\",system-ui,sans-serif}.ds-badge{display:inline-flex;align-items:center;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600;text-transform:capitalize;border:1px solid transparent}.ds-badge-critical{background:#E14356;color:#fff}.ds-badge-high{background:#2A1418;color:#FF6B78;border-color:rgba(255,92,108,.4)}.ds-badge-medium{background:#2A1F0F;color:#F0A93A;border-color:rgba(240,169,58,.4)}.ds-badge-info{background:#1E1838;color:#8B8BA3;border-color:#3A3A4C}.ds-pill-healthy{background:#0F2419;color:#45D68F;border-color:rgba(69,214,143,.4)}.ds-pill-broken{background:#2A1418;color:#FF6B78;border-color:rgba(255,92,108,.4)}"
+      "description": "Pill, 11.5px/600, capitalised. High, medium and low take the semantic wash with a ramp-tinted hairline; critical is the one solid ramp fill under on-primary white. Status pills use the same silhouette for healthy, broken, and for blocked and inconclusive, which share the neutral info wash on both the overlay and the exported report — a destination that refuses an automated request is a limit on coverage, not a defect in the site.",
+      "html": "<div class=\"ds-badges\"><span class=\"ds-badge ds-badge-critical\">Critical</span><span class=\"ds-badge ds-badge-high\">High</span><span class=\"ds-badge ds-badge-medium\">Medium</span><span class=\"ds-badge ds-badge-info\">Info</span><span class=\"ds-badge ds-pill-healthy\">Healthy</span><span class=\"ds-badge ds-pill-broken\">Broken</span><span class=\"ds-badge ds-pill-blocked\">Blocked</span></div>",
+      "css": ".ds-badges{display:flex;gap:8px;flex-wrap:wrap;font-family:\"IBM Plex Sans\",system-ui,sans-serif}.ds-badge{display:inline-flex;align-items:center;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600;text-transform:capitalize;border:1px solid transparent}.ds-badge-critical{background:#E14356;color:#fff}.ds-badge-high{background:#2A1418;color:#FF6B78;border-color:rgba(255,92,108,.4)}.ds-badge-medium{background:#2A1F0F;color:#F0A93A;border-color:rgba(240,169,58,.4)}.ds-badge-info{background:#1E1838;color:#8B8BA3;border-color:#3A3A4C}.ds-pill-healthy{background:#0F2419;color:#45D68F;border-color:rgba(69,214,143,.4)}.ds-pill-broken{background:#2A1418;color:#FF6B78;border-color:rgba(255,92,108,.4)}.ds-pill-blocked{background:#1E1838;color:#8B8BA3;border-color:#3A3A4C}"
     },
     {
       "name": "Finding Row",
       "kind": "card",
       "refersTo": "card",
-      "description": "A finding carries its severity as a 3px inset rail on the leading edge, its confidence as a dot plus a word from the closed vocabulary, and nothing else coloured. Hover strengthens the hairline.",
-      "html": "<button class=\"ds-finding ds-finding-high\"><span class=\"ds-finding-body\"><span class=\"ds-finding-title\">Broken internal links on 12 pages</span><span class=\"ds-finding-meta\">Availability · 12 pages affected</span></span><span class=\"ds-finding-conf\"><i class=\"ds-dot\"></i>Confirmed</span></button>",
-      "css": ".ds-finding{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#15151E;border:1px solid #2E2E3D;border-radius:10px;padding:12px 14px;cursor:pointer;font-family:\"IBM Plex Sans\",system-ui,sans-serif;transition:background .12s ease,border-color .12s ease}.ds-finding-high{box-shadow:inset 3px 0 0 #FF5C6C,0 1px 2px rgba(0,0,0,.40)}.ds-finding:hover{border-color:#3A3A4C;background:#1B1B25}.ds-finding-title{display:block;font-size:14px;font-weight:600;color:#E9E9F2}.ds-finding-meta{display:block;margin-top:2px;font-size:12.5px;color:#8B8BA3}.ds-finding-conf{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:#8B8BA3;font-variant-numeric:tabular-nums}.ds-dot{width:8px;height:8px;border-radius:50%;background:#45D68F;display:inline-block}.ds-finding:focus-visible{outline:2px solid #7350F5;outline-offset:-2px}"
+      "description": "A finding carries its severity as a 3px inset rail on the leading edge, its confidence as a dot plus a word from the closed vocabulary, and nothing else coloured. Every rail step reads its own sealed-ramp value, critical included. Hover strengthens the hairline.",
+      "html": "<button class=\"ds-finding ds-finding-critical\"><span class=\"ds-finding-body\"><span class=\"ds-finding-title\">Six pages answered 5xx during the crawl</span><span class=\"ds-finding-meta\">Availability · 6 pages affected</span></span><span class=\"ds-finding-conf\"><i class=\"ds-dot\"></i>Confirmed</span></button><button class=\"ds-finding ds-finding-high\"><span class=\"ds-finding-body\"><span class=\"ds-finding-title\">Broken internal links on 12 pages</span><span class=\"ds-finding-meta\">Availability · 12 pages affected</span></span><span class=\"ds-finding-conf\"><i class=\"ds-dot\"></i>Confirmed</span></button>",
+      "css": ".ds-finding{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#15151E;border:1px solid #2E2E3D;border-radius:10px;padding:12px 14px;cursor:pointer;font-family:\"IBM Plex Sans\",system-ui,sans-serif;transition:background .12s ease,border-color .12s ease}.ds-finding-critical{box-shadow:inset 3px 0 0 #E14356,0 1px 2px rgba(0,0,0,.40)}.ds-finding-high{box-shadow:inset 3px 0 0 #FF5C6C,0 1px 2px rgba(0,0,0,.40)}.ds-finding:hover{border-color:#3A3A4C;background:#1B1B25}.ds-finding-title{display:block;font-size:14px;font-weight:600;color:#E9E9F2}.ds-finding-meta{display:block;margin-top:2px;font-size:12.5px;color:#8B8BA3}.ds-finding-conf{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:#8B8BA3;font-variant-numeric:tabular-nums}.ds-dot{width:8px;height:8px;border-radius:50%;background:#45D68F;display:inline-block}.ds-finding:focus-visible{outline:2px solid #7350F5;outline-offset:-2px}"
     },
     {
       "name": "Stat Strip",
@@ -773,9 +821,9 @@
       "name": "Coverage Plan Bar",
       "kind": "custom",
       "refersTo": "card",
-      "description": "A 10px pill bar: the surveyed portion is a solid violet fill, the remainder is the 45 degree hatch on the neutral track, with a tabular readout beneath. Not knowing is not the same as being broken.",
-      "html": "<div class=\"ds-cov\"><div class=\"ds-cov-bar\"><span class=\"ds-cov-surveyed\" style=\"width:64%\"></span><span class=\"ds-cov-rest\"></span></div><p class=\"ds-cov-note\"><b>114</b> of <b>178</b> discovered pages surveyed. The remainder was not visited at this page budget.</p></div>",
-      "css": ".ds-cov{font-family:\"IBM Plex Sans\",system-ui,sans-serif}.ds-cov-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:#1E1838;margin:0 0 12px}.ds-cov-surveyed{background:#7350F5}.ds-cov-rest{flex:1 1 auto;background-image:repeating-linear-gradient(45deg,transparent 0 6px,rgba(233,233,242,.07) 6px 7px)}.ds-cov-note{margin:0;font-size:12.5px;line-height:1.55;color:#A8A8BD}.ds-cov-note b{color:#E9E9F2;font-variant-numeric:tabular-nums}"
+      "description": "A 10px pill bar: the surveyed portion is a solid violet fill, the remainder is the 45 degree hatch on the neutral track, with a tabular readout beneath. Progress and coverage fills scale on transform from a left origin rather than animating width, so the fill never touches layout. Not knowing is not the same as being broken.",
+      "html": "<div class=\"ds-cov\"><div class=\"ds-cov-bar\"><span class=\"ds-cov-surveyed\" style=\"transform:scaleX(.64)\"></span></div><p class=\"ds-cov-note\"><b>114</b> of <b>178</b> discovered pages surveyed. The remainder was not visited at this page budget.</p></div>",
+      "css": ".ds-cov{font-family:\"IBM Plex Sans\",system-ui,sans-serif}.ds-cov-bar{position:relative;height:10px;border-radius:999px;overflow:hidden;background:#1E1838;background-image:repeating-linear-gradient(45deg,transparent 0 6px,rgba(233,233,242,.07) 6px 7px);margin:0 0 12px}.ds-cov-surveyed{display:block;width:100%;height:100%;background:#7350F5;transform-origin:left center;transition:transform .3s ease}.ds-cov-note{margin:0;font-size:12.5px;line-height:1.55;color:#A8A8BD}.ds-cov-note b{color:#E9E9F2;font-variant-numeric:tabular-nums}"
     }
   ],
   "narrative": {
@@ -796,6 +844,11 @@
         "name": "The One Voice Rule",
         "section": "colors",
         "body": "Violet is the product speaking — navigation, primary actions, focus, selection, progress. It never means severity. A red button that is not destructive is a bug; a violet element that encodes an audit result is the same bug in the other direction."
+      },
+      {
+        "name": "The Fill Is Not The Ink Rule",
+        "section": "colors",
+        "body": "--wqa-brand (#7350F5) is a fill: backgrounds, borders, focus rings, bars. As text it measures about 4.1:1 on the surface and 4.4:1 on the canvas, and both fail. --wqa-brand-text (#A896FF, 7.3:1) is the primary as text and is the only one of the two that may follow color:. This was violated in sixteen places across three surfaces before a sidecar regeneration compared the build against this document and found them."
       },
       {
         "name": "The Sealed Ramp Rule",
@@ -835,7 +888,7 @@
       {
         "name": "The Three Delivery Paths Rule",
         "section": "typography",
-        "body": "Same files, three ways of reaching them. Document surfaces (public scanner, side panel) link a compiled sheet beside its own fonts/ directory. Injected surfaces (overlay, coach) cannot declare @font-face inside a shadow root at all, so the content script registers one inert <style> on the host page with chrome.runtime.getURL() paths and removes it when the last Lumen root closes. The emailed report embeds the four latin subsets as data: URIs. No surface may be the only place a src is written."
+        "body": "Same files, three ways of reaching them. Document surfaces (public scanner, side panel) link a compiled sheet beside its own fonts/ directory, written by scripts/build-css.mjs. Injected surfaces (overlay, coach) cannot declare @font-face inside a shadow root at all, because font faces resolve against the document and never the shadow tree, so the content script registers one inert <style> on the host page with chrome.runtime.getURL() paths and removes it when the last Lumen root closes; the host page CSP decides whether the files load, which is why the fallback stack is load-bearing rather than decoration. The emailed report embeds the four latin subsets as data: URIs, about 140KB, because it is opened from file:// months later on a machine that has never seen Lumen. No surface may be the only place a src is written: packages/ui/fonts.css holds the rules and each path substitutes its own base."
       },
       {
         "name": "The Tabular Figures Rule",
@@ -850,7 +903,7 @@
       {
         "name": "The 11px Floor Rule",
         "section": "typography",
-        "body": "11px is the smallest type in the product, and the provenance label sits exactly on it. Functional text below 11px fails on high-DPI screens and small viewports, and a letterspaced micro-label is functional text — it names where a sentence came from. Being on the documented ramp is not an exemption: lowering the ramp step to legitimise an 8px label launders the token, not the legibility."
+        "body": "11px is the smallest type in the product, and the provenance label sits exactly on it. Functional text below 11px fails on high-DPI screens and small viewports, and a letterspaced micro-label is functional text — it names where a sentence came from. Being on the documented ramp is not an exemption: lowering the ramp step to legitimise an 8px label launders the token, not the legibility. The label step was 10.5px until a detector pass called it, and moving the step was the right answer rather than exempting the one surface that got measured."
       },
       {
         "name": "The 900px Fold Rule",
@@ -935,7 +988,7 @@
       "Don't render a withheld comparison as a zero, or an unrun check as an empty section that reads clean.",
       "Don't fetch the typeface from a CDN on any surface, and don't let an injected or emailed surface depend on a stylesheet it cannot link. The faces ship with the product.",
       "Don't restate a palette value anywhere outside packages/ui/tokens.css. The exception is the print block in packages/crawl/report.js, which is the documented paper palette and exists because paper has its own inks.",
-      "Don't add kickers or eyebrow labels above headings. The uppercase micro-label marks provenance and nothing else.",
+      "Don't add kickers or eyebrow labels above headings. The uppercase micro-label marks provenance and nothing else. The overlay carried an uppercase “Site audit / Findings” line directly above an <h1> reading “Findings”, inside a workspace whose header and left nav already said both — three statements of one fact, removed.",
       "Don't ship hard offset shadows, glyph or emoji icons, or a system display face; icons are inline SVG stroked in currentColor.",
       "Don't revert to The Category Standard, Played Straight (light #F6F7F9 canvas, white cards, indigo #4F46E5, color-scheme:light), and don't revive The Drawing Set or The Control Room before it. All three are retired."
     ]

@@ -160,7 +160,7 @@ components:
     padding: "8px 10px"
   nav-item-active:
     backgroundColor: "{colors.brand-soft}"
-    textColor: "{colors.ink}"
+    textColor: "{colors.brand-text}"
     rounded: "{rounded.sm}"
     padding: "8px 10px"
   chip:
@@ -190,7 +190,7 @@ components:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
     typography: "{typography.display}"
-    rounded: "{rounded.sm}"
+    rounded: "{rounded.md}"
     padding: "13px 15px"
   badge-severity-high:
     backgroundColor: "{colors.critical-soft}"
@@ -387,7 +387,7 @@ Icons are inline SVG stroked at 1.35–1.6 in `currentColor`.
 
 ### Cards and containers
 - **Corner:** 10px. **Background:** surface on canvas. **Border:** 1px #2E2E3D, strengthening to #3A3A4C on hover for interactive cards. **Padding:** 12–16px; card heads 13px/15px with a hairline beneath.
-- **Stat strip:** a 1px-gap grid whose cells are surface over a hairline ground, so the strip reads as one instrument rather than four floating tiles. A 10.5px uppercase label over a 24–26px tabular figure, with an optional 11.5px faint sub-line ("of 114 discovered").
+- **Stat strip:** a hairlined grid whose cells are surface over a line ground, so the strip reads as one instrument rather than four floating tiles. A 12.5px/500 sentence-case faint label over a 22–26px tabular figure, with an optional 11.5px faint sub-line ("of 114 discovered"). The label names a cell; it does not mark provenance, so it takes no tracking.
 
 ### Inputs and fields
 Surface, 1px #3A3A4C border, 8px radius, 9px/12px padding, 13px text, faint placeholder. Field labels are 12–13px/600 above the control; hints are 12px faint below it. Focus adds the 2px violet ring and a violet border. Disabled fields fill sunken with faint text.

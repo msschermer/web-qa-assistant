@@ -135,6 +135,7 @@
   --wqa-r-xs:6px;
   --wqa-r-sm:8px;
   --wqa-r:10px;
+  --wqa-r-float:12px;   /* shells that actually float: the workspace, the coach */
   --wqa-r-lg:14px;
   --wqa-r-pill:999px;
 
@@ -262,7 +263,7 @@ button{cursor:pointer;font:inherit}
 .finding .detail{margin:0;color:var(--wqa-ink-soft)}
 .finding-context{margin:6px 0 0;font:12px var(--wqa-sans);color:var(--wqa-ink-faint)}
 .finding-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
-.finding-actions .ask-frank{border-color:transparent;background:var(--wqa-brand-soft);color:var(--wqa-brand-strong)}
+.finding-actions .ask-frank{border-color:transparent;background:var(--wqa-brand-soft);color:var(--wqa-brand-text)}
 .finding-state{margin-top:7px;color:var(--wqa-ink-soft);font:12px var(--wqa-sans)}
 .technical{margin-top:9px;padding-top:7px;border-top:1px solid var(--wqa-line)}
 .technical summary{font:12px var(--wqa-sans);color:var(--wqa-ink-faint);cursor:pointer}

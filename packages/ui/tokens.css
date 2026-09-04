@@ -79,6 +79,7 @@
   --wqa-r-xs:6px;
   --wqa-r-sm:8px;
   --wqa-r:10px;
+  --wqa-r-float:12px;   /* shells that actually float: the workspace, the coach */
   --wqa-r-lg:14px;
   --wqa-r-pill:999px;
 
