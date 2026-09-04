@@ -950,7 +950,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .tab{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;padding:8px 10px;border-radius:var(--sa-radius-sm);font-size:13.5px;font-weight:500;color:var(--sa-ink-soft);cursor:pointer;text-align:left}
       .tab:hover{background:var(--sa-subtle);color:var(--sa-ink)}
       .tab:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
-      .tab.active{background:var(--sa-primary-soft);color:var(--sa-primary);font-weight:600}
+      .tab.active{background:var(--sa-primary-soft);color:var(--sa-primary-text);font-weight:600}
       .tab-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .nav-foot{margin-top:auto;padding-top:14px;display:flex;flex-direction:column;gap:8px}
 
@@ -1004,8 +1004,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
          now" before it answers anything else: phase, rate, and the URL in
          flight. Nothing here is a summary; summaries are the results view. */
       .panel-title{margin:0 0 14px;font-size:26px;font-weight:650;letter-spacing:-.025em}
-      .crumb{margin:0 0 6px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--sa-ink-faint)}
-      .crumb span{margin:0 6px;opacity:.55}
       .run-identity h2{margin:0}
       .run-identity h2 .run-target{font-family:var(--sa-mono);font-size:.72em;color:var(--sa-ink-soft);font-weight:600}
       .chip-row{display:flex;flex-wrap:wrap;gap:8px;margin:9px 0 0}
@@ -1119,7 +1117,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
          stop. */
       .scoped-note{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:8px 12px;background:var(--sa-primary-soft);border:1px solid var(--sa-primary-line);border-radius:var(--sa-radius);font-size:12.5px;color:var(--sa-ink-soft)}
       .scoped-note .scoped-text b{color:var(--sa-ink);font-weight:650;font-variant-numeric:tabular-nums}
-      .scoped-note .link-btn{color:var(--sa-primary);flex:0 0 auto}
+      .scoped-note .link-btn{color:var(--sa-primary-text);flex:0 0 auto}
 
       /* A tile stating "178 pages not fully checked" has to be able to show
          those 178. The whole tile is the target, via an overlay button rather
@@ -1136,7 +1134,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       /* The affordance is the arrow, not a colour change: the number itself
          must keep reading as data. */
       .stat-tile:has(.stat-open:not(:disabled)) dt::after{content:' \\2192';color:var(--sa-ink-faint);font-weight:600}
-      .stat-tile:has(.stat-open:not(:disabled)):hover dt::after{color:var(--sa-primary)}
+      .stat-tile:has(.stat-open:not(:disabled)):hover dt::after{color:var(--sa-primary-text)}
 
       /* Grouped navigation --------------------------------------------------
          Twelve report sections need grouping or they read as a list of
@@ -1172,7 +1170,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .tab-state[data-state=unknown] .tab-dot{background:transparent;border:1.5px dashed var(--sa-ink-faint);width:9px;height:9px}
       .tab-num{font-size:11.5px;font-weight:600;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
       .tab-state[data-state=attention] .tab-num{color:var(--sa-critical)}
-      .tab.active .tab-num{color:var(--sa-primary)}
+      .tab.active .tab-num{color:var(--sa-primary-text)}
 
       /* Discipline section pages ------------------------------------------- */
       .section-head{margin:0 0 14px}
@@ -1351,7 +1349,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
       /* The three published documents (robots.txt, sitemap, llms.txt) are rows
          in the conditions readout, and each offers to open the file itself. */
-      .cond-open{flex:0 0 auto;font-size:12.5px;color:var(--sa-primary);background:none;border:0;padding:4px 2px;margin-left:2px;cursor:pointer;text-decoration:underline;font-family:inherit}
+      .cond-open{flex:0 0 auto;font-size:12.5px;color:var(--sa-primary-text);background:none;border:0;padding:4px 2px;margin-left:2px;cursor:pointer;text-decoration:underline;font-family:inherit}
       .cond-open:hover{color:var(--sa-primary-hover)}
       .cond-open:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
 
@@ -1378,7 +1376,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .f-chev{flex:0 0 auto;width:16px;text-align:right;color:var(--sa-ink-faint);font-size:15px;line-height:1;transition:transform .15s ease}
       .f-toggle[aria-expanded="true"] .f-chev{transform:rotate(90deg)}
       .finding-row .f-conf{flex:0 0 auto;width:112px;font-size:12px;color:var(--sa-ink-faint);display:flex;align-items:center;gap:6px;margin-left:auto}
-      .finding-row.sev-critical,.finding-row.sev-high{box-shadow:inset 3px 0 0 var(--sa-sev-high),var(--sa-shadow-sm)}
+      .finding-row.sev-critical{box-shadow:inset 3px 0 0 var(--sa-sev-critical),var(--sa-shadow-sm)}
+      .finding-row.sev-high{box-shadow:inset 3px 0 0 var(--sa-sev-high),var(--sa-shadow-sm)}
       .finding-row.sev-medium{box-shadow:inset 3px 0 0 var(--sa-sev-medium),var(--sa-shadow-sm)}
       .finding-row.sev-low{box-shadow:inset 3px 0 0 var(--sa-sev-low),var(--sa-shadow-sm)}
       .finding-row.sev-info{box-shadow:inset 3px 0 0 var(--sa-line-strong),var(--sa-shadow-sm)}
@@ -1505,8 +1504,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .status-chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}
       .status-chip{display:inline-flex;align-items:center;gap:8px}
       .status-chip b{font-variant-numeric:tabular-nums;font-weight:650;color:var(--sa-ink)}
-      .status-chip.active{background:var(--sa-primary-soft);border-color:var(--sa-primary-line);color:var(--sa-primary)}
-      .status-chip.active b{color:var(--sa-primary)}
+      .status-chip.active{background:var(--sa-primary-soft);border-color:var(--sa-primary-line);color:var(--sa-primary-text)}
+      .status-chip.active b{color:var(--sa-primary-text)}
       /* A run of links from one page reads as a block, not the same URL
          restated on every row. */
       .links-table .link-same-source td:first-child{border-top:0}
@@ -1596,9 +1595,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .render-section[data-state=none] .render-state{background:var(--sa-subtle);color:var(--sa-ink);border:1px dashed var(--sa-line-strong)}
       .render-section[data-state=none] .render-progress-bar{display:none}
       .render-section[data-state=done]{background:var(--sa-success-soft);border-color:var(--sa-success-line)}
-      .render-section[data-state=done] .render-state{background:#fff;color:var(--sa-success)}
+      .render-section[data-state=done] .render-state{background:var(--sa-surface);color:var(--sa-success)}
       .render-section[data-state=done] .render-progress-bar{display:none}
-      .render-section[data-state=running] .render-state,.render-section[data-state=partial] .render-state{background:#fff;color:var(--sa-primary)}
+      .render-section[data-state=running] .render-state,.render-section[data-state=partial] .render-state{background:var(--sa-surface);color:var(--sa-primary-text)}
 
       .deliver{border:1px solid var(--sa-line);border-radius:var(--sa-radius);margin:0;overflow:hidden;background:var(--sa-surface);box-shadow:var(--sa-shadow-sm)}
       .deliver-main{display:flex;align-items:center;gap:18px;padding:16px}
@@ -1619,14 +1618,14 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .section-cut{display:flex;align-items:baseline;gap:8px;border:1px solid var(--sa-line-strong);background:var(--sa-surface);border-radius:999px;padding:6px 13px;cursor:pointer;font-family:var(--sa-sans);font-size:12.5px;color:var(--sa-ink-soft);min-height:32px;box-shadow:var(--sa-shadow-sm)}
       .section-cut:hover{background:var(--sa-subtle)}
       .section-cut:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
-      .section-cut.active{background:var(--sa-primary-soft);border-color:var(--sa-primary-line);color:var(--sa-primary);box-shadow:none}
+      .section-cut.active{background:var(--sa-primary-soft);border-color:var(--sa-primary-line);color:var(--sa-primary-text);box-shadow:none}
       .section-cut .sc-count{font-variant-numeric:tabular-nums;color:var(--sa-ink-faint);font-weight:600}
-      .section-cut.active .sc-count{color:var(--sa-primary)}
+      .section-cut.active .sc-count{color:var(--sa-primary-text)}
 
       .history-list{list-style:none;margin:16px 0 0;padding:0;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);overflow:hidden}
       .history-list li{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--sa-line);padding:11px 14px;font-size:13px;font-variant-numeric:tabular-nums}
       .history-list li:last-child{border-bottom:0}
-      .history-list button{border:0;background:transparent;color:var(--sa-primary);font-weight:600;cursor:pointer;font-size:13px}
+      .history-list button{border:0;background:transparent;color:var(--sa-primary-text);font-weight:600;cursor:pointer;font-size:13px}
 
       .foot-note{margin:0;padding:10px 16px;border-top:1px solid var(--sa-line);background:var(--sa-surface);color:var(--sa-ink-faint);font-size:12px;flex:0 0 auto;font-family:var(--sa-sans)}
 
@@ -1636,7 +1635,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .detail-rule{margin:0;font-size:12.5px;color:var(--sa-ink-faint)}
       .detail-rule code{font-family:var(--sa-mono);font-size:12px;color:var(--sa-ink-soft)}
       .finding-detail .url-list{max-height:220px;overflow:auto;border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);background:var(--sa-subtle);padding:6px 10px;margin:2px 0 4px}
-      .finding-detail .url-item{display:block;font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-primary);text-decoration:none;padding:3px 0;word-break:break-all}
+      .finding-detail .url-item{display:block;font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-primary-text);text-decoration:none;padding:3px 0;word-break:break-all}
       .finding-detail .url-item:hover{text-decoration:underline}
       .detail-empty{margin:2px 0 4px;font-size:12.5px;color:var(--sa-ink-faint)}
       .row-expand{cursor:pointer}
@@ -1927,7 +1926,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         </div>
         <div class="view view-progress">
           <div class="main run-main">
-          <p class="crumb">Site audit <span aria-hidden="true">/</span> Scan progress</p>
           <div class="page-head run-head">
             <div class="run-identity">
               <h2>Scanning <span class="run-target tb-project">&mdash;</span></h2>
@@ -2019,7 +2017,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
           <p class="results-summary sr-only"></p>
           <div class="scope-banner" role="status" hidden><p class="scope-text"></p></div>
           <div class="tab-panel overview-panel">
-          <p class="crumb">Site audit <span aria-hidden="true">/</span> Overview</p>
           <div class="page-head ov-head">
             <div class="ov-identity">
               <h2 class="ov-title">&mdash;</h2>
@@ -2116,7 +2113,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
           </section>
           </div>
           <div class="tab-panel findings-panel" hidden>
-            <p class="crumb">Site audit <span aria-hidden="true">/</span> Findings</p>
             <div class="page-head fx-head">
               <div>
                 <h2 class="panel-title">Findings</h2>
@@ -2189,7 +2185,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             <p class="fx-foot"><span class="fx-foot-text"></span><button type="button" class="link-btn fx-raw">Raw findings</button><button type="button" class="link-btn debug-btn-2">Debug report</button></p>
           </div>
           <div class="tab-panel urls-panel" hidden>
-            <p class="crumb">Site audit <span aria-hidden="true">/</span> Pages</p>
             <h2 class="panel-title">Pages</h2>
             <div class="toolbar">
               <input type="search" class="urls-search" placeholder="Filter by URL or title…" />
@@ -2200,7 +2195,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             <div class="pager"><button type="button" class="btn pager-prev urls-prev">Prev</button><span class="pager-label urls-label"></span><button type="button" class="btn pager-next urls-next">Next</button></div>
           </div>
           <div class="tab-panel links-panel" hidden>
-            <p class="crumb">Site audit <span aria-hidden="true">/</span> Links</p>
             <h2 class="panel-title">Links</h2>
             <div class="toolbar">
               <input type="search" class="links-search" placeholder="Filter by source or target…" />

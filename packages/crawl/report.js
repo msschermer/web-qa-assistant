@@ -354,8 +354,10 @@ export function renderAuditReportHtml({ audit, urls, links, findings, findingGro
     .pill{display:inline-flex;align-items:center;border-radius:99px;padding:2px 9px;font-size:11.5px;font-weight:600;text-transform:capitalize;white-space:nowrap;border:1px solid transparent;color:var(--wqa-ink-faint)}
     .pill-critical,.pill-status-broken{background:var(--wqa-sev-critical);color:#fff}
     .pill-high{background:var(--wqa-critical-soft);color:var(--wqa-critical);border-color:color-mix(in srgb,var(--wqa-sev-high) 40%,transparent)}
-    .pill-medium,.pill-low,.pill-status-blocked{background:var(--wqa-warn-soft);color:var(--wqa-warn);border-color:color-mix(in srgb,var(--wqa-sev-medium) 40%,transparent)}
-    .pill-info,.pill-status-inconclusive{background:var(--wqa-info-soft);color:var(--wqa-ink-faint);border-color:var(--wqa-line-strong)}
+    .pill-medium,.pill-low{background:var(--wqa-warn-soft);color:var(--wqa-warn);border-color:color-mix(in srgb,var(--wqa-sev-medium) 40%,transparent)}
+    /* Blocked is a limit on what Lumen could check, not a defect in the site,
+       so it reads as neutral here exactly as it does in the overlay. */
+    .pill-info,.pill-status-inconclusive,.pill-status-blocked{background:var(--wqa-info-soft);color:var(--wqa-ink-faint);border-color:var(--wqa-line-strong)}
     .pill-status-healthy{background:var(--wqa-ok-soft);color:var(--wqa-ok);border-color:color-mix(in srgb,var(--wqa-ok) 40%,transparent)}
     .ev{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;white-space:nowrap;color:var(--wqa-ink-faint)}
     .ev::before{content:'';width:6px;height:6px;border-radius:99px;background:currentColor}

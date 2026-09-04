@@ -240,6 +240,8 @@ None. Lumen has exactly one accent. The semantic and severity colours below are 
 ### Named Rules
 **The One Voice Rule.** Violet is the product speaking — navigation, primary actions, focus, selection, progress. It never means severity. A red button that is not destructive is a bug; a violet element that encodes an audit result is the same bug in the other direction.
 
+**The Fill Is Not The Ink Rule.** `--wqa-brand` (#7350F5) is a fill: backgrounds, borders, focus rings, bars. As text it measures about 4.1:1 on the surface and 4.4:1 on the canvas, and both fail. `--wqa-brand-text` (#A896FF, 7.3:1) is the primary as text and is the only one of the two that may follow `color:`. This was violated in sixteen places across three surfaces before a sidecar regeneration compared the build against this document and found them.
+
 **The Sealed Ramp Rule.** `--wqa-sev-*` exists for severity and nothing else. Nothing outside a severity bar, rail, dot or legend swatch may take a value from it, and severity may not be expressed in any colour outside it. `scripts/check.mjs` fails the build on `color:var(--sa-sev-*)`.
 
 **The Computed Contrast Rule.** Every text token clears 4.5:1 on backdrop, canvas, surface and sunken. `--wqa-ink-faint` (#8B8BA3, 5.5:1) is the floor — it must not be darkened, and no new text token may land below it. Each semantic *text* colour clears 4.5:1 on its own wash, which is why critical text is #FF6B78 rather than the ramp's #E14356.
@@ -342,7 +344,7 @@ Icons are inline SVG stroked at 1.35–1.6 in `currentColor`.
 ### Chips and pills
 - **Filter chip / lens tab:** pill or 8px tab, transparent by default with an ink-soft 12.5px/600 label; active flips to violet wash + violet hairline + violet-text label.
 - **Severity badge:** pill, 11.5px/600, capitalised. High / medium / low use the semantic wash with a ramp-tinted hairline; **critical is the one solid fill** (#E14356, white text), which is how the top of the ramp announces itself.
-- **Status pill:** healthy = OK wash / OK text; broken = the critical ramp fill under white; blocked = warn wash / warn text; inconclusive = info wash with a strong hairline. Blocked is never coloured as broken.
+- **Status pill:** healthy = OK wash / OK text; broken = the critical ramp fill under white; blocked and inconclusive = info wash with a strong hairline. Blocked is never coloured as broken *or* as a warning: a destination that refuses an automated request is a limit on what Lumen could check, not a defect in the site.
 - **Count badge:** right-aligned 11–12px tabular numeral in ink-faint inside a nav row.
 
 ### Cards and containers
@@ -358,7 +360,7 @@ Surface, 1px #3A3A4C border, 8px radius, 9px/12px padding, 13px text, faint plac
 - **Detail tabs:** underline navigation — a transparent 2px bottom border that goes violet on the active tab, with faint 12.5px/600 labels.
 
 ### Data tables
-12.5px, fully collapsed borders inside a 10px rounded, hairlined, overflow-hidden shell. Heads are 10.5px/650 uppercase faint on sunken with a hairline beneath; cells are 9px/11px, top-aligned, ink-soft, tabular. Row hover fills sunken; there is no zebra striping. Sortable heads darken on hover and append ▲/▼. Wide tables scroll inside their own shell — the page body never scrolls horizontally.
+12.5px, fully collapsed borders inside a 10px rounded, hairlined, overflow-hidden shell. Heads are 12px/600 sentence-case faint on sunken with a hairline beneath — a column head names a column, it does not mark provenance, so it takes no tracking; cells are 9px/11px, top-aligned, ink-soft, tabular. Row hover fills sunken; there is no zebra striping. Sortable heads darken on hover and append ▲/▼. Wide tables scroll inside their own shell — the page body never scrolls horizontally.
 
 ### Results tables (Findings, Pages, Links)
 
@@ -419,6 +421,6 @@ An injected 468px card (max 78vh) with a 12px radius and a deep shadow, pinned a
 - **Don't** render a withheld comparison as a zero, or an unrun check as an empty section that reads clean.
 - **Don't** fetch the typeface from a CDN on any surface, and don't let an injected or emailed surface depend on a stylesheet it cannot link. The faces ship with the product.
 - **Don't** restate a palette value anywhere outside `packages/ui/tokens.css`. The exception is the print block in `packages/crawl/report.js`, which is the documented paper palette and exists because paper has its own inks.
-- **Don't** add kickers or eyebrow labels above headings. The uppercase micro-label marks provenance and nothing else.
+- **Don't** add kickers or eyebrow labels above headings. The uppercase micro-label marks provenance and nothing else. The overlay carried an uppercase "Site audit / Findings" line directly above an `<h1>` reading "Findings", inside a workspace whose header and left nav already said both — three statements of one fact, removed.
 - **Don't** ship hard offset shadows, glyph or emoji icons, or a system display face; icons are inline SVG stroked in `currentColor`.
 - **Don't** revert to **The Category Standard, Played Straight** (light #F6F7F9 canvas, white cards, indigo #4F46E5, `color-scheme:light`), and don't revive **The Drawing Set** (diazo paper, blueprint navy, condensed uppercase drawing type, keynote numbering, title-block rails) or **The Control Room** before it. All three are retired.
