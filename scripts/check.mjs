@@ -3,11 +3,17 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { provenanceMatchesVersion } from './release-metadata.mjs';
 
+// Only this project's own source. The QA harness keeps a Chrome profile under
+// .autoqa, and Chrome's profile data carries hundreds of its own .js files —
+// this walker was syntax-checking those, which is neither useful nor fast: the
+// count fell from 602 files to 167 the moment the profiles were cleared. The
+// tool installs are somebody else's source too.
+const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', '.autoqa', '.claude', '.cursor', '.impeccable', '.github']);
 const files = [];
 function walk(dir) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
-    if (e.isDirectory() && !['node_modules', 'dist'].includes(e.name)) walk(p);
+    if (e.isDirectory() && !SKIP_DIRS.has(e.name)) walk(p);
     else if (e.isFile() && p.endsWith('.js')) files.push(p);
   }
 }
