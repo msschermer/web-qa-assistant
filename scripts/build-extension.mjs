@@ -89,6 +89,31 @@ fs.copyFileSync(path.join(root,'packages/rules/browser-rules.js'),path.join(out,
 fs.copyFileSync(path.join(root,'packages/rules/image-purpose.js'),path.join(out,'image-purpose.js'));
 fs.copyFileSync(path.join(root,'packages/integrity/target-integrity.js'),path.join(out,'target-integrity.js'));
 fs.copyFileSync(path.join(root,'packages/integrity/apply-report.js'),path.join(out,'apply-report.js'));
+// The brief's reasoning gate reaches the overlay the same way target-integrity
+// does: pure modules for the tests, one global for the content script. The
+// validator has to be the same code in both places — a second copy of the rule
+// that rejects invented numbers is how one of them quietly stops rejecting them.
+function buildBriefBrowserBundle(root, outDir) {
+  const strip = (rel) => fs.readFileSync(path.join(root, rel), "utf8")
+    .split(/\r?\n/)
+    .filter((line) => !/^import\s/.test(line))
+    .join("\n")
+    .replace(/^export const /gm, "const ")
+    .replace(/^export function /gm, "function ");
+  const exports = "globalThis.LumenBriefPhrasing = { briefEnvelope, allowedNumbers, BRIEF_PHRASING_RULES, validateBriefPhrasing, mergeBriefPhrasing };";
+  const bundle = [
+    "(() => {",
+    strip("packages/findings/brief-envelope.js"),
+    strip("packages/findings/brief-phrasing.js"),
+    exports,
+    "})();",
+    ""
+  ].join("\n");
+  try { new Function(bundle); }
+  catch (error) { throw new Error(`brief-phrasing.browser.js does not parse: ${error.message}`); }
+  fs.writeFileSync(path.join(outDir, "brief-phrasing.browser.js"), bundle);
+  return bundle;
+}
 function buildIntegrityBrowserBundle(root, outDir) {
   let src = fs.readFileSync(path.join(root, 'packages/integrity/target-integrity.js'), 'utf8');
   src = src.replace(/^export const /gm, 'const ');
@@ -111,6 +136,7 @@ function buildIntegrityBrowserBundle(root, outDir) {
 }
 
 buildIntegrityBrowserBundle(root, out);
+buildBriefBrowserBundle(root, out);
 fs.copyFileSync(path.join(root,'packages/findings/correlate.js'),path.join(out,'correlate.js'));
 fs.copyFileSync(path.join(root,'packages/findings/correlation.js'),path.join(out,'correlation.js'));
 fs.copyFileSync(path.join(root,'packages/findings/compose.js'),path.join(out,'compose.js'));

@@ -233,11 +233,27 @@ scanSyntheticFixtureIdentity('fixtures');
 
 // --- 1.5.x product invariants -------------------------------------------------
 
-// The image-purpose classifier must be injected before browser-rules, otherwise
-// semantic context silently degrades and Frank falls back to the old fork.
-if (!/files:\['vendor\/axe\.min\.js','image-purpose\.js','target-integrity\.browser\.js','browser-rules\.js','content\.js'\]/.test(backgroundSource)) {
+// The image-purpose classifier and the target-integrity bundle must be injected
+// before browser-rules, otherwise semantic context silently degrades and Frank
+// falls back to the old fork. content.js loads last because it consumes them.
+//
+// This asserts the ordering rather than one exact list. The previous version
+// hardcoded the five filenames, so adding a sixth broke a check that had no
+// opinion about the sixth.
+// background.js injects more than one file list (page-diagnostics has its own),
+// so pick the list that actually carries the content script.
+const injectedFiles = [...backgroundSource.matchAll(/files:\[([^\]]*)\]/g)]
+  .map((m) => [...m[1].matchAll(/'([^']+)'/g)].map((f) => f[1]))
+  .find((list) => list.includes('content.js')) || [];
+const injectedAt = (name) => injectedFiles.indexOf(name);
+const injectionOrderOk = ['vendor/axe.min.js', 'image-purpose.js', 'target-integrity.browser.js', 'browser-rules.js', 'content.js']
+  .every((name) => injectedAt(name) >= 0)
+  && injectedAt('image-purpose.js') < injectedAt('browser-rules.js')
+  && injectedAt('target-integrity.browser.js') < injectedAt('browser-rules.js')
+  && injectedAt('browser-rules.js') < injectedAt('content.js');
+if (!injectionOrderOk) {
   bad++;
-  console.error('injection order regression: target-integrity.browser.js and image-purpose.js must load before browser-rules.js');
+  console.error('injection order regression: image-purpose.js and target-integrity.browser.js must load before browser-rules.js, and content.js last');
 }
 
 // Renderer Docker images must include every local packages/* runtime dependency.

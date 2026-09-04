@@ -399,7 +399,7 @@ async function ensureInjected(tabId){
   try{
     await chrome.scripting.executeScript({target:{tabId},files:['page-diagnostics.js'],injectImmediately:true,world:'ISOLATED'});
   }catch{}
-  await chrome.scripting.executeScript({target:{tabId},files:['vendor/axe.min.js','image-purpose.js','target-integrity.browser.js','browser-rules.js','content.js']});
+  await chrome.scripting.executeScript({target:{tabId},files:['vendor/axe.min.js','image-purpose.js','target-integrity.browser.js','brief-phrasing.browser.js','browser-rules.js','content.js']});
 }
 
 // --- Site audit local render pass ---------------------------------------

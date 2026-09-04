@@ -2046,7 +2046,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
           <!-- The brief. Composed deterministically from the findings, which is
                why the label says what it is grounded in. -->
           <section class="brief" hidden>
-            <p class="brief-kicker">Lumen brief <span aria-hidden="true">·</span> grounded in scan evidence</p>
+            <p class="brief-kicker">Lumen brief <span aria-hidden="true">·</span> <span class="brief-source">grounded in scan evidence</span></p>
             <div class="brief-body">
               <div class="brief-lead">
                 <h3>What needs attention</h3>
@@ -3758,15 +3758,128 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   }
 
   /** The brief, and the detail pane beside it. */
+  /**
+   * The brief's wording, and where it came from.
+   *
+   * The reader must always be able to tell a composed sentence from a
+   * written one. "Grounded in scan evidence" is true of both — the evidence
+   * and the ranking are identical either way — so the label names the author
+   * of the words, not the source of the facts.
+   */
+  const BRIEF_PROVENANCE = {
+    deterministic: "grounded in scan evidence",
+    pending: "grounded in scan evidence · asking on-device AI",
+    model: "scan evidence · wording by on-device AI"
+  };
+
+  /**
+   * Ask the on-device model to phrase the brief.
+   *
+   * One stateless call per audit: no session is retained, because this is a
+   * single request rather than a conversation, and a retained session would
+   * let one audit's wording bleed into the next.
+   *
+   * Everything that constitutes a claim — which areas, in what order, with
+   * what counts, severity and confidence — is already decided. The model is
+   * given the skeleton and may only return words for it, and
+   * validateBriefPhrasing rejects the response outright if it tries to do
+   * more. A rejection is not a failure state for the operator: the
+   * deterministic brief was already on screen and simply stays.
+   */
+  async function phraseBriefOnDevice(brief, audit) {
+    const api = globalThis.LumenBriefPhrasing;
+    const model = globalThis.LanguageModel;
+    if (!api || !model?.availability) return { ok: false, code: "LOCAL_AI_API_UNAVAILABLE" };
+
+    const envelope = api.briefEnvelope(brief, audit?.urlCounts || {});
+    if (!envelope.areas.length) return { ok: false, code: "BRIEF_AI_NOTHING_TO_SAY" };
+
+    let status = "unavailable";
+    try { status = await model.availability({ expectedInputs: [{ type: "text" }] }); }
+    catch { return { ok: false, code: "LOCAL_AI_PROBE_FAILED" }; }
+    // "downloadable" means Chrome would fetch a multi-gigabyte model. That is
+    // not something an audit should trigger on the operator's behalf.
+    if (status !== "available") return { ok: false, code: "LOCAL_AI_" + String(status).toUpperCase() };
+
+    const rules = api.BRIEF_PHRASING_RULES.map((r, i) => (i + 1) + ". " + r).join("\n");
+    const shape = JSON.stringify({
+      summary: "two or three sentences",
+      areas: envelope.areas.map((a) => ({ id: a.id, action: "short imperative headline", rationale: "one or two sentences" }))
+    });
+
+    let session = null;
+    try {
+      session = await model.create({
+        expectedInputs: [{ type: "text" }],
+        initialPrompts: [{
+          role: "system",
+          content: [
+            "You word the findings of a web site audit for a professional auditing a client site.",
+            "The audit is already complete and its conclusions are fixed. You are not deciding anything.",
+            "",
+            "Rules:",
+            rules,
+            "",
+            "Reply with JSON only, in exactly this shape:",
+            shape
+          ].join("\n")
+        }]
+      });
+      const raw = await session.prompt("Evidence:\n" + JSON.stringify(envelope) + "\n\nJSON only.");
+      let candidate = null;
+      try { candidate = JSON.parse(String(raw).replace(/^[^{]*/, "").replace(/[^}]*$/, "")); }
+      catch { return { ok: false, code: "BRIEF_AI_INVALID_JSON" }; }
+      const verdict = api.validateBriefPhrasing(candidate, envelope);
+      if (!verdict.ok) return { ok: false, code: verdict.code, message: verdict.message };
+      return { ok: true, brief: api.mergeBriefPhrasing(brief, candidate) };
+    } catch (error) {
+      return { ok: false, code: "LOCAL_AI_FAILED", message: String(error?.message || error) };
+    } finally {
+      try { session?.destroy?.(); } catch {}
+    }
+  }
+
+  /** Start the phrasing once per audit, and repaint only if it is accepted. */
+  function requestBriefPhrasing(brief, audit) {
+    const auditId = String(audit?.id || siteAudit.auditId || "");
+    const state = siteAudit.briefPhrasing;
+    if (state && state.auditId === auditId) return;
+    siteAudit.briefPhrasing = { auditId, status: "pending" };
+    renderBriefProvenance();
+    phraseBriefOnDevice(brief, audit).then((result) => {
+      if (!siteAudit || String(siteAudit.auditId || "") !== auditId) return;
+      siteAudit.briefPhrasing = result.ok
+        ? { auditId, status: "model", brief: result.brief }
+        : { auditId, status: "deterministic", code: result.code };
+      if (result.ok) renderLumenBrief(siteAudit.rawFindingGroups || [], siteAudit.audit);
+      else renderBriefProvenance();
+    }).catch(() => {
+      siteAudit.briefPhrasing = { auditId, status: "deterministic", code: "LOCAL_AI_FAILED" };
+      renderBriefProvenance();
+    });
+  }
+
+  function renderBriefProvenance() {
+    const kicker = siteAudit?.shadow?.querySelector(".brief-kicker .brief-source");
+    if (!kicker) return;
+    const status = siteAudit.briefPhrasing?.status || "deterministic";
+    kicker.textContent = BRIEF_PROVENANCE[status] || BRIEF_PROVENANCE.deterministic;
+  }
   function renderLumenBrief(groups, audit) {
     const shadow = siteAudit.shadow;
     const section = shadow.querySelector('.brief');
     if (!section) return;
-    const brief = composeLumenBrief(groups, audit);
+    const deterministic = composeLumenBrief(groups, audit);
+    // An accepted phrasing replaces the words and nothing else; the ranking,
+    // counts, severity and confidence in it came from composeLumenBrief.
+    const phrased = siteAudit.briefPhrasing?.status === "model" ? siteAudit.briefPhrasing.brief : null;
+    const brief = phrased || deterministic;
     siteAudit.brief = brief;
     if (!brief.groups.length) { section.hidden = true; return; }
     section.hidden = false;
     shadow.querySelector('.brief-summary').textContent = brief.summary;
+    renderBriefProvenance();
+    if (!phrased) requestBriefPhrasing(deterministic, audit);
     shadow.querySelector('.brief-scope').textContent =
       `${brief.groups.length} priority group${brief.groups.length === 1 ? '' : 's'}, ranked from ${brief.totalInstances} finding${brief.totalInstances === 1 ? '' : 's'} across the ${brief.fetched} page${brief.fetched === 1 ? '' : 's'} actually analysed.`;
 
