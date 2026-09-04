@@ -9,8 +9,10 @@
   <meta name="author" content="Mike Schermer">
   <meta name="theme-color" content="#7350F5">
   <link rel="canonical" href="https://assistant.msschermer.us/">
-  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700&display=swap" rel="stylesheet">
+  <!-- The typeface is self-hosted (see packages/ui/fonts.css): a tool that
+       audits third-party requests should not make one to render its own name.
+       styles.css carries the @font-face rules and /fonts/ the files. -->
+  <link rel="preload" href="/fonts/ibm-plex-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>

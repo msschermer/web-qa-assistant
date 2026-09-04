@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import { buildLumenCss, lumenTokenBlock } from './build-css.mjs';
+import { buildLumenCss, lumenTokenBlock, fontFaceCss, copyFontFiles } from './build-css.mjs';
 const root=process.cwd(),src=path.join(root,'apps/extension'),out=path.join(root,'dist/extension');
 function shortBuildRevision(){
   try{
@@ -42,6 +42,18 @@ buildLumenCss({
   const content=fs.readFileSync(contentPath,'utf8');
   const next=content.replace(/function lumenTokens\(\) \{[\s\S]*?\n  \}/,`function lumenTokens() {\n    return ${JSON.stringify(tokens)};\n  }`);
   if(next===content)throw new Error('Failed to inject the Lumen palette into content.js');
+  fs.writeFileSync(contentPath,next);
+}
+{
+  // The typeface. `__LUMEN_FONT_BASE__` survives the injection on purpose:
+  // only the running extension knows its own origin, so content.js resolves
+  // it with chrome.runtime.getURL() when it registers the faces.
+  copyFontFiles(path.join(out,'fonts'));
+  const faces=fontFaceCss('__LUMEN_FONT_BASE__');
+  const contentPath=path.join(out,'content.js');
+  const content=fs.readFileSync(contentPath,'utf8');
+  const next=content.replace(/function lumenFontFaceTemplate\(\) \{[\s\S]*?\n  \}/,`function lumenFontFaceTemplate() {\n    return ${JSON.stringify(faces)};\n  }`);
+  if(next===content)throw new Error('Failed to inject the Lumen @font-face rules into content.js');
   fs.writeFileSync(contentPath,next);
 }
 {

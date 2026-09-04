@@ -33,6 +33,24 @@ const TOKENS_CSS = fs.readFileSync(new URL('../ui/tokens.css', import.meta.url),
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .trim();
 
+/**
+ * The typeface, embedded.
+ *
+ * This file is emailed, saved and opened from `file://` months later, possibly
+ * on a machine that has never seen Lumen. A relative font URL would resolve to
+ * nothing and a CDN URL would resolve to nothing offline, so the faces travel
+ * inside the document as data URIs. Four latin subsets cost about 140KB
+ * base64 — the price of the client's copy reading the way the consultant's
+ * screen did.
+ */
+const FONT_FACE_CSS = fs.readFileSync(new URL('../ui/fonts.css', import.meta.url), 'utf8')
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/url\(__LUMEN_FONT_BASE__([^)]+)\)/g, (_match, file) => {
+    const bytes = fs.readFileSync(new URL(`../ui/fonts/${file}`, import.meta.url));
+    return `url(data:font/woff2;base64,${bytes.toString('base64')})`;
+  })
+  .trim();
+
 function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -244,13 +262,14 @@ export function renderAuditReportHtml({ audit, urls, links, findings, findingGro
   }
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Site audit — ${esc(audit.site_origin)}</title><style>
+    ${FONT_FACE_CSS}
     ${TOKENS_CSS}
-    :root{color-scheme:dark;--r-mono:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace}
+    :root{color-scheme:dark;--r-mono:var(--wqa-mono)}
     *{box-sizing:border-box}
     /* The flex column keeps the footer at the foot of the window rather than
        halfway up it when a short section — Browser checks, say — is open. */
     body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--wqa-canvas);color:var(--wqa-ink);
-      font:14px/1.55 'Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;
+      font:14px/1.55 var(--wqa-sans);
       -webkit-font-smoothing:antialiased}
     header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding:20px 28px;border-bottom:1px solid var(--wqa-line);background:var(--wqa-surface)}
     .mark{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:8px;background:var(--wqa-brand);color:#fff;font-weight:700;font-size:12px;align-self:center}

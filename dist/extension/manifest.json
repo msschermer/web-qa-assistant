@@ -25,6 +25,20 @@
     "service_worker": "background.js",
     "type": "module"
   },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "fonts/ibm-plex-sans-latin.woff2",
+        "fonts/ibm-plex-sans-latin-ext.woff2",
+        "fonts/ibm-plex-mono-400-latin.woff2",
+        "fonts/ibm-plex-mono-600-latin.woff2"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
+    }
+  ],
   "side_panel": {
     "default_path": "sidepanel.html"
   },

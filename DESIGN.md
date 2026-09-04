@@ -33,49 +33,49 @@ colors:
   sev-info: "#7A7A94"
 typography:
   display:
-    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
     fontSize: "26px"
     fontWeight: 650
     lineHeight: 1.1
     letterSpacing: "-0.03em"
   headline:
-    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
     fontSize: "19px"
     fontWeight: 650
     lineHeight: 1.2
     letterSpacing: "-0.02em"
   title:
-    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
     fontSize: "13.5px"
     fontWeight: 600
     lineHeight: 1.35
     letterSpacing: "normal"
   body:
-    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
     fontSize: "13px"
     fontWeight: 400
     lineHeight: 1.55
     letterSpacing: "normal"
   body-public:
-    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
     fontSize: "16px"
     fontWeight: 400
     lineHeight: 1.55
     letterSpacing: "normal"
   meta:
-    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
     fontSize: "12.5px"
     fontWeight: 500
     lineHeight: 1.45
     letterSpacing: "normal"
   label:
-    fontFamily: "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
+    fontFamily: "IBM Plex Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif"
     fontSize: "11px"
     fontWeight: 650
     lineHeight: 1.3
     letterSpacing: "0.09em"
   mono:
-    fontFamily: "ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace"
+    fontFamily: "IBM Plex Mono, ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace"
     fontSize: "11.5px"
     fontWeight: 400
     lineHeight: 1.5
@@ -196,7 +196,7 @@ The surface is a near-black canvas (#0E0E14) with slightly lighter panels on it,
 - One violet primary (#7350F5) that never means severity
 - A sealed five-step severity ramp used only for severity
 - Contrast computed, not eyeballed: every text token clears 4.5:1 on all four grounds
-- One sans and one mono across every surface, fetched on first-party pages and falling back on injected ones
+- One self-hosted superfamily — IBM Plex Sans and its own monospace sibling — across every surface
 - Depth from the ground stepping lighter and from hairlines, not from shadow
 - Left navigation grouped into destinations, a scrolling main column, a 900px fold to a horizontal strip
 - Tabular figures, and hatching for what was not surveyed
@@ -250,10 +250,12 @@ None. Lumen has exactly one accent. The semantic and severity colours below are 
 
 ## Typography
 
-**Display / Body Font:** Inter where it resolves, the platform UI face otherwise (`system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif`)
-**Mono Font:** `ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace` — URLs, rule ids, selectors, evidence values, timestamps
+**Display / Body Font:** **IBM Plex Sans**, self-hosted, variable on the weight axis 400–700, falling back to the platform UI face (`system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, sans-serif`)
+**Mono Font:** **IBM Plex Mono**, self-hosted at 400 and 600 — URLs, rule ids, selectors, evidence values, timestamps
 
-**Character:** One neutral grotesque doing all the work, tightened at the top of the ramp (−0.02 to −0.03em on headings and figures) and left alone at reading sizes. Weight, not size, carries most of the hierarchy: 650 for headings and figures, 600 for titles and labels, 500 for navigation and meta, 400 for prose.
+**Character:** One superfamily doing all the work. Plex was drawn for a technical products company and reads as engineered rather than generic: open apertures and a slightly mechanical skeleton that suits an instrument, with none of the neutrality-by-default of the grotesques every tool in this category reaches for. Its monospace is the same design at a fixed width, so a rule id sitting beside a sentence is one voice, not two families in a room together. Type is tightened at the top of the ramp (−0.02 to −0.03em on headings and figures) and left alone at reading sizes. Weight, not size, carries most of the hierarchy: 650 for headings and figures, 600 for titles and labels, 500 for navigation and meta, 400 for prose — and because the sans is the variable build, 650 is a real weight rather than a synthetic bold rounded up to 700.
+
+This replaced Inter, which was serviceable and anonymous: it is on every tool in the category and on the detector's own list of faces that no longer read as a choice.
 
 ### Hierarchy
 - **Display** (650, 24–26px, 1.1, −0.03em, tabular): stat-strip figures. The largest type in the product is a number.
@@ -268,9 +270,17 @@ None. Lumen has exactly one accent. The semantic and severity colours below are 
 ### Named Rules
 **The Provenance Label Rule.** The uppercase tracked micro-label exists for one job: marking whether the sentence under it is measurement or reading. On this surface a reader must always be able to tell the scanner's words from Lumen's. It is not a decorative eyebrow, and it is not used above ordinary headings.
 
-**The One Face Rule.** One sans and one mono, declared identically in `packages/ui/tokens.css` and inherited everywhere else. There is no second family anywhere in the product.
+**The One Face Rule.** One superfamily, declared once in `packages/ui/tokens.css` and inherited everywhere else. There is no second family anywhere in the product.
 
-**The Two Delivery Paths Rule.** Same face, two ways of getting it. The public scanner (`apps/web/public/index.html`) is an ordinary page and fetches Inter from Google Fonts with `preconnect` and `display=swap`. The overlay, the coach and the exported report never fetch: they take Inter if the host already has it and the platform UI face otherwise. An injected or emailed surface may never depend on a webfont; a first-party page may.
+**The Self-Hosted Rule.** The faces ship with the product (`packages/ui/fonts/`, SIL OFL 1.1) and are never fetched from a font CDN. Lumen audits sites for third-party requests and privacy exposure; a tool that does that while calling out to Google Fonts to render its own name has not taken its own advice. Self-hosting also means the extension works offline and a client's exported report renders correctly on a plane.
+
+**The Three Delivery Paths Rule.** Same files, three ways of reaching them, because three surfaces have genuinely different constraints:
+
+1. **Document surfaces** — the public scanner and the side panel — link a compiled sheet that sits beside its own `fonts/` directory, so a relative URL resolves. `scripts/build-css.mjs` writes both.
+2. **Injected surfaces** — the Site Audit overlay and the walkthrough coach — cannot use a relative URL, and cannot declare `@font-face` inside their shadow root at all: font faces resolve against the document, never the shadow tree. So the content script registers one inert `<style>` on the host page with `chrome.runtime.getURL()` paths, and removes it when the last Lumen root closes. The host page's CSP decides whether the files actually load, which is exactly why the fallback stack is load-bearing rather than decoration.
+3. **The emailed report** — `packages/crawl/report.js` embeds the four latin subsets as `data:` URIs, about 140KB. It is opened from `file://` months later on a machine that has never seen Lumen; a relative URL would resolve to nothing and a CDN URL would resolve to nothing offline.
+
+No surface may be the only place a `src` is written: `packages/ui/fonts.css` holds the rules and each path substitutes its own base.
 
 **The Tabular Figures Rule.** Any number a reader might compare against another number carries `font-variant-numeric: tabular-nums` — stat strips, counts, table cells, pager labels, history rows.
 
@@ -407,7 +417,7 @@ An injected 468px card (max 78vh) with a 12px radius and a deep shadow, pinned a
 - **Don't** add a score, grade, index or single health number to the conditions readout or the report.
 - **Don't** invent a confidence word outside `confirmed` / `corroborated` / `inferred` / `inconclusive`.
 - **Don't** render a withheld comparison as a zero, or an unrun check as an empty section that reads clean.
-- **Don't** let an injected or emailed surface depend on a fetched webfont, or on a stylesheet it cannot link. First-party pages may fetch Inter.
+- **Don't** fetch the typeface from a CDN on any surface, and don't let an injected or emailed surface depend on a stylesheet it cannot link. The faces ship with the product.
 - **Don't** restate a palette value anywhere outside `packages/ui/tokens.css`. The exception is the print block in `packages/crawl/report.js`, which is the documented paper palette and exists because paper has its own inks.
 - **Don't** add kickers or eyebrow labels above headings. The uppercase micro-label marks provenance and nothing else.
 - **Don't** ship hard offset shadows, glyph or emoji icons, or a system display face; icons are inline SVG stroked in `currentColor`.

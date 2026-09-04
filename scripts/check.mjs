@@ -133,7 +133,12 @@ const ALLOWED_HOSTS = new Set([
   'github.com', 'raw.githubusercontent.com', 'api.openai.com', 'openai.com',
   'cdnjs.cloudflare.com', 'schema.org', 'www.w3.org', 'w3.org', 'developer.mozilla.org',
   'dequeuniversity.com', 'deque.com', 'registry.npmjs.org', 'npmjs.com', 'docs.docker.com',
+  // Kept so the privacy invariant below can name them; the product no longer
+  // fetches from either.
   'fonts.googleapis.com', 'fonts.gstatic.com',
+  // The SIL Open Font License's own canonical URL, carried verbatim in
+  // packages/ui/fonts/OFL.txt. A licence may not be edited to satisfy a lint.
+  'scripts.sil.org', 'openfontlicense.org',
   // Platform suffixes used in environment-classification fixtures.
   'vercel.app', 'netlify.app', 'pages.dev', 'bigscoots-staging.com',
   // RFC 2606 reserved second-level examples.
@@ -497,6 +502,30 @@ if (!/local-ai\.js/.test(fs.readFileSync('scripts/build-extension.mjs','utf8')))
   if (!/lumenTokenBlock\(\)/.test(extBuild) || !/function lumenTokens\(\) \{/.test(fs.readFileSync('apps/extension/content.js','utf8'))) {
     bad++;
     console.error('build regression: the Lumen palette must be injected into the Site Audit overlay');
+  }
+  // The typeface ships with the product. Lumen audits third-party requests, so
+  // it may not make one to render its own name — and a face that silently
+  // stops being copied degrades to the fallback stack without any other
+  // symptom, which is precisely the kind of regression nothing else catches.
+  for (const file of ['ibm-plex-sans-latin.woff2', 'ibm-plex-mono-400-latin.woff2']) {
+    if (!fs.existsSync(`packages/ui/fonts/${file}`)) {
+      bad++;
+      console.error(`build regression: packages/ui/fonts/${file} is missing — the typeface must ship with the product`);
+    }
+    if (!fs.existsSync(`dist/extension/fonts/${file}`)) {
+      bad++;
+      console.error(`build regression: the extension build must copy ${file} into dist/extension/fonts`);
+    }
+  }
+  if (!/function lumenFontFaceTemplate\(\) \{/.test(fs.readFileSync('apps/extension/content.js','utf8')) || !/fontFaceCss\(/.test(extBuild)) {
+    bad++;
+    console.error('build regression: the @font-face rules must be injected into the Site Audit overlay from packages/ui/fonts.css');
+  }
+  for (const [surface, file] of [['the public scanner', 'apps/web/public/index.html'], ['the compiled web sheet', 'apps/web/public/styles.css']]) {
+    if (/fonts\.googleapis\.com|fonts\.gstatic\.com/.test(fs.readFileSync(file, 'utf8'))) {
+      bad++;
+      console.error(`privacy regression: ${surface} fetches a font from a CDN — Lumen self-hosts its typeface`);
+    }
   }
   // The discipline taxonomy has one definition for the same reason the palette
   // does: the overlay and the exported client report must file a finding under

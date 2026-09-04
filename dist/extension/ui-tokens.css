@@ -95,12 +95,13 @@
   --wqa-space-4:16px;
   --wqa-space-5:24px;
 
-  /* Inter where it resolves, the platform UI face otherwise. The overlay is
-     injected into third-party pages whose CSP we do not control, so nothing
-     here may depend on a fetched font. */
-  --wqa-sans:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;
+  /* IBM Plex Sans and its own monospace sibling, self-hosted (packages/ui/
+     fonts.css). The stack behind them is load-bearing, not decoration: the
+     overlay is injected into third-party pages whose CSP we do not control, so
+     every surface must stay legible when the face does not arrive. */
+  --wqa-sans:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;
   --wqa-draw:var(--wqa-sans);
-  --wqa-mono:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;
+  --wqa-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;
 
   /* Coverage still hatches what was not surveyed: not knowing is not the same
      as being broken, and that distinction stays visual. Light-on-dark now. */

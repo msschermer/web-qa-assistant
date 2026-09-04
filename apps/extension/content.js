@@ -324,6 +324,47 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     return '';
   }
 
+  /** The @font-face rules from packages/ui/fonts.css, injected at build time
+   * with `__LUMEN_FONT_BASE__` still in them so the runtime can resolve the
+   * extension's own URL. */
+  function lumenFontFaceTemplate() {
+    return '';
+  }
+
+  /**
+   * Register Lumen's typeface with the host document.
+   *
+   * @font-face declared inside a shadow root is ignored by the browser — font
+   * faces resolve against the document, not the shadow tree — so the one rule
+   * both injected surfaces need is the one rule they cannot carry themselves.
+   * This adds a single inert <style> to the host page: it declares faces and
+   * matches no element, so nothing on the audited page changes appearance, and
+   * it is removed again when the last Lumen root closes.
+   *
+   * The page's own CSP governs whether the files actually load. When it
+   * refuses, the fallback stack in tokens.css carries the surface and nothing
+   * breaks — which is why that stack is load-bearing rather than decoration.
+   */
+  function ensureLumenFontFaces() {
+    try {
+      if (document.getElementById('__web_qa_fonts')) return;
+      const template = lumenFontFaceTemplate();
+      if (!template) return;
+      const style = document.createElement('style');
+      style.id = '__web_qa_fonts';
+      style.setAttribute('data-webqa-ui', 'fonts');
+      style.textContent = template.replaceAll('__LUMEN_FONT_BASE__', chrome.runtime.getURL('fonts/'));
+      (document.head || document.documentElement).appendChild(style);
+    } catch {}
+  }
+
+  /** Lumen leaves no nodes behind: the face registration goes when the last
+   * surface that needed it does. */
+  function releaseLumenFontFaces() {
+    if (document.getElementById('__web_qa_frank_root') || document.getElementById('__web_qa_site_audit_root')) return;
+    document.getElementById('__web_qa_fonts')?.remove();
+  }
+
   function createFrankRoot() {
     const old = document.getElementById('__web_qa_frank_root');
     if (old) old.remove();
@@ -332,6 +373,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     host.setAttribute('data-webqa-ui', 'frank-overlay');
     host.setAttribute('data-webqa-overlay', 'frank');
     host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:auto;';
+    ensureLumenFontFaces();
     document.documentElement.appendChild(host);
     const shadow = host.attachShadow({ mode: 'open' });
     shadow.innerHTML = `<style>${frankCss()}</style><div class="backdrop"></div><div class="spotlight" hidden></div><section class="coach" role="dialog" aria-modal="true" aria-labelledby="frank-coach-title" aria-describedby="frank-coach-body" tabindex="-1"><div class="accent"></div><div class="top"><span class="mark" aria-hidden="true"></span><span class="identity"><span class="name">Lumen</span><span class="device">Walkthrough</span></span><span class="verdict" hidden></span><span class="progress"></span></div><nav class="rail" aria-label="Walkthrough steps"></nav><div class="scroll"><div class="body" aria-live="polite" aria-atomic="true"><span class="eyebrow"></span><h2 id="frank-coach-title"></h2><p id="frank-coach-body"></p></div><section class="anchor" hidden aria-label="Element status"><span class="anchor-head"></span><p class="anchor-note"></p><code class="anchor-selector" hidden></code><div class="anchor-actions"></div></section><dl class="metrics" hidden></dl><figure class="code" hidden><figcaption class="code-head"><span>Observed markup</span><button type="button" class="mini copy-code">Copy</button></figcaption><pre></pre></figure><div class="sources" hidden></div><p class="state" hidden role="status" aria-live="polite"></p></div><div class="foot"><button type="button" class="nav back">Back</button><button type="button" class="nav ghost preview" hidden>Preview change</button><button type="button" class="nav ghost reset" hidden>Reset preview</button><button type="button" class="nav ghost report-bug">Report bug</button><button type="button" class="nav next">Next</button><button type="button" class="nav return-qa">Back to findings</button></div></section>`;
@@ -722,6 +764,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     document.removeEventListener('keydown', frankSession.keyHandler, true);
     const returnFocus = frankSession.returnFocus;
     frankSession.host.remove();
+    releaseLumenFontFaces();
     frankSession = null;
     try { returnFocus?.focus?.({ preventScroll: true }); } catch {}
     const injectedUi = cleanupInjectedUi();
@@ -1828,15 +1871,16 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     host.setAttribute('data-webqa-ui', 'site-audit-overlay');
     host.setAttribute('data-webqa-overlay', 'site-audit');
     host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483646;pointer-events:auto;';
+    ensureLumenFontFaces();
     document.documentElement.appendChild(host);
     const shadow = host.attachShadow({ mode: 'open' });
     shadow.innerHTML = `<!--
-      THESIS: The category standard for a site-audit tool, executed straight. The operator took the standing exit and named Sitebulb and Semrush as the bar: Sitebulb's density and severity discipline, Semrush's polish and colour confidence.
-      OWN-WORLD: Light app canvas under white cards, one indigo primary for the product's own voice, a five-step severity ramp used only for severity, 8px radii, soft elevation, Inter-class system type, tabular figures.
-      STORY: The consultant sees what was surveyed, what was not, and what is broken, then hands the sheet to a client.
-      FIRST VIEWPORT: Left navigation carrying the site and its sections; main column opens on Overview — stat tiles, the site-conditions readout, then severity, findings by area, top issues and coverage. Primary action sits in the nav foot.
-      FORM: The category standard (the standing exit), taken over the rolled direction; seed 40294b97.
-      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+      THESIS: An audit is an investigation in progress, not a report that appears at the end. This surface is the instrument a consultant leaves open on a second monitor while a crawl runs.
+      OWN-WORLD: The operator's console — near-black grounds in five steps, violet as the single product voice, one sealed severity ramp, structure carried by hairlines a shade above the ground rather than by shadow. IBM Plex Sans and its own monospace sibling, self-hosted.
+      STORY: The consultant sees what was surveyed, what was not, and what is broken, then hands the client a document that says the same things in the same order.
+      FIRST VIEWPORT: Left navigation grouped into destinations — Overview and Findings, then Explore, then Validate; the main column opens on Overview with the scope of the crawl stated before any count that depends on it.
+      FORM: The direction the operator pinned with six mockups, replacing the light category standard the previous world had taken as the standing exit.
+      FINISH: unreviewed and undocumented is unfinished; DESIGN.md is written from the world that shipped, not from the one that was intended.
     --><style>${siteAuditCss()}</style><div class="backdrop"></div><section class="workspace" role="dialog" aria-modal="true" aria-labelledby="sa-title">
       <header class="head"><span class="mark" aria-hidden="true"></span><div class="identity"><span class="name">Lumen</span><span class="device">Site Audit</span></div><button type="button" class="close" aria-label="Close site audit">&times;</button></header>
       <div class="body">
@@ -2373,6 +2417,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     document.removeEventListener('keydown', siteAuditEscHandler);
     siteAudit?.host?.remove();
     siteAudit = null;
+    releaseLumenFontFaces();
   }
   function stopPolling() {
     if (siteAudit?.pollTimer) { clearInterval(siteAudit.pollTimer); siteAudit.pollTimer = null; }
