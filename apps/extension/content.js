@@ -2788,6 +2788,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       siteAudit.schema = null;
       siteAudit.schemaLens = 'validation';
       siteAudit.plan = null;
+      siteAudit.planCache = null;
       siteAudit.planPhrasing = null;
       siteAudit.planBuilding = false;
       siteAudit.optimizeLens = 'priorities';
@@ -6687,9 +6688,30 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   }
 
 
+  /** The plan is a deterministic function of the audit and the two stated
+   * inputs, so a completed audit can only ever produce one plan per input pair.
+   * Re-requesting it on every visit to Optimize was a round trip to the gateway
+   * for an answer that cannot have changed, and for a remote user that is the
+   * most expensive call the overlay makes. The schema and site-model loaders
+   * already memoise this way; this brings the third in line.
+   *
+   * A running audit is never cached: its findings are still arriving, so the
+   * plan genuinely does change underneath it. */
+  function optimizePlanCacheKey() {
+    const stated = siteAudit.planInputs || {};
+    return `${siteAudit.auditId}|${stated.siteType || ''}|${stated.templateAccess || ''}`;
+  }
+
   async function buildOptimizePlanNow() {
     const shadow = siteAudit.shadow;
     const body = shadow.querySelector('.optimize-body');
+    const cacheKey = optimizePlanCacheKey();
+    const settled = siteAudit.audit?.status === 'complete';
+    if (settled && siteAudit.planCache?.key === cacheKey && siteAudit.planCache.plan) {
+      siteAudit.plan = siteAudit.planCache.plan;
+      renderOptimizeSection();
+      return;
+    }
     siteAudit.planBuilding = true;
     body.innerHTML = '';
     const working = document.createElement('div');
@@ -6731,6 +6753,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       return;
     }
     siteAudit.plan = r.plan;
+    // Only a settled audit is cacheable; a running one will build a different
+    // plan the next time it is asked, because more findings have landed.
+    if (siteAudit.audit?.status === 'complete') siteAudit.planCache = { key: cacheKey, plan: r.plan };
     renderOptimizeSection();
     // The wording pass runs after the plan is on screen, never in front of it:
     // the sequence is the product, and holding it back behind an optional model
