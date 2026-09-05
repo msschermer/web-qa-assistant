@@ -899,7 +899,51 @@ async function addLinkAudit(report,tabId,{privilegedExternal=true}={}){
 }
 
 async function fetchJson(url,options={},timeoutMs=GATEWAY_TIMEOUT_MS){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);try{const response=await fetch(url,{...options,signal:controller.signal}),text=await response.text();if(!text.trim())throw new Error(`empty response (HTTP ${response.status})`);let data;try{data=JSON.parse(text)}catch{throw new Error(`invalid JSON response (HTTP ${response.status})`)}if(!response.ok)throw Object.assign(new Error(data?.error||`HTTP ${response.status}`),{status:response.status,code:data?.code||''});return data}finally{clearTimeout(timer)}}
-async function gatewayCandidates(){const s=await settings();if(s.apiBase)return[s.apiBase.replace(/\/$/,'')];return[...new Set([...LOCAL_APIS,LIVE_API].map(v=>v.replace(/\/$/,'')))]}
+/**
+ * Which gateway to try, best first.
+ *
+ * This used to return the same fixed list on every single request, so every call
+ * walked localhost:3000 and localhost:8787 before reaching the live gateway.
+ * When no local gateway is running, which is every ordinary install, that walk
+ * is not free: a Chrome fetch to a closed loopback port measured **2.4 seconds**
+ * the first time and 250-330ms after. Two of them ran ahead of every request, so
+ * each gateway call carried roughly half a second of dead wait in the steady
+ * state and several seconds cold, and the overlay makes several calls per
+ * action. That was the whole of a reported "the UI got much slower".
+ *
+ * The root that answered last time is therefore remembered and tried first. It
+ * lives in session storage rather than local storage on purpose: a developer who
+ * stops their local gateway should not be pinned to it forever, and a browser
+ * restart is a cheap moment to re-discover.
+ */
+const PREFERRED_GATEWAY_KEY='qaPreferredGateway';
+/** A local candidate that has never answered gets a short budget, because a
+ * gateway that is not listening cannot be slow, it is absent. A root that has
+ * already answered keeps the caller's full timeout, so a busy local gateway
+ * working through a large audit is never abandoned mid-request. */
+const UNPROVEN_LOCAL_TIMEOUT_MS=1200;
+let preferredGateway=null;
+function isLocalRoot(root){return /^http:\/\/(localhost|127\.|\[::1\])/i.test(String(root||''))}
+async function rememberGateway(root){
+  if(preferredGateway===root)return;
+  preferredGateway=root;
+  try{await chrome.storage.session?.set({[PREFERRED_GATEWAY_KEY]:root})}catch{}
+}
+async function forgetGateway(root){
+  if(preferredGateway&&preferredGateway!==root)return;
+  preferredGateway=null;
+  try{await chrome.storage.session?.remove(PREFERRED_GATEWAY_KEY)}catch{}
+}
+async function gatewayCandidates(){
+  const s=await settings();
+  if(s.apiBase)return[s.apiBase.replace(/\/$/,'')];
+  const all=[...new Set([...LOCAL_APIS,LIVE_API].map(v=>v.replace(/\/$/,'')))];
+  if(!preferredGateway){
+    try{preferredGateway=(await chrome.storage.session?.get({[PREFERRED_GATEWAY_KEY]:''}))?.[PREFERRED_GATEWAY_KEY]||null}catch{}
+  }
+  if(preferredGateway&&all.includes(preferredGateway))return[preferredGateway,...all.filter(r=>r!==preferredGateway)];
+  return all;
+}
 async function ensureInstallationId(){const s=await settings();if(s.installationId)return s.installationId;const id=(globalThis.crypto?.randomUUID?.()||`wqa_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g,'_');await chrome.storage.local.set({installationId:id});return id}
 async function registerManagedAccess(root){
   const installationId=await ensureInstallationId(),rid=requestId('REGISTER');
@@ -917,17 +961,24 @@ async function gatewayCredential(root,{refresh=false}={}){
 async function gatewayRequest(method,path,payload,timeoutMs=GATEWAY_TIMEOUT_MS,operation='GATEWAY'){
   const errors=[],rid=requestId(operation);
   for(const root of await gatewayCandidates()){
+    // An unproven local root is probed briefly; a root already known to work
+    // keeps the caller's full budget.
+    const budget=isLocalRoot(root)&&preferredGateway!==root?Math.min(timeoutMs,UNPROVEN_LOCAL_TIMEOUT_MS):timeoutMs;
     let credential=await gatewayCredential(root);
     for(let attempt=0;attempt<2;attempt++)try{
       const options={method,headers:{'x-web-qa-request-id':rid,...(credential.token?{'x-web-qa-key':credential.token}:{})}};
       if(method!=='GET'){options.headers['content-type']='application/json';options.body=JSON.stringify(payload||{})}
-      const data=await fetchJson(root+path,options,timeoutMs);
+      const data=await fetchJson(root+path,options,budget);
+      await rememberGateway(root);
       return{...data,gateway:root,requestId:data.requestId||rid,accessMode:credential.type};
     }catch(error){
       const status=Number(error?.status||0);
       if(status===401&&credential.type==='managed'&&attempt===0){credential=await gatewayCredential(root,{refresh:true});if(credential.token)continue}
       errors.push(`${root}: ${error?.name==='AbortError'?'timeout':error.message}`);
       if([401,403].includes(status)){error.gateway=root;throw error}
+      // A remembered root that has stopped answering must not keep being tried
+      // first, or a stopped local gateway would pin every request behind it.
+      await forgetGateway(root);
       break;
     }
   }
