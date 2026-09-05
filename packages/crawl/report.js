@@ -420,11 +420,24 @@ export function renderAuditReportHtml({ audit, urls, links, findings, findingGro
         <h2>Pages</h2>
         <p class="lede">Every URL this crawl discovered, and what was read from the ones it fetched. A row with no title or word count was discovered but never fetched, because the page limit stopped the crawl before it got there.</p>
         ${table(urlHeaders, urls.map(urlRow), 'No pages were crawled.')}` },
-    { id: 'links', label: 'Links', count: links.length, group: 'Explore', content: `
+    // The complete link inventory used to be printed here as a second table,
+    // one row per link. On a 200-page site that was 5,001 rows and **85% of the
+    // whole document** — 1,154KB of the 1,357KB — while the findings this
+    // report exists to communicate came to 2.6KB. A client reads a report; they
+    // do not read every internal link on their own site, and the same rows are
+    // already in the workbook with more columns than this table carried, and in
+    // Explore in the product. What stays is the subset that is actually a
+    // finding, plus an honest count of what was checked to get there.
+    // Named "Broken links" rather than "Links" on purpose. The overlay's Explore
+    // > Links tab is the full browsable inventory and keeps that name; this
+    // section is now the actionable subset, so calling both "Links" while they
+    // hold different things is exactly the screen/document contradiction the
+    // header of this file forbids. The destination id stays `links` so the two
+    // navigations still line up.
+    { id: 'links', label: 'Broken links', count: brokenLinks.length, group: 'Explore', content: `
         <h2>Broken and blocked links</h2>
-        ${table(linkHeaders, brokenLinks.map(linkRow), 'Every link checked resolved.')}
-        <h3>All checked links</h3>
-        ${table(linkHeaders, links.map(linkRow), 'No links were checked.')}` },
+        <p class="lede">${plural(links.length, 'link')} checked${links.length ? `, of which ${brokenLinks.length} did not resolve` : ''}. The complete inventory, with every source, target and anchor text, is the Links sheet of the exported workbook.</p>
+        ${table(linkHeaders, brokenLinks.map(linkRow), 'Every link checked resolved.')}` },
     { id: 'browser', label: 'Browser checks', group: 'Validate', content: browserSection }
   ];
 

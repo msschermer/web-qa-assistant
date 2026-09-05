@@ -141,3 +141,39 @@ test('an audit with no findings or links renders cleanly instead of crashing on 
   assert.match(html, /No pages were crawled/);
   assert.match(html, /Every link checked resolved/);
 });
+
+test('the client report carries the links that failed, not every link on the site', () => {
+  // The complete inventory used to be a second table here, one row per link. On
+  // a 200-page site that was 5,001 rows and 85% of the whole document, while
+  // the findings the report exists to communicate came to 2.6KB. A client reads
+  // a report; they do not read every internal link on their own site, and the
+  // same rows are in the workbook with more columns.
+  const links = [];
+  for (let i = 0; i < 400; i++) {
+    links.push({
+      source_url: `https://example.com/p${i}`,
+      target_url: `https://example.com/t${i}`,
+      anchor_text: 'Read more',
+      status: i < 3 ? 'broken' : 'healthy',
+      http_status: i < 3 ? 404 : 200
+    });
+  }
+  const html = renderAuditReportHtml({
+    audit: baseAudit(), urls: [], findings: [], findingGroups: [], links
+  });
+
+  // The count of what was checked is still stated, so nothing is hidden.
+  assert.match(html, /400 links checked, of which 3 did not resolve/);
+  // And the reader is told where the full inventory actually lives.
+  assert.match(html, /Links sheet of the exported workbook/);
+
+  // Only the three failures are tabulated. A healthy target must not appear as
+  // a row; if this fails, the raw dump has come back.
+  assert.ok(html.includes('https://example.com/t1'), 'a broken destination is listed');
+  assert.ok(!html.includes('https://example.com/t399'), 'a healthy destination is not tabulated');
+
+  // Size is the point, so assert on it rather than trusting the row check.
+  const linkSection = html.slice(html.indexOf('id="tab-links"'));
+  const rows = (linkSection.slice(0, linkSection.indexOf('id="tab-browser"')).match(/<tr>/g) || []).length;
+  assert.ok(rows <= 5, `the links section should tabulate only failures, got ${rows} rows`);
+});
