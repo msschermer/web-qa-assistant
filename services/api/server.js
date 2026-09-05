@@ -28,6 +28,7 @@ import { openAuditStore, newAuditId, normalizeAuditUrl } from '../../packages/cr
 import { runAudit, isCrawlableStartUrl, planCrawlConfig, CRAWL_LIMITS } from '../../packages/crawl/crawler.js';
 import { guidanceForRule } from '../../packages/findings/rule-guidance.js';
 import { renderAuditReportHtml, reportCss } from '../../packages/crawl/report.js';
+import { purgeAudits, retentionPolicyFromEnv, describeRetention } from '../../packages/crawl/retention.js';
 import { buildAuditDebugBundle } from '../../packages/crawl/debug-report.js';
 
 const app = express();
@@ -373,6 +374,23 @@ app.post('/api/scan', async (req, res) => {
 // ever holds an audit id and reconnects by polling these routes.
 const AUDIT_DB_PATH = process.env.AUDIT_DB_PATH || path.join(__dirname, '../../data/audits.db');
 const auditStore = openAuditStore(AUDIT_DB_PATH);
+
+// An audit holds a client's page titles, URLs and link graph. This store is a
+// working store so a crawl can be resumed and exported, not an archive, and
+// until retention existed nothing ever deleted one. See packages/crawl/retention.js.
+const RETENTION = retentionPolicyFromEnv(process.env);
+const RETENTION_NOTE = describeRetention(RETENTION);
+function runRetention(reason) {
+  try {
+    const r = purgeAudits(auditStore, RETENTION);
+    if (r.deleted) console.log(`[retention] ${reason}: deleted ${r.deleted} audit(s) (${r.expired} expired, ${r.overCount} over per-site cap) of ${r.examined}`);
+    return r;
+  } catch (error) {
+    // Retention must never take the gateway down with it.
+    console.error('[retention] purge failed', error);
+    return null;
+  }
+}
 const runningAudits = new Map(); // auditId -> { cancelled }
 const MAX_CONCURRENT_AUDITS = Number(process.env.AUDIT_MAX_CONCURRENT || 2);
 // Layered ON TOP OF, never instead of, the process-wide ceiling above: the
@@ -463,6 +481,9 @@ function launchAudit(id, startUrl, config) {
       auditStore.finishAudit(id, { status: 'failed', error: String(error?.message || error).slice(0, 500) });
     } finally {
       runningAudits.delete(id);
+      // The audit just became terminal, so it is now eligible for the per-site
+      // cap. Purging here keeps the store bounded without waiting for the timer.
+      runRetention('after audit');
     }
   })();
   return control;
@@ -495,7 +516,7 @@ app.get('/api/audits', requireExtensionKey, (req, res) => {
   const gate = isCrawlableStartUrl(req.query?.site || '');
   if (!gate.ok) return res.status(400).json({ ok: false, error: 'A valid site URL is required.', requestId: req.webQaRequestId });
   const audits = auditStore.listAudits(new URL(gate.url).origin, auditOwnerFor(req), Math.min(50, Number(req.query?.limit) || 20));
-  res.json({ ok: true, requestId: req.webQaRequestId, audits: audits.map(auditProgressPayload) });
+  res.json({ ok: true, requestId: req.webQaRequestId, retention: RETENTION_NOTE, audits: audits.map(auditProgressPayload) });
 });
 
 app.get('/api/audits/:id', requireExtensionKey, (req, res) => {
@@ -1002,4 +1023,11 @@ app.get('/assets/coverage.js', (_req, res) => {
 const web = path.resolve(__dirname, '../../apps/web/public');
 app.use(express.static(web, { extensions: ['html'], maxAge: '5m' }));
 app.use((req, res) => res.sendFile(path.join(web, 'index.html')));
-app.listen(port, () => console.log(`web-qa api ${RELEASE_VERSION} listening on ${port}`));
+app.listen(port, () => {
+  console.log(`web-qa api ${RELEASE_VERSION} listening on ${port}`);
+  console.log(`[retention] ${RETENTION_NOTE}`);
+  runRetention('startup');
+  // Hourly, so a long-lived container with no traffic still honours the age
+  // rule. unref() keeps the timer from holding the process open.
+  setInterval(() => runRetention('scheduled'), 3600_000).unref();
+});

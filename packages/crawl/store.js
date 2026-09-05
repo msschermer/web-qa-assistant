@@ -275,6 +275,7 @@ export function openAuditStore(dbPath) {
     setAuditStats: db.prepare('UPDATE audits SET stats_json = ? WHERE id = ?'),
     setAuditConfig: db.prepare('UPDATE audits SET config_json = ? WHERE id = ?'),
     listByStatus: db.prepare('SELECT id FROM audits WHERE status = ?'),
+    auditsForRetention: db.prepare('SELECT id, site_origin, owner, status, created_at FROM audits'),
     upsertUrl: db.prepare(`
       INSERT INTO audit_urls (audit_id, url, normalized_url, discovered_via, status, http_status, final_url, redirected, collection_method, title, meta_description, canonical, indexable, h1_count, h1_text, word_count, error, fetched_at, schema_types)
       VALUES (@audit_id, @url, @normalized_url, @discovered_via, @status, @http_status, @final_url, @redirected, @collection_method, @title, @meta_description, @canonical, @indexable, @h1_count, @h1_text, @word_count, @error, @fetched_at, @schema_types)
@@ -465,6 +466,12 @@ export function openAuditStore(dbPath) {
      * audit today, and a destructive endpoint with no caller is a liability
      * rather than a feature; this exists for fixtures and maintenance.
      */
+    /** Every audit's retention-relevant columns, for packages/crawl/retention.js.
+     * Deliberately not the whole row: the purge decision needs an id, a site, an
+     * owner, a status and an age, and nothing else. */
+    auditsForRetention() {
+      return stmt.auditsForRetention.all();
+    },
     deleteAudit(auditId) {
       const id = String(auditId || '');
       if (!id) return false;

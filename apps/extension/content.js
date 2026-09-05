@@ -1957,6 +1957,21 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .section-cut .sc-count{font-variant-numeric:tabular-nums;color:var(--sa-ink-faint);font-weight:600}
       .section-cut.active .sc-count{color:var(--sa-primary-text)}
 
+      .history{margin:22px 0 0}
+      .history-head{display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:0 0 8px}
+      .history-head h3{margin:0;font-size:13.5px;font-weight:650;letter-spacing:-.01em;color:var(--sa-ink)}
+      .history-policy{margin:0;font-size:12px;color:var(--sa-ink-faint)}
+      .history-when{font-weight:600;color:var(--sa-ink)}
+      .history-meta{color:var(--sa-ink-soft)}
+      /* The change against the previous audit is the reason to read this row at
+         all: a count answers "what did it find", a delta answers "is this site
+         getting better or worse", which is the question a second audit exists
+         to settle. Direction is carried by a word as well as a colour. */
+      .history-delta{font-weight:600;white-space:nowrap}
+      .history-delta[data-dir="down"]{color:var(--sa-success)}
+      .history-delta[data-dir="up"]{color:var(--sa-critical)}
+      .history-delta[data-dir="same"]{color:var(--sa-ink-faint)}
+      .history-running{color:var(--sa-warn);font-weight:600}
       .history-list{list-style:none;margin:16px 0 0;padding:0;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);overflow:hidden}
       .history-list li{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--sa-line);padding:11px 14px;font-size:13px;font-variant-numeric:tabular-nums}
       .history-list li:last-child{border-bottom:0}
@@ -2319,9 +2334,14 @@ if (!globalThis.__WEB_QA_CONTENT__) {
           <p class="setup-error" style="display:none"></p>
           <div class="actions">
             <button type="button" class="btn primary start-btn">Start audit</button>
-            <button type="button" class="btn history-btn">Past audits</button>
           </div>
-          <ul class="history-list" hidden></ul>
+          <section class="history" hidden>
+            <div class="history-head">
+              <h3>Earlier audits of this site</h3>
+              <p class="hint history-policy"></p>
+            </div>
+            <ul class="history-list"></ul>
+          </section>
           </div>
           <aside class="setup-aside">
             <h3>How the audit runs</h3>
@@ -2786,7 +2806,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       siteAudit.urlsOffset = 0;
       loadSiteAuditUrls();
     });
-    shadow.querySelector('.history-btn').addEventListener('click', () => loadSiteAuditHistory(origin));
     shadow.querySelector('.render-start-btn').addEventListener('click', startRenderPass);
     shadow.querySelector('.render-stop-btn').addEventListener('click', stopRenderPass);
     wireDownloadMenu();
@@ -2855,8 +2874,14 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   // only ever offers a resume banner; the click is what actually acts on it.
   async function tryResumeSiteAudit(origin) {
     const r = await chrome.runtime.sendMessage({ type: 'SITE_AUDIT_LIST', site: origin }).catch(() => null);
-    const mostRecent = (r?.audits || [])[0];
-    if (!mostRecent || !siteAudit) return;
+    const audits = r?.audits || [];
+    if (!siteAudit) return;
+    // One request, both components. They used to be fetched separately and say
+    // the same thing twice: the banner announced the last audit and the first
+    // row of the list repeated it.
+    renderSiteAuditHistory(audits, r?.retention || '');
+    const mostRecent = audits[0];
+    if (!mostRecent) return;
     const banner = siteAudit.shadow.querySelector('.resume-banner');
     const when = new Date(mostRecent.createdAt).toLocaleString();
     banner.querySelector('.resume-text').textContent = mostRecent.status === 'running'
@@ -2890,24 +2915,90 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     if (siteAudit?.pollTimer) { clearInterval(siteAudit.pollTimer); siteAudit.pollTimer = null; }
   }
 
-  async function loadSiteAuditHistory(origin) {
-    const list = siteAudit.shadow.querySelector('.history-list');
-    const r = await chrome.runtime.sendMessage({ type: 'SITE_AUDIT_LIST', site: origin }).catch(() => null);
+  /** "3 hours ago" rather than a locale timestamp. The question this screen
+   * answers is whether the last audit is recent enough to open instead of
+   * re-running, and a formatted date makes the reader do that subtraction. */
+  function relativeWhen(iso) {
+    const then = Date.parse(iso || '');
+    if (!Number.isFinite(then)) return 'unknown time';
+    const mins = Math.round((Date.now() - then) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    const days = Math.round(hours / 24);
+    return `${days} day${days === 1 ? '' : 's'} ago`;
+  }
+
+  /**
+   * The earlier-audits list.
+   *
+   * Shown with the screen rather than behind a "Past audits" button, because
+   * the decision it supports — open the recent one or run a new one — is the
+   * decision this screen exists for, and a control nobody clicks is a control
+   * nobody reads.
+   *
+   * Each row carries the change against the audit before it. A finding count on
+   * its own is what a crawler reports; the delta is the only thing here that
+   * says whether the site is getting better, which is what a second audit was
+   * run to find out. It is stated as a plain count difference, never as a rate
+   * or a score, because two crawls of different scope are not comparable beyond
+   * the direction of travel.
+   */
+  function renderSiteAuditHistory(audits, retentionNote) {
+    const section = siteAudit.shadow.querySelector('.history');
+    const list = section.querySelector('.history-list');
     list.innerHTML = '';
-    const audits = (r?.audits || []).filter((a) => a.status !== 'running');
-    if (!audits.length) { list.hidden = true; return; }
-    list.hidden = false;
-    for (const audit of audits.slice(0, 8)) {
+    const rows = (audits || []).slice(0, 5);
+    if (!rows.length) { section.hidden = true; return; }
+    section.hidden = false;
+    section.querySelector('.history-policy').textContent = retentionNote || '';
+
+    rows.forEach((audit, i) => {
       const li = document.createElement('li');
       const label = document.createElement('span');
-      label.textContent = `${new Date(audit.createdAt).toLocaleString()} · ${audit.status} (${audit.findingsCount} findings)`;
+      const when = document.createElement('span');
+      when.className = 'history-when';
+      when.textContent = relativeWhen(audit.createdAt);
+      label.appendChild(when);
+
+      const running = audit.status === 'running' || audit.status === 'queued';
+      const meta = document.createElement('span');
+      meta.className = running ? 'history-running' : 'history-meta';
+      meta.textContent = running
+        ? '  still running'
+        : `  ${audit.findingsCount} finding${audit.findingsCount === 1 ? '' : 's'}${audit.status === 'complete' ? '' : ` · ${audit.status}`}`;
+      label.appendChild(meta);
+
+      // Compared against the next row down, which is the audit before this one.
+      const previous = rows[i + 1];
+      if (!running && previous && previous.status === 'complete' && audit.status === 'complete') {
+        const diff = Number(audit.findingsCount) - Number(previous.findingsCount);
+        const delta = document.createElement('span');
+        delta.className = 'history-delta';
+        delta.dataset.dir = diff === 0 ? 'same' : diff < 0 ? 'down' : 'up';
+        delta.textContent = diff === 0
+          ? '  no change'
+          : `  ${Math.abs(diff)} ${diff < 0 ? 'fewer' : 'more'} than the audit before`;
+        label.appendChild(delta);
+      }
+
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.textContent = 'Open';
-      btn.addEventListener('click', () => { siteAudit.auditId = audit.id; showSiteAuditResults(); });
+      btn.textContent = running ? 'Resume' : 'Open';
+      btn.addEventListener('click', () => {
+        siteAudit.auditId = audit.id;
+        if (running) {
+          siteAudit.startedAt = Date.parse(audit.startedAt || audit.createdAt) || Date.now();
+          setSiteAuditView('progress');
+          beginPolling();
+        } else {
+          showSiteAuditResults();
+        }
+      });
       li.append(label, btn);
       list.appendChild(li);
-    }
+    });
   }
 
   async function startSiteAudit() {

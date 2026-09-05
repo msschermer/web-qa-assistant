@@ -314,6 +314,16 @@ const GROUPS = [
     ]
   },
   {
+    title: 'Earlier audits of this site',
+    why: 'The row a consultant decides from: open the recent audit, or run a new one. Reproduced here because reaching it needs several audits of one origin, days apart, which no single run produces. The delta against the audit before is the only part a crawler could not report on its own, so it is the part worth looking at.',
+    wide: true,
+    specimens: [
+      ['improving, regressing, unchanged', historyList()],
+      ['one audit, nothing to compare', historyList({ single: true })],
+      ['still running', historyList({ running: true })]
+    ]
+  },
+  {
     title: 'Empty and unavailable',
     why: 'The overlay’s own empty states, which state what would have filled them rather than showing a blank panel.',
     wide: true,
@@ -365,6 +375,36 @@ function changeRow(open, { absent = false } = {}) {
     </button>
     ${body}
   </li></ul>`;
+}
+
+/** The earlier-audits list from the Site Audit setup screen. Markup matches
+ * renderSiteAuditHistory() in apps/extension/content.js. */
+function historyList({ single = false, running = false } = {}) {
+  const row = (when, meta, delta, action) => `<li>
+    <span><span class="history-when">${when}</span>${meta}${delta}</span>
+    <button type="button">${action}</button>
+  </li>`;
+  const plain = (n) => `<span class="history-meta">  ${n} findings</span>`;
+  const delta = (dir, text) => `<span class="history-delta" data-dir="${dir}">  ${text}</span>`;
+
+  let rows;
+  if (single) {
+    rows = row('3 hours ago', plain(38), '', 'Open');
+  } else if (running) {
+    rows = row('12 minutes ago', '<span class="history-running">  still running</span>', '', 'Resume')
+      + row('2 days ago', plain(44), delta('same', 'no change'), 'Open');
+  } else {
+    rows = row('an hour ago', plain(38), delta('down', '6 fewer than the audit before'), 'Open')
+      + row('yesterday', plain(44), delta('same', 'no change'), 'Open')
+      + row('2 days ago', plain(44), delta('up', '17 more than the audit before'), 'Open');
+  }
+  return `<section class="history">
+    <div class="history-head">
+      <h3>Earlier audits of this site</h3>
+      <p class="hint history-policy">Audits are deleted after 7 days, and only the 5 most recent per site are kept.</p>
+    </div>
+    <ul class="history-list">${rows}</ul>
+  </section>`;
 }
 
 function questionCard() {

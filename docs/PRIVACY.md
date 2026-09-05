@@ -40,6 +40,41 @@ The public scanner accepts HTTP/HTTPS URLs only. Its browser is isolated from th
 
 `ASSISTANT_ACCESS_TOKEN` can protect private/team extension routes and remains an optional developer override. It is never bundled into the extension. When managed installation access is enabled, the browser creates an installation identifier and receives a signed, expiring token from the gateway. The signing secret remains server-side. Managed installation tokens support expiration, per-install accounting and quotas, but they should not be treated as proof of a human identity; account/OAuth authentication is the appropriate next step when user entitlements are required.
 
+## Audit retention
+
+A site audit holds page titles, URLs, the internal link graph and findings for a
+site the operator usually does not own. That store exists so a crawl can be
+resumed, reviewed and exported. **It is a working store, not an archive.**
+
+By default, **audits are deleted after 7 days, and only the 5 most recent per
+site are kept.** Whichever limit is reached first applies. An audit that is
+still queued, running or paused is never deleted by either rule, because the
+render pass deliberately survives a closed panel and a killed service worker;
+it becomes eligible as soon as it reaches a terminal status.
+
+Both limits are set by the operator:
+
+```dotenv
+AUDIT_RETENTION_HOURS=168   # 0 disables the age rule
+AUDIT_KEEP_PER_SITE=5       # 0 disables the count rule
+```
+
+An unreadable value falls back to the default rather than disabling retention,
+so a typo can never silently mean "keep forever". The gateway purges on startup,
+after each audit reaches a terminal status, and hourly. The active policy is
+printed at startup, returned on the audit list response, and shown in the
+extension above the earlier-audits list, so the guarantee is visible rather than
+taken on trust.
+
+The exports are the durable artifact. `report.html`, `workbook.xlsx` and
+`export.csv` are generated on demand from the store, so retention limits how
+long **Lumen** holds a client's evidence, not how long the operator keeps the
+work. Download the report to keep it.
+
+Policy and enforcement live in `packages/crawl/retention.js`; deleting an audit
+cascades to its URLs, links, findings, schema items and sitemap rows, so no
+orphaned client evidence outlives the audit that explains it.
+
 ## Logging
 
 Request IDs may be logged to correlate failures. Do not add raw page bodies, form submissions, cookies or full evidence graphs to production logs.
