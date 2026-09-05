@@ -1,155 +1,130 @@
-# UI / UX / brand system
+# Product language and interaction contract
+
+**The visual system is not here.** Colour, type, spacing, elevation, shape and every
+component live in [`DESIGN.md`](../DESIGN.md), written from the world that shipped;
+`packages/ui/tokens.css` is the one place a value is named. This document holds what
+`DESIGN.md` does not: the words the product uses, the order it says things in, the
+shape of a walkthrough, and the accessibility floor its interactions must clear.
+
+> This file used to describe the visual system too, and by the time anyone read it
+> again it described a retired one — a light blue-grey canvas, a `#143E63` brand, a
+> teal accent, a Tailwind pipeline authored in `packages/ui/lumen.css`, and a claim
+> that no webfont was bundled. Every one of those was false: the world is dark and
+> violet, Tailwind was removed, and the test suite asserts `packages/ui/lumen.css`
+> is gone. Two documents describing one design system drift for the same reason nine
+> pill implementations did. There is now one.
 
 ## Product posture
 
-**Lumen** should feel like a calm engineering review tool, not a scanner dump and not a chatbot. There is no named persona. The product shows what the page is actually doing.
+**Lumen** should feel like a calm engineering review tool, not a scanner dump and not
+a chatbot. There is no named persona. The product shows what the page is actually
+doing. **Frank** is the name of the reasoning layer, not a character: it explains
+verified evidence and never creates, upgrades or replaces a finding.
 
-## Visual language
+### Punctuation
 
-The extension and web app share `packages/ui/tokens.css`. Source CSS lives in `packages/ui/lumen.css` and is compiled with Tailwind v4 into `dist/extension/sidepanel.css` and `apps/web/public/styles.css`. Markup uses stable component classes (`btn-primary`, `finding-card`, `workspace-section`), not utility soup.
+The product's voice does not use the em dash. Sentences carry their own
+punctuation: a comma, a semicolon, a colon, or a full stop, whichever the
+sentence actually needs. Where a dash was doing the work of a separator between
+a label and its value, use a colon; where it separated two counts or two facts
+of equal weight, use the middle dot the plan already uses ("6 changes · 32
+findings").
 
-- soft blue-gray workspace canvas with white cards
-- deep navy-charcoal ink typography
-- a deep engineering blue brand (`#143E63`) with a teal accent (`#087C89`)
-- green for resolved/healthy states
-- severity as a 3px left rail plus text, so color is never the only meaning
-- IBM Plex Sans for reading and IBM Plex Mono for selectors and rule IDs
-- the extension does not fetch Google Fonts (CSP); the public web app may keep the existing font link
+This is a build failure rather than a preference. `scripts/check.mjs` scans
+every string and template in `apps/`, `packages/` and `services/` and fails on
+an em dash outside a comment, because the character arrives one paste at a time
+and a surface that carries it in nine places out of ten reads as inconsistent
+rather than as deliberate. Comments are exempt: they are notes to ourselves, not
+copy. The single exemption in source is the character class in
+`packages/rules/image-purpose.js`, which has to contain the character in order
+to detect it in alt text.
+
+An en dash still marks an empty cell in a table, which is the conventional "no
+value" mark and a different character from the one being avoided.
 
 ## Information hierarchy
 
-1. **Page assessment**: what deserves attention now
-2. **Recommended order**: human-readable problem, confidence and context
-3. **actions**: Walk through, Highlight, Recheck, Copy issue
-4. **coverage**: what was and was not successfully checked
-5. **technical details**: rule IDs, selectors and raw bounded evidence behind progressive disclosure
+The order a finding is presented in, on every surface that presents one:
+
+1. **Assessment** — what deserves attention now
+2. **Recommended order** — the human-readable problem, its confidence, its context
+3. **Actions** — Walk through, Highlight, Recheck, Copy issue
+4. **Coverage** — what was and was not successfully checked
+5. **Technical detail** — rule ids, selectors and bounded raw evidence, behind
+   progressive disclosure
 
 ## State language
 
-Use:
+These strings are load-bearing; each one makes a different claim about where a
+sentence came from, and swapping them silently changes what the product asserts.
 
-- `Evidence-backed assessment` / `Evidence summary` for the scan overview, which does not imply that an AI request occurred
-- `On-device reasoning` when Chrome built-in AI improved a walkthrough locally
-- `Cloud reasoning` only when the optional metered cloud fallback was explicitly enabled and succeeded
-- `Verified guidance` for deterministic walkthroughs when local AI is unavailable, still preparing, or fails evidence-quality validation
-- `Confirmed`, `Corroborated`, `Inferred` for evidence strength
-- `Incomplete coverage` for checker uncertainty
+| Phrase | Means |
+| --- | --- |
+| `Evidence-backed assessment` / `Evidence summary` | the scan overview. Deliberately does **not** imply that any AI request occurred. |
+| `On-device reasoning` | Chrome's built-in `LanguageModel` improved a walkthrough locally. |
+| `Cloud reasoning` | the optional metered cloud fallback was explicitly enabled *and* succeeded. Never shown otherwise. |
+| `Verified guidance` | a deterministic walkthrough, because local AI is unavailable, still preparing, or failed evidence-quality validation. |
+| `Confirmed`, `Corroborated`, `Inferred`, `Inconclusive` | evidence strength, and the only four words allowed for it (`packages/findings/confidence.js`). |
+| `Observed`, `Needs attention`, `Not established` | the three states of a site condition. |
+| `Not run` | a pass that has not been asked for yet — an offer, not a fault. |
 
-Do not turn inability to verify into a defect.
+**Do not turn inability to verify into a defect.** "Unavailable" and "not applicable"
+are coverage facts. Expressing one as a confidence level is not a softer phrasing, it
+is a false claim: `normalizeConfidence()` coerces an unrecognised word to a fallback
+that defaults to `confirmed`, so inventing a gentler term *upgrades* the finding.
 
 ## Walkthrough
 
-Two surfaces stay split:
+Two surfaces stay split, and the split is the presentation contract:
 
-- **Side panel Evidence**: deterministic facts only
-- **On-page guide**: explanation and action
+- **Side panel — Evidence:** the stable deterministic inspection record. Finding
+  status, confidence, environment, selector or target, measured values, tool
+  provenance, verification attempts, current-step evidence, full bounded evidence,
+  utility actions. It answers *what did the tools actually find?*
+- **On-page card — walkthrough:** interpretation, impact, remediation, verification.
+  It answers *what do these facts mean and what should I do?* It may carry a short
+  heading and several concise sentences, because the rest of the page is dimmed to
+  make a dedicated focus surface.
 
-The predictable conceptual grammar is:
+The conceptual grammar is predictable on purpose:
 
-`Interpret -> Impact -> Fix -> Verify`
+`Interpret → Impact → Fix → Verify`
 
-Comparison/trend steps are inserted only when supported. Recheck is available at the verification step when the product can test the selected condition again.
+Comparison and trend steps are inserted only when the evidence supports them. Recheck
+appears at the verification step when the product can actually test that condition
+again. The target element stays spotlighted; the card tries right, left, below and
+above so it does not cover the element when a reasonable alternative exists. The
+deterministic walkthrough opens on interpretation rather than a redundant "locate"
+step. Current-step evidence is treated more strongly in the sidebar so a reader can
+trace a statement back to its facts without the whole explanation being duplicated
+there.
 
 ## Accessibility requirements
 
-- all actions keyboard accessible
-- visible focus state
-- no status communicated only by color
-- walkthrough dialogs/overlays trap focus while active and restore focus on close
-- Escape exits the walkthrough
-- status changes use appropriate live regions
-- narrow side-panel widths remain usable
-- reduced-motion preferences are respected where animation is used
+No formal conformance claim has been made for Lumen's own interface, and none may be
+implied. These are the floor its interactions are held to anyway — a tool that audits
+accessibility failing the checks it reports on others is a credibility problem before
+it is a compliance one.
 
-
----
-
-# 1.5.0 revision
-
-The 1.4.0 skin read as an engineering prototype: monospace headings, 2px radii,
-hairline borders around every component, all-caps micro-labels, and top severity bars.
-1.5.0 replaces it.
-
-## Tokens
-
-Defined in `packages/ui/tokens.css`, copied into the extension build as
-`ui-tokens.css`. Legacy `--wqa-*` aliases are retained so any unmigrated rule degrades
-to the new palette rather than to an unstyled browser default.
-
-| Role | Token | Value |
-| --- | --- | --- |
-| Canvas | `--wqa-canvas` | `#F3F6FA` |
-| Elevated surface | `--wqa-surface` | `#FFFFFF` |
-| Sunken surface | `--wqa-sunken` | `#F7F9FC` |
-| Primary ink | `--wqa-ink` | `#102133` |
-| Secondary ink | `--wqa-ink-soft` | `#45566B` |
-| Tertiary ink | `--wqa-ink-faint` | `#78879A` |
-| Hairline | `--wqa-line` | `#E2E8F0` |
-| Brand | `--wqa-brand` | `#143E63` |
-| Accent | `--wqa-accent` | `#087C89` |
-| Secondary accent | `--wqa-violet` | `#5557A7` |
-| Critical | `--wqa-critical` | `#B42318` |
-| Warning | `--wqa-warn` | `#B54708` |
-| Healthy | `--wqa-ok` | `#067647` |
-
-Radii: `6px` controls, `8px` cards, `12px` the brief and overlay, `999px` chips.
-
-## Typography
-
-IBM Plex Sans carries everything a person reads, including headings. IBM Plex Mono is
-reserved for what a person copies or compares character by character: selectors, rule
-IDs, HTTP codes, scores, evidence values, diagnostics.
-
-Moving headings out of mono is the single largest contributor to the change in
-character. Mono headings were the main reason the panel read as a debug surface.
-
-Plex is not bundled and no webfont is loaded, so the stack falls back to `system-ui`
-where Plex is not installed. The fallback order was chosen so this still reads as
-deliberate.
-
-## Structure
-
-- **Severity is a left-edge accent**, 3px, not a top bar. It reads as a margin marker
-  rather than as a warning banner across the card.
-- **Chips are soft-tinted pills in sentence case.** All-caps monospace labels were
-  removed; they added visual weight without adding information.
-- **Panels are collapsed by default** with a summary note on the right, so secondary
-  detail is reachable without occupying the primary reading column.
+- Every action is reachable from the keyboard, with a visible focus state.
+- No status is communicated by colour alone. Severity carries a 3px rail *and* text;
+  conditions carry a ringed dot *and* a word.
+- Walkthrough dialogs and overlays trap focus while active and restore it on close;
+  Escape exits.
+- Status changes are announced through appropriate live regions.
+- Narrow side-panel widths stay usable (300px minimum).
+- Reduced-motion preferences are respected wherever animation is used.
+- Interactive controls are never nested — a button inside a button is invalid and
+  unreachable for much of assistive technology.
 
 ## Signature: the impact ledger
 
-A compact strip beneath the brief showing counts per impact area, with the leading
-area marked and each cell acting as a filter.
+A compact strip showing counts per impact area, the leading area marked, each cell
+acting as a filter. It encodes something true rather than decorating: the
+cross-discipline balance of the current scan. It is the direct answer to the
+acceptance finding that the product felt like an accessibility extension — when a scan
+finds a broken link, an indexing problem and three accessibility groups, the ledger
+says so before the reader scrolls.
 
-It encodes something true rather than decorating: the cross-discipline balance of the
-current scan. It is the direct visual answer to the acceptance finding that the product
-felt like an accessibility extension. When a scan finds a broken link, an indexing
-problem and three accessibility groups, the ledger says so before the reader scrolls.
-
-Empty areas are omitted, never shown as zero. A zero would imply a check ran and
-passed, which is not always what happened.
-
-## Walkthrough focus mode — 1.6.0
-
-Focus mode deliberately separates **facts** from **reasoning**.
-
-### Sidebar: Evidence
-
-The side panel is the stable deterministic inspection record: finding status, confidence, environment, selector/target, measured values, tool provenance, verification attempts, current-step evidence, full bounded evidence, and utility actions. It answers: **what did the tools actually find?**
-
-### Center card: walkthrough
-
-The centered card owns the narrative: interpretation, impact, remediation, and verification. It is allowed to carry a short heading plus several concise sentences because the rest of the page is already dimmed to create a dedicated focus surface. It answers: **what do these facts mean and what should I do?**
-
-The real target remains spotlighted. Placement tries right, left, below, and above the target so the card does not cover the element when a reasonable alternative exists. The deterministic walkthrough begins with interpretation rather than a redundant standalone “locate” step.
-
-Current-step evidence receives a stronger visual treatment in the sidebar so a user can trace the statement back to the facts without duplicating the whole explanation there.
-
-### Identity
-
-The product is **Lumen**. The mark is a simple aperture, not a letter-mascot. Walkthrough chrome uses a restrained teal accent. The product remains calm and engineering-led.
-
-### Tailwind
-
-Lumen CSS is authored in `packages/ui/lumen.css` with Tailwind v4 (`@theme` plus `@layer components`). `npm run build:extension` compiles that source into the extension distribution and `apps/web/public/styles.css`. Component class names stay stable so tests can assert structure without depending on generated utility class strings.
-
+Empty areas are omitted, never shown as zero. A zero implies a check ran and passed,
+which is not always what happened.

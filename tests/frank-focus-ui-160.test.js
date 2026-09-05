@@ -103,7 +103,23 @@ test('the severity ramp stays fills-only once it reaches the overlay', () => {
   assert.match(content, /--sa-critical:var\(--wqa-critical\)/, 'text uses the semantic pair');
   assert.match(content, /--sa-warn:var\(--wqa-warn\)/);
   assert.match(content, /--sa-sev-critical:var\(--wqa-sev-critical\)/, 'fills use the ramp');
-  assert.match(content, /\.badge\.sev-low\{background:var\(--sa-warn-soft\);color:var\(--sa-warn\)/);
+  // Severity now reaches a pill through one table rather than through seven
+  // near-identical badge classes, so the guard pins both halves: low maps to
+  // the warn tone, and the warn tone is the semantic pair rather than the ramp.
+  assert.match(content, /const SEVERITY_TONE = \{[^}]*low: 'warn'/, 'low severity takes the warn tone');
+  assert.match(content, /\.pill\[data-tone=warn\]\{background:var\(--sa-warn-soft\);color:var\(--sa-warn\)/);
+  // Critical is the one severity whose ground comes from the ramp: a solid
+  // fill under white, never ramp-coloured text on a tint.
+  assert.match(content, /const SEVERITY_TONE = \{ critical: 'critical-solid'/);
+  // The ground is derived from the ramp rather than being the ramp value
+  // itself. White on #E14356 measures 4.09:1, under the floor for text this
+  // size, and the state gallery's contrast pass caught it on a component that
+  // had already shipped. The ramp is sealed, so the pill deepens its own ground
+  // from it: still a fill sourced from the ramp, still never ink.
+  const solid = content.match(/\.pill\[data-tone=critical-solid\]\{[^}]*\}/)[0];
+  assert.match(solid, /background:color-mix\(in srgb,var\(--sa-sev-critical\)/, 'the fill still comes from the ramp');
+  assert.match(solid, /color:#fff\}/, 'and carries white ink, not ramp-coloured ink');
+  assert.ok(!/color:var\(--sa-sev/.test(solid), 'the ramp never becomes the ink');
 });
 
 test('the dark world keeps its contrast floors, computed rather than asserted by eye', () => {

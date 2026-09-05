@@ -899,7 +899,7 @@ export function diagnosticIndex(artifact = {}) {
       webqaErrors: asBound(artifact.webqaDiagnostics),
       findings: asBound(artifact.findings?.recommendedOrder)
     },
-    note: 'Newest exported diagnostic pointer only — not the page currently open. Use webqa_diagnostic_section for bounded sections. Do not treat this as a live scan of the current tab.'
+    note: 'Newest exported diagnostic pointer only, not the page currently open. Use webqa_diagnostic_section for bounded sections. Do not treat this as a live scan of the current tab.'
   };
 }
 

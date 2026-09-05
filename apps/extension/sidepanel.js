@@ -1763,7 +1763,7 @@ async function refreshIdleHistory() {
   const last = $('#idle-last');
   if (last) {
     last.innerHTML = thisPage
-      ? `<b>This page</b> was scanned at ${esc(time(thisPage.lastScan))} — ${esc(plural(Number(thisPage.materialCount || 0), 'issue'))}.`
+      ? `<b>This page</b> was scanned at ${esc(time(thisPage.lastScan))}: ${esc(plural(Number(thisPage.materialCount || 0), 'issue'))}.`
       : `<b>This page</b> has not been scanned yet.`;
   }
 
@@ -1879,17 +1879,117 @@ loadSettings().finally(() => restoreWorkspaceOrRescan({ preferRestore: true }));
  * the Chrome prompt appears while the operator is looking at the field they
  * just filled in.
  */
-function loadBriefAiSettings(settings) {
-  const provider = $("#brief-ai-provider");
-  if (provider) provider.value = String(settings.briefAiProvider || "on-device");
+/**
+ * The writing settings.
+ *
+ * Built from what can actually answer rather than from a fixed list. The
+ * previous screen offered "On-device only" as its default on machines where
+ * Chrome reports the built-in model unavailable and cannot be made to report
+ * anything else, so the feature looked broken while every part of it worked.
+ * An option that cannot answer is now shown as unavailable, with the reason,
+ * and the line under the picker names whoever will actually be asked.
+ */
+async function loadBriefAiSettings(settings) {
   const url = $("#byo-ai-url"); if (url) url.value = settings.byoAiBaseUrl || "";
   const model = $("#byo-ai-model"); if (model) model.value = settings.byoAiModel || "";
   const key = $("#byo-ai-key"); if (key) key.value = settings.byoAiKey || "";
+  await renderBriefAiProviders(String(settings.briefAiProvider || "byo"));
+}
+
+/** Chrome's built-in model can only be probed from a document, so the panel
+ * asks here and tells the worker what it found. */
+async function localModelAvailable() {
+  try {
+    if (typeof LanguageModel === "undefined" || !LanguageModel?.availability) return false;
+    const status = await LanguageModel.availability({
+      expectedInputs: [{ type: "text", languages: ["en"] }],
+      expectedOutputs: [{ type: "text", languages: ["en"] }]
+    });
+    return status === "available" || status === "downloadable" || status === "downloading";
+  } catch { return false; }
+}
+
+async function renderBriefAiProviders(selected) {
+  const select = $("#brief-ai-provider");
+  const resolvedLine = $("#brief-ai-resolved");
+  if (!select) return;
+  const localAvailable = await localModelAvailable();
+  const state = await send({ type: "BRIEF_AI_SETTINGS", localAvailable }, 6000).catch(() => null);
+  const providers = state?.providers || {};
+  const want = selected || state?.provider || "byo";
+  select.innerHTML = "";
+  for (const id of ["byo", "on-device", "gateway", "off"]) {
+    const info = id === "off"
+      ? { label: "No model, Lumen writes everything", ready: true, note: "Every word comes from Lumen itself." }
+      : providers[id];
+    if (!info) continue;
+    const option = document.createElement("option");
+    option.value = id;
+    option.textContent = info.ready ? info.label : info.label + " (unavailable)";
+    option.disabled = !info.ready && id !== want;
+    option.title = info.note || "";
+    if (id === want) option.selected = true;
+    select.appendChild(option);
+  }
+  const presets = $("#byo-ai-presets");
+  const row = $("#byo-ai-preset-row");
+  if (presets && row && !presets.childElementCount) {
+    for (const preset of state?.presets || []) {
+      const option = document.createElement("option");
+      option.value = preset.baseUrl;
+      option.label = preset.label;
+      presets.appendChild(option);
+      // A button rather than only a datalist entry: the point is to remove the
+      // typing, and that includes the model name and the key expectation.
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn btn-quiet";
+      button.textContent = preset.label;
+      button.title = preset.note;
+      button.addEventListener("click", () => {
+        $("#byo-ai-url").value = preset.baseUrl;
+        $("#byo-ai-model").value = preset.model;
+        if (!preset.needsKey) $("#byo-ai-key").value = "";
+        const status = $("#brief-ai-status");
+        if (status) status.textContent = preset.note;
+      });
+      row.appendChild(button);
+    }
+  }
+  if (resolvedLine) {
+    const r = state?.resolved;
+    resolvedLine.textContent = !r ? ""
+      : r.ready
+        ? (r.substituted ? r.reason : "Ready. " + (r.reason || ""))
+        : "No model will be asked. " + (r.reason || "");
+  }
+}
+
+async function testBriefAiEndpoint() {
+  const status = $("#brief-ai-status");
+  const button = $("#test-brief-ai");
+  if (button) { button.disabled = true; button.textContent = "Testing…"; }
+  if (status) status.textContent = "Asking the endpoint for one word…";
+  try {
+    const result = await send({
+      type: "BRIEF_AI_TEST",
+      byoAiBaseUrl: ($("#byo-ai-url")?.value || "").trim(),
+      byoAiModel: ($("#byo-ai-model")?.value || "").trim(),
+      byoAiKey: $("#byo-ai-key")?.value || ""
+    }, 20000).catch((error) => ({ ok: false, message: String(error?.message || error) }));
+    if (status) {
+      status.textContent = result?.ok
+        ? `${result.origin} answered in ${result.latencyMs} ms as ${result.model}. Save to use it.`
+        : (result?.message || "The endpoint did not answer.") + (result?.code ? ` (${result.code})` : "");
+    }
+  } finally {
+    if (button) { button.disabled = false; button.textContent = "Test endpoint"; }
+  }
 }
 
 async function saveBriefAiSettings() {
   const status = $("#brief-ai-status");
-  const provider = $("#brief-ai-provider")?.value || "on-device";
+  const provider = $("#brief-ai-provider")?.value || "byo";
   const byoAiBaseUrl = ($("#byo-ai-url")?.value || "").trim();
   const byoAiModel = ($("#byo-ai-model")?.value || "").trim();
   const byoAiKey = $("#byo-ai-key")?.value || "";
@@ -1901,7 +2001,7 @@ async function saveBriefAiSettings() {
       return;
     }
     if (!byoAiModel) {
-      if (status) status.textContent = "Set the model name your endpoint expects.";
+      if (status) status.textContent = "Set the model name your endpoint serves.";
       return;
     }
     // Chrome only allows a permission request from a user gesture, which is
@@ -1915,15 +2015,9 @@ async function saveBriefAiSettings() {
   }
 
   const saved = await send({ type: "SAVE_BRIEF_AI_SETTINGS", briefAiProvider: provider, byoAiBaseUrl, byoAiModel, byoAiKey }, 8000).catch(() => null);
-  if (status) {
-    status.textContent = saved?.ok
-      ? (provider === "off"
-        ? "Saved. Lumen will word the brief itself."
-        : provider === "byo"
-          ? "Saved. On-device first, then your endpoint."
-          : "Saved. On-device only.")
-      : "Could not save those settings.";
-  }
+  if (status) status.textContent = saved?.ok ? "Saved." : "Could not save those settings.";
+  if (saved?.ok) await renderBriefAiProviders(provider);
 }
 
 $("#save-brief-ai")?.addEventListener("click", saveBriefAiSettings);
+$("#test-brief-ai")?.addEventListener("click", testBriefAiEndpoint);

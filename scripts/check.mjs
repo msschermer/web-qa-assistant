@@ -8,7 +8,7 @@ import { provenanceMatchesVersion } from './release-metadata.mjs';
 // this walker was syntax-checking those, which is neither useful nor fast: the
 // count fell from 602 files to 167 the moment the profiles were cleared. The
 // tool installs are somebody else's source too.
-const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', '.autoqa', '.claude', '.cursor', '.impeccable', '.github']);
+const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', '.autoqa', '.claude', '.github']);
 const files = [];
 function walk(dir) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -48,7 +48,9 @@ const provenanceSource = fs.readFileSync('RELEASE_PROVENANCE.txt','utf8');
 const buildStatusSource = fs.readFileSync('BUILD_STATUS.md','utf8');
 if (!readmeSource.includes(`Current delivery candidate: **${pkg.version}**`)) { bad++; console.error('release metadata regression: README delivery candidate is stale'); }
 if (!provenanceMatchesVersion(provenanceSource, pkg.version)) { bad++; console.error('release metadata regression: provenance version is stale'); }
-if (!buildStatusSource.includes(`Web QA Assistant ${pkg.version}`)) { bad++; console.error('release metadata regression: build status version is stale'); }
+// "Lumen", not "Web QA Assistant": the repository keeps the old name in package
+// identity and paths, but nothing a reader sees may still use it.
+if (!buildStatusSource.includes(`Lumen ${pkg.version}`)) { bad++; console.error('release metadata regression: build status version is stale'); }
 
 for (const p of ['activeTab', 'scripting', 'sidePanel', 'storage']) {
   if (!manifest.permissions.includes(p)) {
@@ -145,6 +147,13 @@ const ALLOWED_HOSTS = new Set([
   // The SIL Open Font License's own canonical URL, carried verbatim in
   // packages/ui/fonts/OFL.txt. A licence may not be edited to satisfy a lint.
   'scripts.sil.org', 'openfontlicense.org',
+  // Model endpoints the operator can point Lumen at. They are presets in a
+  // settings screen, not data collected from anyone.
+  'openrouter.ai', 'ollama.com',
+  // The XML namespace URIs the .xlsx format is defined in. They are part of the
+  // file format rather than an address anything is fetched from, and a workbook
+  // that alters them is a workbook no spreadsheet will open.
+  'schemas.openxmlformats.org', 'schemas.microsoft.com',
   // Platform suffixes used in environment-classification fixtures.
   'vercel.app', 'netlify.app', 'pages.dev', 'bigscoots-staging.com',
   // RFC 2606 reserved second-level examples.
@@ -171,24 +180,11 @@ function allowedHost(host) {
   // Any subdomain of an allowed apex is fine (e.g. staging.example.com).
   return [...ALLOWED_HOSTS].some(allowed => h.endsWith(`.${allowed}`));
 }
-/** Third-party agent-skill payloads installed by `npx impeccable install`.
- * Scoped to that vendor by name on purpose: our own skills under
- * .claude/skills (lumen-*, run-web-qa-assistant) are our content and stay
- * scanned. */
-const VENDORED_SKILL_DIR = /(^|\/)\.(claude|cursor|github)\/skills\/impeccable$/;
-
 function scanForClientData(dir) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
       if (['node_modules', '.git', 'dist', 'qa-runs', '.autoqa'].includes(e.name)) continue;
-      // Vendored agent skills (installed by `npx impeccable install` into
-      // .claude/.cursor/.github) are third-party code, not our fixtures. They
-      // legitimately contain SSRF-test hostnames like `127.0.0.1.evil.com` and
-      // the vendor's own domain. This rule exists to stop *our* fixtures from
-      // carrying real client data; policing someone else's tool does nothing
-      // for that and only teaches the team to ignore a failing gate.
-      if (VENDORED_SKILL_DIR.test(full.replace(/\\/g, '/'))) continue;
       scanForClientData(full);
       continue;
     }
@@ -577,6 +573,69 @@ if (!/local-ai\.js/.test(fs.readFileSync('scripts/build-extension.mjs','utf8')))
     bad++;
     console.error(`design regression: severity ramp used as text (${rampAsText.join(', ')}) — the ramp is fills only; use --sa-critical / --sa-warn`);
   }
+
+  // Anchors must not fall through to the browser's link colours. Under
+  // `:host{all:initial}` an unstyled <a> takes the UA link blue, `:visited`
+  // paints a second colour over it, and neither is ours — so a list of URLs
+  // arrives in two colours distinguished by whether the operator happened to
+  // have opened that page. The findings inspector's Instances tab shipped
+  // exactly that: #0000EE, underlined, 16px, in the sans face, because the rule
+  // that dresses those links had been written as `.finding-detail .url-item`
+  // and the second place that builds them is not inside `.finding-detail`.
+  // The floor is a base `a` rule; a component may still restyle itself on top.
+  for (const [file, css] of [['apps/extension/content.js', overlay], ['packages/ui/coach.css', fs.readFileSync('packages/ui/coach.css', 'utf8')]]) {
+    if (!/\n\s*a\{[^}]*color:/.test(css)) {
+      bad++;
+      console.error(`design regression: ${file} has no base anchor colour — an unstyled <a> under :host{all:initial} renders in the browser's link blue and its :visited purple, neither of which is the product's`);
+    }
+  }
+
+  // DESIGN.md describes one chip-and-pill component. The overlay implemented it
+  // nine times — .badge, .status-pill, .signal-badge, .cond-state,
+  // .cond-confidence, .phase-badge, .render-state, .sheet-scale, .state-chip —
+  // each restating the radius, the padding and the type, and only three of them
+  // seating their own label. A pill is a box drawn around one line of text, and
+  // any flex or grid row can stretch it taller than that line, so a pill that
+  // does not centre its own text sits high inside itself the moment a taller
+  // sibling joins the row. That is how the confidence chip in the findings
+  // inspector ended up misaligned beside a larger area chip.
+  //
+  // Seating the nine was the fix for that morning; this is the fix for the
+  // class of defect. A rule that declares the pill silhouette AND carries text
+  // is a pill implementation, and there may only be the documented ones. A new
+  // pill composes .pill and a data-tone; it does not write these three
+  // declarations again. Anything genuinely new belongs in DESIGN.md and in this
+  // list, deliberately, rather than arriving by copy-paste.
+  const PILL_PRIMITIVES = new Set([
+    '.pill',            // the Site Audit overlay's pill
+    '.chip',            // the overlay's interactive filter chip, and the side panel's own chip
+    '.section-cut',     // the overlay's section-index control
+    '.idle-scheme'      // the side panel's scheme marker
+  ]);
+  for (const file of ['apps/extension/content.js', 'packages/ui/coach.css', 'packages/ui/web.css', 'apps/extension/sidepanel.css', 'packages/crawl/report.js']) {
+    const css = fs.readFileSync(file, 'utf8');
+    for (const rule of css.match(/[^{}]+\{[^{}]*\}/g) || []) {
+      const brace = rule.indexOf('{');
+      const body = rule.slice(brace + 1, -1);
+      // font-size and padding are what separate a pill from the bars, tracks
+      // and fills that share the radius and carry no text at all.
+      if (!/border-radius:\s*(?:999px|var\(--wqa-r-pill\))/.test(body)) continue;
+      if (!/font-size:/.test(body) || !/padding:/.test(body)) continue;
+      const selector = rule.slice(0, brace).trim().split('\n').pop().trim();
+      // The base class of the first selector in the list — `.pill.roomy` and
+      // `.chip[data-tone=ok]` are the primitive modifying itself, not a tenth
+      // implementation.
+      const base = (selector.split(',')[0].trim().match(/\.[A-Za-z][\w-]*/) || [''])[0];
+      if (!PILL_PRIMITIVES.has(base)) {
+        bad++;
+        console.error(`design regression: ${file} ${selector} is a second pill implementation — compose .pill and a data-tone instead of restating the radius, padding and type`);
+        continue;
+      }
+      if (/display:\s*[a-z-]*flex/.test(body) && /align-items:/.test(body)) continue;
+      bad++;
+      console.error(`design regression: ${file} ${selector} is a pill carrying text but does not seat it — add a flex display and align-items so a taller sibling cannot push its label to the top`);
+    }
+  }
 }
 const extensionBuildSource = fs.readFileSync('scripts/build-extension.mjs','utf8');
 const axeCacheIndex = extensionBuildSource.indexOf('const axeBytes=');
@@ -732,6 +791,134 @@ if (fs.existsSync('dist/extension/background.js')) {
 }
 if (fs.existsSync('dist/extension/sidepanel.js')) {
   validateRelativeImports('dist/extension/sidepanel.js');
+}
+
+// --- Design rules the repository now owns ------------------------------------
+//
+// These were enforced by an external design skill. Rules a project actually
+// lives by belong to the project: an outside tool can be uninstalled, and the
+// rule leaves with it.
+
+// Every level of the closed confidence vocabulary must be drawable. The
+// vocabulary is sealed in packages/findings/confidence.js, and `corroborated`
+// had no dot rule for long enough to be recorded as a known gap and then
+// forgotten: it rendered an 8px transparent circle, which reads as no evidence
+// rather than as corroborated evidence.
+{
+  const overlaySource = fs.readFileSync('apps/extension/content.js', 'utf8');
+  const vocabulary = fs.readFileSync('packages/findings/confidence.js', 'utf8');
+  const levels = [...vocabulary.matchAll(/'(confirmed|corroborated|inferred|inconclusive)'/g)]
+    .map((m) => m[1]);
+  for (const level of new Set(levels)) {
+    if (!new RegExp(`\\.confidence-dot\\.${level}\\{`).test(overlaySource)) {
+      bad++;
+      console.error(`confidence vocabulary: .confidence-dot.${level} has no rule, so that level draws nothing`);
+    }
+  }
+}
+
+// A gallery drifts the moment a component gains a state and no specimen, and
+// it drifts twice as fast now that it covers four surfaces. What is checked
+// here is the shape that makes the page hard to fall behind, not a list of
+// values that would itself need maintaining.
+{
+  const gallery = fs.readFileSync('apps/web/public/gallery.js', 'utf8');
+
+  // The sealed confidence vocabulary must be read from its own module rather
+  // than listed again. Every surface's specimen iterates it, so a fifth level
+  // appears everywhere at once. A hand-written list here is how 'corroborated'
+  // went unlooked-at for months in the first place.
+  if (!/import\s*\{[^}]*CONFIDENCE_LEVELS[^}]*\}\s*from/.test(gallery)) {
+    bad++;
+    console.error('state gallery: the confidence specimens must import CONFIDENCE_LEVELS rather than list the levels');
+  }
+
+  // Lumen ships four surfaces and the drift between them is the thing the
+  // cross-surface half of the page is for. A surface with no specimen is a
+  // surface nobody is comparing.
+  for (const surface of ['overlay', 'panel', 'web', 'report']) {
+    if (!new RegExp(`^\\s*${surface}:`, 'm').test(gallery)) {
+      bad++;
+      console.error(`state gallery: no specimens for the '${surface}' surface`);
+    }
+  }
+
+  // Every tone the overlay's pill primitive answers to. A tone with no specimen
+  // is a colour nobody has looked at against its neighbours, which is how three
+  // phase labels came to read as a severity ramp.
+  const overlayCss = fs.readFileSync('apps/extension/content.js', 'utf8');
+  const tones = new Set([...overlayCss.matchAll(/\.pill\[data-tone=([a-z-]+)\]/g)].map((m) => m[1]));
+  for (const tone of tones) {
+    // A specimen may name a tone as a pill() argument or inline in markup;
+    // both mean the tone has been looked at beside its neighbours, which is
+    // what this is checking for.
+    const named = gallery.includes(`'${tone}'`);
+    const inline = gallery.includes(`data-tone="${tone}"`);
+    if (!named && !inline) {
+      bad++;
+      console.error(`state gallery: no specimen uses the '${tone}' pill tone`);
+    }
+  }
+
+  // Each surface's specimen has to render through that surface's own
+  // stylesheet, and the gateway has to be able to hand each one over. A route
+  // that quietly disappears turns a specimen into an unstyled div that still
+  // looks like a specimen.
+  const server = fs.readFileSync('services/api/server.js', 'utf8');
+  for (const asset of ['/assets/site-audit.css', '/assets/sidepanel.css', '/assets/report.css', '/assets/confidence.js', '/assets/fonts.css']) {
+    if (!gallery.includes(asset) && !fs.readFileSync('apps/web/public/gallery.html', 'utf8').includes(asset)) continue;
+    if (!server.includes(`'${asset}'`)) {
+      bad++;
+      console.error(`state gallery: ${asset} is loaded by the gallery but no route serves it`);
+    }
+  }
+}
+
+// --- Copy: no em dashes in anything the operator reads -----------------------
+//
+// The product's voice does not use the em dash. This is a build failure rather
+// than a preference because the character arrives one paste at a time, and a
+// surface carrying it in nine places out of ten reads as inconsistent rather
+// than deliberate. Sentences carry their own punctuation instead: a comma, a
+// semicolon, a colon or a full stop.
+//
+// Comments are exempt. They are not copy, they are never shown to a reader, and
+// holding our own notes to the product's voice would be a lint on the wrong
+// thing. The scan is therefore comment-aware rather than a blanket search,
+// which is also what lets it stay a failure instead of a warning nobody acts on.
+const EM_DASH_EXEMPT = new Set([
+  // A character class that detects trivial alt text. It has to contain the
+  // character in order to match it.
+  path.normalize('packages/rules/image-purpose.js')
+]);
+const copyFiles = [];
+function walkCopy(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) walkCopy(p); }
+    else if (/\.(js|html)$/.test(e.name)) copyFiles.push(p);
+  }
+}
+for (const root of ['apps', 'packages', 'services']) walkCopy(root);
+for (const file of copyFiles) {
+  if (EM_DASH_EXEMPT.has(path.normalize(path.relative(process.cwd(), file)))) continue;
+  const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+  let inBlock = false;
+  lines.forEach((line, i) => {
+    const trimmed = line.trim();
+    const wasBlock = inBlock;
+    const opens = (line.match(/\/\*/g) || []).length + (line.match(/<!--/g) || []).length;
+    const closes = (line.match(/\*\//g) || []).length + (line.match(/-->/g) || []).length;
+    if (opens > closes) inBlock = true;
+    else if (closes > opens) inBlock = false;
+    if (!line.includes('—')) return;
+    const isComment = wasBlock || trimmed.startsWith('*') || trimmed.startsWith('//')
+      || trimmed.startsWith('/*') || trimmed.startsWith('<!--');
+    if (isComment) return;
+    bad++;
+    console.error(`em dash in copy: ${path.relative(process.cwd(), file)}:${i + 1}. Use a comma, semicolon, colon or full stop.`);
+  });
 }
 
 console.log(`Checked ${files.length} JavaScript files`);

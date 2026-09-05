@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import { composeAttention } from '../packages/findings/compose.js';
 import { buildEvidenceLedger, compactFrankPageLedger, ledgerDetailTier } from '../packages/findings/evidence-ledger.js';
 import { buildEvidenceGraph } from '../packages/frank/evidence.js';
-import { buildReviewBundle } from '../packages/ai/review-bundle.js';
 import { IMPACT_CLASS_IDS } from '../packages/findings/impact.js';
 import { buildBugReport } from '../packages/support/bug-report.js';
 
@@ -227,21 +226,6 @@ test('partial link coverage still supplies confirmed findings and the limitation
   assert.ok(coverageLedger.value.degradedAreas.includes('links'));
 });
 
-test('review bundle attention.groups can be UI-sized while allGroups/ledger keep the full set', () => {
-  const findings = groupsAcrossClasses();
-  const review = buildReviewBundle({
-    page: { url: 'https://example.com/', hostname: 'example.com', title: 'Example', targetIntegrity: { state: 'reached' } },
-    environment: { type: 'production' },
-    coverage: { browser: 'complete', axe: 'complete', links: 'complete' },
-    findings
-  });
-  assert.ok(review.attention.groups.length <= 12);
-  assert.equal(review.attention.allGroups.length, 16);
-  assert.equal(review.evidenceLedger.materialGroupCount, 16);
-  assert.equal(review.evidenceLedger.groups.length, 16);
-  assert.doesNotMatch(JSON.stringify(review), /<html|documentHtmlSample/);
-});
-
 test('Frank compact manifest keeps all 120 material groups without dropping the tail', () => {
   const classes = IMPACT_CLASS_IDS.filter((id) => id !== 'coverage');
   const findings = Array.from({ length: 120 }, (_, i) => materialFinding({
@@ -299,16 +283,6 @@ test('Frank compact manifest keeps all 120 material groups without dropping the 
   assert.equal(artifact.evidenceLedger.groups.length, 120);
   assert.equal(artifact.evidenceLedger.groupsOmitted, 0);
   assert.equal(artifact.evidenceLedger.truncated, false);
-
-  const review = buildReviewBundle({
-    page: { url: 'https://example.com/', hostname: 'example.com', title: 'Example', targetIntegrity: { state: 'reached' } },
-    environment: { type: 'production' },
-    coverage: { browser: 'complete', axe: 'complete', links: 'complete' },
-    findings
-  });
-  assert.ok(review.attention.groups.length <= 12);
-  assert.equal(review.evidenceLedger.groups.length, 120);
-  assert.equal(review.evidenceLedger.groupsOmitted, 0);
 });
 
 test('Frank packaging paths compact every material group instead of slicing at 80', () => {

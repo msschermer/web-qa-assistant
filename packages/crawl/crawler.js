@@ -156,7 +156,7 @@ function linkFinding(link, internal, disposition, row) {
     return {
       ruleId: internal ? 'navigation.link-review' : 'navigation.link-review-external',
       title: `${internal ? 'Internal' : 'External'} link returned a ${label} response`,
-      detail: `${link.text ? `"${link.text}" ` : ''}points to ${link.url}. An independent request received HTTP ${status} — this commonly means the destination's own bot-protection blocked the automated check (sites like Yelp, LinkedIn, and many WAFs do this to any non-browser request), not that the page is actually down. This is NOT treated as a broken link; confirm by visiting it yourself if you're unsure.`,
+      detail: `${link.text ? `"${link.text}" ` : ''}points to ${link.url}. An independent request received HTTP ${status}. This commonly means the destination's own bot-protection blocked the automated check (sites like Yelp, LinkedIn, and many WAFs do this to any non-browser request), not that the page is actually down. This is NOT treated as a broken link; confirm by visiting it yourself if you're unsure.`,
       category: 'review', severity: 'low', confidence: 'inconclusive',
       link: { url: link.url, internal, status, finalUrl: row.finalUrl || link.url, redirected: Boolean(row.redirected), text: link.text || '' }
     };
@@ -239,6 +239,8 @@ export async function runAudit({
   store.enqueueUrl(auditId, startUrl, 'start', 0);
   const depthByNormalizedUrl = new Map([[normalizeAuditUrl(startUrl), 0]]);
   const sitemapUrls = new Set();
+  // Kept so the set survives the crawl. See audit_sitemap_urls in store.js.
+  const sitemapEntries = [];
   let sitemapFetched = false;
   let sitemapTruncated = false;
   if (config.respectRobots) {
@@ -253,6 +255,7 @@ export async function runAudit({
         if (config.excludePatterns.length && pathMatchesAnyPattern(pathname, config.excludePatterns)) continue;
         if (config.includePatterns.length && !pathMatchesAnyPattern(pathname, config.includePatterns)) continue;
         sitemapUrls.add(normalizeAuditUrl(u));
+        sitemapEntries.push({ normalized: normalizeAuditUrl(u), url: u, source: sitemapUrl });
         // Sitemap URLs are treated as depth 0 (directly known), not reached
         // via link traversal, so maxDepth never excludes them.
         depthByNormalizedUrl.set(normalizeAuditUrl(u), 0);
@@ -361,6 +364,15 @@ export async function runAudit({
           h1Text: page.h1Text || '', wordCount: page.wordCount || null, schemaTypes: page.schemaTypes || []
         });
 
+        // The structured-data items behind schemaTypes. Recorded per page as the
+        // crawl goes so a paused or page-limited audit still holds the inventory
+        // for everything it did read, rather than only for a run that finished.
+        store.recordSchema(auditId, job.url, {
+          items: page.schemaItems || [],
+          invalidBlocks: page.schemaInvalidBlocks || [],
+          truncated: Boolean(page.schemaTruncated)
+        });
+
         if (!page.isHtml) { stats.pagesProcessed++; continue; }
 
         const links = Array.isArray(page.links) ? page.links : [];
@@ -429,6 +441,7 @@ export async function runAudit({
   }
 
   store.setPhase(auditId, 'analyzing');
+  store.recordSitemapUrls(auditId, sitemapEntries);
   const allUrls = store.listUrls(auditId, { limit: 100000, offset: 0 });
   const fetchedUrls = allUrls.filter((u) => u.status === 'fetched');
   const crawlContext = {
@@ -441,7 +454,12 @@ export async function runAudit({
     // which is only meaningful once the crawl actually finished exploring
     // every internal link it could find.
     maxPagesReached: (store.urlCountsByStatus(auditId).queued || 0) > 0,
-    inlinkCounts: store.internalInlinkCounts(auditId)
+    inlinkCounts: store.internalInlinkCounts(auditId),
+    // The parsed structured data from every page, so the schema discipline can
+    // validate the site as a whole rather than one page at a time. Recorded
+    // during the crawl; read here because cross-page validation is the only
+    // thing that can see a conflict or a template gap.
+    schemaPages: store.schemaPages(auditId, { parsedUrls: fetchedUrls.map((u) => u.final_url || u.url) })
   };
   const crossFindings = runCrossPageScanners(fetchedUrls, crawlContext);
   for (const [url, findings] of crossFindings) {

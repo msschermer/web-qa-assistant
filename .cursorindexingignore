@@ -1,6 +1,0 @@
-# Generated or very large files that remain accessible when explicitly opened,
-# but should not pollute normal codebase search/indexing.
-dist/extension/vendor/axe.min.js
-package-lock.json
-**/*.zip
-qa-runs/

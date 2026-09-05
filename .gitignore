@@ -5,10 +5,8 @@ node_modules/
 .DS_Store
 Thumbs.db
 
-# Local Cursor/WebQA development state
-.cursor/webqa.env
+# Local QA artifacts. May carry screenshots and page context from real sites.
 qa-runs/
-tools/cursor-webqa/node_modules/
 
 # Accept-dogfood generated state (keep *.mjs harness sources)
 tools/accept-dogfood/.chrome-profile*/
@@ -29,17 +27,8 @@ AUTOQA_BOOTSTRAP_PROBE.tmp.md
 # Full-site audit local persistence (services/api uses AUDIT_DB_PATH to relocate this)
 data/
 
-# Local AI-tool installs. These are per-developer, are not part of the product,
-# and were showing as untracked noise in every `git status`. The Cursor
-# equivalent under .cursor/ IS tracked, because those skills are shared.
+# Per-developer AI-tool install. Not part of the product, and nothing in the
+# build depends on it. Anything a reader is told to run lives in the repository
+# instead, which is why the verification harness sits at tools/autoqa/driver.mjs
+# rather than under here.
 .claude/
-.impeccable/hook.cache.json
-.github/agents/
-.github/hooks/
-.github/skills/
-# The Impeccable design skill installs into every tool it finds. Its Cursor
-# copy is the same per-developer install as the Claude one above; the project's
-# own Cursor agents and skills beside it stay tracked.
-.cursor/skills/impeccable/
-.cursor/agents/impeccable-*.md
-.cursor/hooks.json

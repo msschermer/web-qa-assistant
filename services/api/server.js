@@ -1,5 +1,6 @@
 import express from 'express';
 import helmet from 'helmet';
+import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +16,10 @@ import { buildPerformanceAssessment } from '../../packages/findings/performance-
 import { applyFindingPolicy, presentationPolicySummary } from '../../packages/findings/policy.js';
 import { resolvePerformanceCoverage, applyPrivilegedProbeAccounting, reconcilePerformanceCoverage } from '../../packages/findings/coverage.js';
 import { buildEvidenceLedger } from '../../packages/findings/evidence-ledger.js';
+import { summariseSchema } from '../../packages/findings/schema-validation.js';
+import { buildOptimizePlan } from '../../packages/findings/optimize-plan.js';
+import { buildSiteModel } from '../../packages/findings/site-model.js';
+import { buildAuditWorkbook, workbookFilename } from '../../packages/report/audit-workbook.js';
 import { applyTargetIntegrityReport, attachTargetIntegrity, finalizeBlockedTargetReport } from '../../packages/integrity/apply-report.js';
 import { targetIntegrityLimitsAudit, targetIntegrityBlocksAudit } from '../../packages/integrity/target-integrity.js';
 import { issueInstallationToken, verifyInstallationToken } from '../../packages/auth/install-access.js';
@@ -22,7 +27,7 @@ import { probeExternalCandidates, mapExternalProbeRows } from '../../packages/se
 import { openAuditStore, newAuditId, normalizeAuditUrl } from '../../packages/crawl/store.js';
 import { runAudit, isCrawlableStartUrl, planCrawlConfig, CRAWL_LIMITS } from '../../packages/crawl/crawler.js';
 import { guidanceForRule } from '../../packages/findings/rule-guidance.js';
-import { renderAuditReportHtml } from '../../packages/crawl/report.js';
+import { renderAuditReportHtml, reportCss } from '../../packages/crawl/report.js';
 import { buildAuditDebugBundle } from '../../packages/crawl/debug-report.js';
 
 const app = express();
@@ -594,6 +599,81 @@ app.get('/api/audits/:id/distributions', requireExtensionKey, (req, res) => {
   if (!audit) return;
   res.json({ ok: true, requestId: req.webQaRequestId, distributions: auditStore.auditDistributions(req.params.id) });
 });
+/* The structured-data inventory and what validation makes of it. Errors and
+   conflicts are confirmed because the item is in hand; opportunities are
+   inferred and are not defects — see packages/findings/schema-validation.js. */
+/* The sequenced plan. Built from the same finding groups the Findings section
+   shows, so the two cannot disagree about how much there is; coverage limits
+   travel with it so a plan built from part of a site says so. */
+function optimizePlanFor(id, audit, query = {}) {
+  // The same grouping the Findings section reads, so the plan and the table
+  // cannot disagree about how much there is.
+  // Carrying the same remediation text the Findings section shows. A change
+  // that names the element to edit but not what to do with it is half a job,
+  // and this endpoint was passing the rollup through without it.
+  const groups = auditStore.findingsByRule(id).map((g) => ({ ...g, guidance: guidanceForRule(g.rule_id) }));
+  const parsedUrls = auditStore.listUrls(id, { limit: 5000, statuses: 'fetched' }).map((u) => u.final_url || u.url);
+  const schema = summariseSchema(auditStore.schemaPages(id, { parsedUrls }));
+  let stats = {};
+  try { stats = JSON.parse(audit.stats_json || '{}'); } catch { stats = {}; }
+  // The per-finding rows and the page rows the plan needs to build changes: a
+  // change carries the element it edits and the value that element holds now,
+  // and neither of those is in the rule-level rollup.
+  const findingRows = auditStore.listFindings(id, { limit: 2000, offset: 0 });
+  const pageRows = auditStore.listUrls(id, { limit: 5000, statuses: 'fetched' });
+  const pageByUrl = new Map(pageRows.map((u) => [u.final_url || u.url, u]));
+  // The link graph and the sitemap's membership: neither is a finding, and both
+  // are needed to notice that two valid signals disagree with each other.
+  const linkRows = auditStore.listLinks(id, { limit: 50000, offset: 0, status: null });
+  const sitemapUrls = auditStore.sitemapUrlSet(id);
+  const plan = buildOptimizePlan({
+    groups,
+    findings: findingRows,
+    pages: pageByUrl,
+    urlCounts: auditStore.urlCountsByStatus(id),
+    renderProgress: stats.renderProgress || {},
+    schema,
+    siteOrigin: audit.site_origin || '',
+    pageRows, links: linkRows, sitemapUrls,
+    // One definition of what makes two URLs the same, shared with the crawl
+    // that wrote the sitemap set.
+    normalizeUrl: normalizeAuditUrl,
+    // The operator's own statements, allowlisted in normalizePlanInputs. They
+    // change wording and sequence, never a finding.
+    inputs: { siteType: String(query.siteType || ''), templateAccess: String(query.templateAccess || '') }
+  });
+  return plan;
+}
+
+/**
+ * The page families the crawl could read.
+ *
+ * Its own endpoint because it is not the plan: Pages wants it to label rows,
+ * and asking for a whole Action Plan to colour a table would be paying for a
+ * page build to read one field.
+ */
+app.get('/api/audits/:id/site-model', requireExtensionKey, (req, res) => {
+  const audit = getOwnedAudit(req, res);
+  if (!audit) return;
+  const model = buildSiteModel(auditStore.listUrls(req.params.id, { limit: 5000, statuses: 'fetched' }));
+  res.json({ ok: true, requestId: req.webQaRequestId, model });
+});
+
+app.get('/api/audits/:id/optimize', requireExtensionKey, (req, res) => {
+  const audit = getOwnedAudit(req, res);
+  if (!audit) return;
+  res.json({ ok: true, requestId: req.webQaRequestId, plan: optimizePlanFor(req.params.id, audit, req.query || {}) });
+});
+app.get('/api/audits/:id/schema', requireExtensionKey, (req, res) => {
+  const audit = getOwnedAudit(req, res);
+  if (!audit) return;
+  // Only pages the crawl actually parsed form the denominator. A page that was
+  // never fetched has no schema evidence either way, and counting it as a page
+  // without structured data would report a coverage gap as a finding.
+  const parsedUrls = auditStore.listUrls(req.params.id, { limit: 5000, statuses: 'fetched' }).map((u) => u.final_url || u.url);
+  const pages = auditStore.schemaPages(req.params.id, { parsedUrls });
+  res.json({ ok: true, requestId: req.webQaRequestId, schema: summariseSchema(pages) });
+});
 app.get('/api/audits/:id/links', requireExtensionKey, (req, res) => {
   const audit = getOwnedAudit(req, res);
   if (!audit) return;
@@ -784,6 +864,76 @@ app.get('/api/audits/:id/export.csv', requireExtensionKey, (req, res) => {
   res.send(toCsv(rows, CSV_COLUMNS[dataset]));
 });
 
+/**
+ * The deliverable.
+ *
+ * One file, one or both of the two things an audit produces: the evidence and
+ * the work. Built here rather than in the extension because this is where the
+ * data already is, and because the file never leaves the operator's machine on
+ * this path — the gateway is local, and nothing is uploaded anywhere to make a
+ * spreadsheet.
+ */
+function sendWorkbook(req, res) {
+  const audit = getOwnedAudit(req, res);
+  if (!audit) return;
+  const id = req.params.id;
+  const asked = String(req.query?.include || req.body?.include || 'scan,plan').split(',').map((s) => s.trim());
+  const include = { scan: asked.includes('scan'), plan: asked.includes('plan') };
+  if (!include.scan && !include.plan) {
+    return res.status(400).json({ ok: false, error: 'include must name scan, plan, or both.', requestId: req.webQaRequestId });
+  }
+
+  let plan = null;
+  if (include.plan) {
+    plan = optimizePlanFor(id, audit, req.query || {});
+    applyDrafts(plan, req.body?.drafts);
+  }
+
+  const findings = include.scan ? denormalizedFindingRows(id, auditStore.listFindings(id, { limit: 50000, offset: 0 })) : [];
+  const pages = include.scan ? auditStore.listUrls(id, { limit: 50000, offset: 0 }) : [];
+  const links = include.scan ? auditStore.listLinks(id, { limit: 50000, offset: 0, status: null }) : [];
+
+  const book = buildAuditWorkbook({
+    audit: { ...audit, id },
+    urlCounts: auditStore.urlCountsByStatus(id),
+    findings, pages, links, plan, include,
+    // What the audit found, not what this file happens to carry.
+    findingCount: auditStore.findingsByRule(id).reduce((n, g) => n + Number(g.instances || 0), 0)
+  });
+  res.setHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('content-disposition', `attachment; filename="${workbookFilename({ ...audit, id }, include)}"`);
+  res.setHeader('x-web-qa-filename', workbookFilename({ ...audit, id }, include));
+  res.send(book);
+}
+
+/**
+ * Land the operator's accepted drafts on the changes they were written for.
+ *
+ * Matched by change id, and only onto changes whose rule still asks for the
+ * same kind of value: a draft is written against one page's evidence, and a
+ * plan rebuilt from a re-crawled site may not hold the same change under the
+ * same id. Anything that does not match is dropped rather than guessed at.
+ */
+function applyDrafts(plan, drafts) {
+  if (!plan || !drafts || typeof drafts !== 'object') return;
+  for (const priority of plan.priorities || []) {
+    for (const action of priority.actions || []) {
+      for (const change of action.changes || []) {
+        const said = drafts[change.id];
+        if (!said || typeof said !== 'object') continue;
+        if (String(said.ruleId || '') !== String(change.ruleId || '')) continue;
+        const text = String(said.draft || '').trim();
+        if (!text || text.length > 400) continue;
+        change.draft = text;
+        change.draftBy = said.by === 'byo' ? 'byo' : 'on-device';
+      }
+    }
+  }
+}
+
+app.get('/api/audits/:id/workbook.xlsx', requireExtensionKey, sendWorkbook);
+app.post('/api/audits/:id/workbook.xlsx', requireExtensionKey, sendWorkbook);
+
 app.use('/api', (req, res) => res.status(404).json({ ok: false, error: 'Unknown API route.', requestId: req.webQaRequestId }));
 app.use((err, req, res, next) => {
   if (req.path?.startsWith('/api/')) {
@@ -795,6 +945,57 @@ app.use((err, req, res, next) => {
 });
 
 app.use('/assets/ui', express.static(path.resolve(__dirname, '../../packages/ui'), { maxAge: '1h' }));
+
+// --- The four surfaces' own stylesheets, for the state gallery ---------------
+//
+// The gallery renders every specimen through the cascade its surface actually
+// renders through, so each surface's real sheet has to be reachable over HTTP.
+// None of these is a copy: a route hands out either the file the surface loads
+// or the exact string the surface injects.
+//
+// The two that come out of `dist/` answer 404 with the command that emits them.
+// `.dockerignore` keeps `dist` and `scripts` out of the gateway image, so in
+// production they are absent by design and the gallery is a development page
+// that says so, rather than a page that renders something plausible instead.
+function sendBuiltCss(res, name) {
+  const emitted = path.resolve(__dirname, '../../dist/extension/', name);
+  if (!fs.existsSync(emitted)) {
+    return res.status(404).type('text/plain').send(`Run npm run build:extension: it emits dist/extension/${name}.`);
+  }
+  res.type('text/css').sendFile(emitted);
+}
+
+// The overlay: the string the content script injects into its shadow root,
+// written out by the build after token injection.
+app.get('/assets/site-audit.css', (_req, res) => sendBuiltCss(res, 'site-audit.css'));
+// The side panel: the compiled document sheet the panel's own HTML links.
+app.get('/assets/sidepanel.css', (_req, res) => sendBuiltCss(res, 'sidepanel.css'));
+// The exported report: the same function the exported document interpolates,
+// faces already embedded as data URIs.
+app.get('/assets/report.css', (_req, res) => res.type('text/css').send(reportCss()));
+// The web app needs no route here: apps/web/public is served below, sheet and
+// fonts together, which is how the browser loads it in production too.
+
+// The faces, and the @font-face block naming them.
+//
+// `packages/ui/fonts.css` ships with `__LUMEN_FONT_BASE__` where the URL prefix
+// goes, precisely so each delivery path resolves it its own way: the panel
+// against a sibling directory, the overlay against chrome.runtime, the report
+// against embedded data. This is that substitution for a fourth path, not a
+// fourth copy of the font list. It also resolves the `url(fonts/...)` in the
+// panel sheet, which sits one level up at /assets/.
+app.use('/assets/fonts', express.static(path.resolve(__dirname, '../../packages/ui/fonts'), { maxAge: '1h' }));
+app.get('/assets/fonts.css', (_req, res) => {
+  const faces = fs.readFileSync(path.resolve(__dirname, '../../packages/ui/fonts.css'), 'utf8');
+  res.type('text/css').send(faces.replaceAll('__LUMEN_FONT_BASE__', '/assets/fonts/'));
+});
+// The sealed confidence vocabulary, as a module the browser can import. The
+// state gallery iterates it rather than listing the four levels again, so a
+// fifth level would appear on every surface's specimen without anyone
+// remembering to add it.
+app.get('/assets/confidence.js', (_req, res) => {
+  res.type('application/javascript').sendFile(path.resolve(__dirname, '../../packages/findings/confidence.js'));
+});
 app.get('/assets/coverage.js', (_req, res) => {
   res.type('application/javascript').sendFile(path.resolve(__dirname, '../../packages/findings/coverage.js'));
 });

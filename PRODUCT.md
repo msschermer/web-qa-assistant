@@ -1,7 +1,5 @@
 # Product
 
-<!-- impeccable:product-schema 1 -->
-
 ## Platform
 
 web
@@ -76,6 +74,18 @@ machine.
   element-snapshot endpoint. They sit outside the crawl path.
 - Audits run against real, third-party production sites — including sites behind
   WAFs and bot protection, and sites the operator cannot modify.
+- **Optimize** turns the recorded findings into a sequenced plan: clustered by
+  remediation locus, ordered by what each group unblocks, every action traceable
+  to the rules, counts and confidence behind it. It is a lens over the scanner's
+  labels and re-rates nothing. It makes **no off-site claims** — competitors,
+  search demand, rankings and traffic are outside what this product observes, and
+  the plan reports research as *not connected* rather than omitting the question.
+  The site model is read from the site's own structured data or left unset; it is
+  never inferred from page wording.
+- The crawl records structured-data **items**, not only the names of their types:
+  JSON-LD (including @graph) and microdata, as a bounded projection in
+  `audit_schema_items`. That is what makes property-level validation, entity
+  identity conflicts and template-gap inference possible at all.
 - Existing outputs: CSV exports (findings, urls, urls-summary, links), an HTML
   report, and a privacy-bounded debug/bug-report artifact.
 
@@ -139,8 +149,12 @@ machine.
   completeness** — what a professional audit tool must show. They are no longer
   the reference for how it looks. Future design work extends this world rather
   than reverting to the convention or starting a third one.
-- A design system already exists and is authoritative: `packages/ui/tokens.css`,
-  `packages/ui/lumen.css`, and `docs/DESIGN-SYSTEM.md`.
+- A design system already exists and is authoritative: `packages/ui/tokens.css`
+  is the only place a colour is named, `DESIGN.md` describes the visual world as
+  built, and `docs/DESIGN-SYSTEM.md` holds the product language, walkthrough
+  grammar and accessibility floor that sit alongside it. (`packages/ui/lumen.css`
+  was named here until this pass; it was the Tailwind entry point, and both it
+  and Tailwind are gone — `tests/frank-focus-ui-160.test.js` asserts its absence.)
 - Voice: plain-English translation of scanner output, with raw scanner language
   demoted to "Technical evidence". Never claim a measurement, standard, URL,
   component identity, user behavior, traffic effect or business outcome without
@@ -148,15 +162,15 @@ machine.
 
 ## Evidence on Hand
 
-- Real project documentation: `README.md`, `AGENTS.md`, `CLAUDE.md`,
+- Real project documentation: `README.md`, `AGENTS.md`,
   `docs/DESIGN-SYSTEM.md`, `docs/PRIVACY.md`, `docs/DEPLOYMENT.md`, and versioned
   release notes.
 - A synthetic fixture corpus under `fixtures/` and `qa-sites/`. Fixtures must
   stay neutral and synthetic — real client or test-site names and copied content
   must not enter them (enforced by `scripts/check.mjs`).
 - Live verification is available through the run driver
-  (`.claude/skills/run-web-qa-assistant/`), including real audits and screenshots
-  of the actual extension UI.
+  (`tools/autoqa/driver.mjs`), including real audits and screenshots of the
+  actual extension UI.
 - **Absences future work must not fabricate:** there are no testimonials,
   named customers, case studies, benchmarks, press, pricing, licensing terms, or
   user counts. There is no accessibility conformance claim. Do not invent them,

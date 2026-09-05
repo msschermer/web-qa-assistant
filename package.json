@@ -17,7 +17,10 @@
     "release:validate": "node scripts/validate-release.mjs",
     "benchmark:corpus": "node scripts/benchmark-corpus.mjs",
     "autoqa:dogfood": "node tools/autoqa/dogfood.mjs",
-    "autoqa:fixture-server": "node tools/autoqa/fixture-server.mjs"
+    "autoqa:fixture-server": "node tools/autoqa/fixture-server.mjs",
+    "gallery": "node tools/autoqa/gallery-check.mjs",
+    "autoqa:verify-profile": "node tools/autoqa/verify-chrome-profile.mjs",
+    "autoqa:reasoning-fixture": "node tools/autoqa/reasoning-audit.mjs"
   },
   "dependencies": {
     "axe-core": "^4.13.0",

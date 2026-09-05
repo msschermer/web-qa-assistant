@@ -43,9 +43,18 @@ function lift(names) {
 
 test('the report nav is two destinations, then Explore, then Validate', () => {
   const { SITE_AUDIT_NAV_GROUPS, SITE_AUDIT_TAB_LABEL } = lift(['SITE_AUDIT_NAV_GROUPS', 'SITE_AUDIT_TAB_LABEL']);
-  assert.deepEqual(SITE_AUDIT_NAV_GROUPS.map((g) => g.label), ['', 'Explore', 'Validate']);
+  // Optimize is a fourth destination rather than a tab inside Findings: it is
+  // the only place that answers "what do we do, and in what order" rather than
+  // "what is wrong", and that answer goes unread at the bottom of a table.
+  assert.deepEqual(SITE_AUDIT_NAV_GROUPS.map((g) => g.label), ['', 'Explore', 'Validate', 'Optimize']);
+  assert.deepEqual(SITE_AUDIT_NAV_GROUPS[3].items, ['optimize'], 'the plan is read here');
   assert.deepEqual(SITE_AUDIT_NAV_GROUPS[0].items, ['overview', 'findings'], 'the audit is read here');
-  assert.deepEqual(SITE_AUDIT_NAV_GROUPS[1].items, ['urls', 'links'], 'the rows are interrogated here');
+  // Structured data joins Explore rather than getting a group of its own: it is
+  // another body of collected rows the operator interrogates, like pages and
+  // links. It is only here because the crawl now records the items themselves —
+  // a destination backed by nothing but a count of type names would have been a
+  // rail entry added to look fuller, which this grouping exists to prevent.
+  assert.deepEqual(SITE_AUDIT_NAV_GROUPS[1].items, ['urls', 'links', 'schema'], 'the rows are interrogated here');
   assert.deepEqual(SITE_AUDIT_NAV_GROUPS[2].items, ['browser'], 'the evidence that must be asked for');
   for (const id of SITE_AUDIT_NAV_GROUPS.flatMap((g) => g.items)) assert.ok(SITE_AUDIT_TAB_LABEL[id], id + ' needs a label');
 });
@@ -218,7 +227,7 @@ test('a render-pass discipline with nothing measured reads as unestablished, not
   assert.match(body, /run: startRenderPass/);
   // The unmeasured figures are held open with an em-dash, which cannot be
   // misread as a measurement of zero.
-  assert.match(body, /value: '—'/);
+  assert.match(body, /value: '–'/);
 });
 
 test('a section nav chip counts established findings, not unverifiable volume', () => {

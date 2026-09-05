@@ -1,4 +1,4 @@
-# Build status: Web QA Assistant 1.7.5
+# Build status: Lumen 1.7.5
 
 ## Release vs development
 
@@ -41,7 +41,7 @@ Exact final test/check/build/release results for 1.7.5 are recorded in `RELEASE_
 
 ## Known gaps
 
-- PSI / field CWV enrichment not implemented (see `docs/DEV-BATCH-PSI.md` for deferral rationale).
+- PSI / field CWV enrichment not implemented. Field data needs a Chrome UX Report key and a site with enough traffic to have one, so a lab observation is what Lumen can honestly report today; the deferral note that used to sit in `docs/` was pruned with the rest of the historical batch planning.
 - HEAD 200 without GET confirm can hide a GET 404 on HEAD-deaf or method-asymmetric origins.
 - Session cache stores query-bearing URLs until TTL or browser exit; the extension spans incognito.
 - Chrome HTTP/1.1 typically allows about six connections per host.

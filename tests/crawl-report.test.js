@@ -92,7 +92,7 @@ test('a render pass that never ran is stated, not left as an empty section readi
     findingGroups: []
   });
   assert.match(notRun, /Not run for this audit/);
-  assert.match(notRun, /an empty section is not a clean bill of health/);
+  assert.match(notRun, /An empty section is not a clean bill of health/);
 
   const ran = renderAuditReportHtml({
     audit: baseAudit(),

@@ -1,6 +1,8 @@
 # Lumen (Web QA Assistant)
 
-Lumen is an evidence-first browser QA product for developers, implementation teams and technical SEO work. It combines deterministic browser inspection, verified internal-link checks, accessibility testing, published-state context and historical performance context. Walkthroughs turn a verified finding into a clear sequence of evidence, impact, remediation and re-verification.
+Lumen is an evidence-first web QA and site-auditing product, built for **agencies and independent consultants auditing sites they do not own** — repeatedly, and with a client waiting for the output. In-house developers, implementation teams and technical SEO work are compatible audiences, not the design target.
+
+It works at two scales. **Page Scan** inspects the current page in the real browser: axe-core accessibility, browser rules, verified link checks, live element highlighting. **Site Audit** crawls a whole site from the assistant gateway — a cheap static fetch, never a server-side render — and then offers an optional per-page browser pass for the checks that need a real browser. Walkthroughs turn a verified finding into a clear sequence of evidence, impact, remediation and re-verification.
 
 The project evolved from the original **Preflight** prototype. The legacy implementation is preserved in Git on the `legacy-preflight` branch and `preflight-legacy` tag. The active product no longer depends on the old Preflight service.
 
@@ -24,40 +26,9 @@ observation
 
 The scanner may retain lower-priority observations, but the default view is intentionally selective. Inconclusive evidence never becomes a defect. A timeout, blocked checker or unavailable integration is reported as a coverage limitation instead of an issue.
 
-## What 1.7.0 adds
+## Recent releases
 
-- a real cross-discipline QA workspace organized around **Page assessment**, **QA areas**, **Recommended order**, and **Workspace tools**
-- consumer-facing finding translation across Navigation, Discoverability, Performance, Accessibility, Security, and Web quality while preserving raw scanner output under **Technical evidence**
-- a dedicated Security impact class so security findings are not hidden inside generic availability/implementation buckets
-- a privacy-bounded **Report bug** workflow that records runtime/readiness/validation state locally, exports JSON, sends nothing automatically, and keeps page/Frank content excluded by default
-- explicit context opt-in for bounded current-finding measurements and Frank wording, still excluding selectors, raw DOM, form values, cookies, and credentials
-- broader on-device Frank validation for links, indexing/robots, canonicals, LCP/TTFB/transfer weight, opener security, meta refresh, charset, and accessibility families
-- mixed-discipline acceptance tests that prevent a noisy scanner from crowding out higher-confidence navigation, discoverability, performance, or security issues
-- a presentation hierarchy where walkthroughs explain meaning/action while the sidebar remains the auditable evidence record
-
-## What 1.6.1 adds
-
-- rule-specific Frank guidance for `axe.target-size`, using structured size and spacing evidence instead of generic accessibility boilerplate
-- target-size impact language grounded in pointer/touch activation rather than unrelated keyboard or low-vision claims
-- claim/fix-family validation for on-device rewrites so Chrome AI can substantially improve wording without being forced to echo deterministic prose
-- explicit reasoning-mode disclosure in the centered Frank card: **On-device reasoning**, **Verified guidance**, or **Cloud reasoning · metered**
-- step-specific evidence selection so Frank highlights the measurements that actually support the current explanation
-- evidence-ledger source semantics that separate observed evidence from standards/reference context and suppress meaningless single-pass verification counts
-- a compact sticky finding identity in Frank mode plus scroll reset so the finding title is not lost when the walkthrough opens
-- the failed real-world 24px target-size scenario promoted into the automated acceptance suite
-
-## What 1.6.0 adds
-
-- a dedicated Chrome built-in AI readiness manager that is independent from page scanning
-- visible `downloadable`, `downloading`, `warming`, `ready`, `unavailable`, and error states for on-device AI
-- first-use preparation that resumes the pending **Walk through** request automatically when Chrome becomes ready; **Rescan** is never an AI-recovery action
-- one warm system-only Prompt API base session with isolated cloned sessions per finding, preventing cross-site or cross-finding conversation carryover
-- an evidence-led focus mode: the sidebar is the deterministic Evidence panel while the centered card contains interpretation, impact, remediation, and verification
-- a Lumen visual identity compiled from Tailwind v4 component CSS (`packages/ui/lumen.css`) without utility-class soup in markup
-- more specific deterministic remediation, including evidence-derived passing contrast-color suggestions when they can be calculated safely
-- additional adversarial AI guards for unsupported page positions/components, business claims, invented measurements, semantic drift, and destructive/secret-handling instructions embedded in hostile page text
-- self-contained extension rebuilds that preserve the vendored axe runtime even when a release source package is used without `node_modules`
-- all 1.5.0–1.5.2 scanner, prioritization, performance, integration-health, privacy, managed-auth, and zero-metered-AI defaults remain in place
+Per-release detail lives in `docs/releases/`, newest first — see `RELEASE_NOTES_1.7.5.md`. `BUILD_STATUS.md` records what is released, what the next target is, and the known gaps as they stand today.
 
 ## Deterministic and connected systems
 
@@ -67,6 +38,8 @@ Local browser-side inspection uses:
 - `axe-core` for automated accessibility findings
 - staged same-origin link verification with independent confirmation before 404/5xx findings are admitted
 - verified target IDs for walkthrough highlighting
+
+The site crawl runs on the gateway and parses HTML with jsdom without executing JavaScript, which is what keeps it cheap at any site size — so any absence it reports is `inferred`, never confirmed. The checks that genuinely need a browser (accessibility, JavaScript-dependent content, image and performance sizing) run afterwards in the operator's own browser, one page at a time. **The crawl path never calls the renderer or server-side Chromium**; that boundary is load-bearing for the cost model, not an implementation detail.
 
 Connected context is routed through the assistant gateway:
 
@@ -169,32 +142,30 @@ npm run build:extension
 
 Then load `dist/extension` from `chrome://extensions` using **Load unpacked**.
 
-For Cursor IDE development workflow, see [docs/CURSOR-QUICKSTART.md](docs/CURSOR-QUICKSTART.md).
-
 ### Driving the running product
 
 Most of Lumen is a Chrome extension and is invisible to `npm test`. A committed
 harness builds, launches and screenshots the real thing:
 
 ```powershell
-node .claude/skills/run-web-qa-assistant/driver.mjs audit https://example.com/ --max-pages 3
-node .claude/skills/run-web-qa-assistant/driver.mjs ui https://example.com/
+node tools/autoqa/driver.mjs audit https://example.com/ --max-pages 3
+node tools/autoqa/driver.mjs ui https://example.com/
 ```
 
 It starts the gateway if one is not already running, and writes screenshots to
 `.autoqa/runs/driver/`. See
-[.claude/skills/run-web-qa-assistant/SKILL.md](.claude/skills/run-web-qa-assistant/SKILL.md)
+`tools/autoqa/driver.mjs`
 for all commands, the one-time Chrome profile bootstrap, and the Chrome/Playwright
 gotchas.
 
-### Claude Code skills
+### Working in this repository
 
-`CLAUDE.md` is the Claude Code entry point and defers to `AGENTS.md` for the
-operating contract. `.claude/skills/` holds task-scoped skills — `lumen-ui`,
-`lumen-functionality`, `lumen-bugfix`, `lumen-product-pass`, `lumen-qa`, and
-`run-web-qa-assistant` — intended to keep work on the requested outcome instead
-of drifting into unrelated refactoring. Cursor's equivalents remain in
-`.cursor/skills/`.
+`AGENTS.md` is the operating contract, and it is the only one. It carries the
+whole method: scope discipline, how to approach a regression, a scanner change or
+a broad product pass, the required gates, and what counts as verification.
+
+Everything you are told to run lives in the repository. The verification harness
+is `tools/autoqa/driver.mjs`.
 
 ## Production
 
@@ -214,10 +185,109 @@ Detailed procedures:
 Current delivery candidate: **1.7.5**.
 
 
+## How Optimize reasons
+
+Before the plan is built, Lumen reads a **page-group model** from the crawl:
+which URLs form families, how strongly those families cohere, and which of them
+look like one template. Groups named by a path are something the site states;
+groups found by similarity are something Lumen measured, and the two carry
+different confidence. It is visible under **Optimize → Site model**, with the
+measurement behind every claim.
+
+That model then does two things no single scanner can:
+
+- **Template actions.** Several *different* kinds of change landing on one page
+  family is usually one file opened once, not several jobs. The proposal names
+  the changes it covers and never replaces them, so the plan still reconciles
+  against Findings.
+- **Open questions.** Where the canonical, the sitemap and the internal links
+  disagree, there is a real problem and no defensible instruction. Lumen states
+  the question, what it will not decide, and what would settle it.
+
+Both reach the exported Action Plan, on their own tabs, and the cover explains
+what they are. `findings → jobs` is reported so it can be checked; the goal is
+the smallest defensible set of changes, not the smallest number.
+
+## Using a model
+
+Lumen decides everything from evidence before a model is asked anything. What a
+model is for is the **drafting** of replacement text: open a change in Optimize
+that asks for one specific value, press **Draft a replacement**, and the model
+writes a candidate title, meta description, heading or link text from that
+page's own words. The draft is checked for length, for difference from the value
+it replaces and from every sibling page, for unsupported claims, and for whether
+it uses the page's vocabulary at all. It is never applied to the site; it lands
+in the Action Plan export in its own column, labelled unchecked.
+
+Configure one under **Writing** in the side panel. Any OpenAI-compatible
+endpoint works, and the presets cover the common cases:
+
+| Preset | Endpoint | Key |
+|---|---|---|
+| Ollama | `http://localhost:11434/v1` | none |
+| LM Studio | `http://localhost:1234/v1` | none |
+| OpenAI | `https://api.openai.com/v1` | yours |
+| OpenRouter | `https://openrouter.ai/api/v1` | yours |
+
+**Test endpoint** makes a real request and reports what answered. Chrome's
+built-in model is offered when the browser can actually run it, which on most
+machines it cannot; the picker says so rather than offering an option that
+fails later. Nothing is metered by Lumen and no request passes through its
+servers: the call goes from your browser to the endpoint you named.
+
+Two different envelopes leave the machine, and they are not the same size. The
+brief and the plan send discipline names, rule ids, severity, confidence and
+counts, with no URL, host, page title or markup by construction. **Drafting
+sends the page's own title, heading, description and address**, because that is
+what drafting a title for it means. That is why drafting is a per-change button
+and never something that runs on its own.
+
+## Looking at the interface
+
+```bash
+npm run build:extension   # emits dist/extension/site-audit.css
+npm run dev               # or: node services/api/server.js
+npm run gallery           # screenshots and contrast-checks every state
+```
+
+`/gallery.html` renders every state of the Site Audit overlay on one page, from
+the stylesheet the extension actually injects, inside a shadow root reproducing
+its host contract. It leads with the states a real audit will not conveniently
+produce, which are the ones that go unseen: all four confidence levels, the
+priority bands, the scopes, an open question, a template action, the hatch, and
+the empty states a healthy site produces.
+
+`npm run gallery` is the machine reading of the same page: it computes contrast
+for every text node in every specimen and fails on anything under its floor.
+
+## Exporting an audit
+
+The **Download** control in the Site Audit sidebar builds a single `.xlsx` from
+whichever of the two deliverables you tick:
+
+| Tick | Tabs you get |
+|---|---|
+| Action plan | About this report, Action plan, Plan phases |
+| Scan results | About this report, Findings, Pages, Links |
+| Both | all six, plan first |
+
+The file is assembled by the local gateway from data that is already on the
+machine, and handed straight back to the browser — nothing is uploaded to build
+it. The same audit exports byte-identical twice, so the file can be checksummed
+by whoever receives it. The HTML client report is still available from inside
+the same control, and the per-dataset CSV exports are unchanged.
+
+The writer is `packages/report/workbook.js` — hand-written rather than a
+dependency, because a spreadsheet is a well-specified format plus a zip
+container and this repository runs on five runtime dependencies with no build
+step.
+
 ## Documentation
 
 - `docs/releases/` - release notes, newest `RELEASE_NOTES_1.7.5.md`
 - `docs/ARCHITECTURE.md` - how the extension, gateway and renderer fit together
 - `docs/TOOL-CONTRACTS.md` - the contract each connected tool is held to
-- `DESIGN.md` - the design system as built; `PRODUCT.md` - product truth and brand commitments
-- `docs/FINAL-REVIEW-1.7.0.md` - final multi-role, adversarial, security, and product review gate
+- `DESIGN.md` - the visual system as built; `docs/DESIGN-SYSTEM.md` - the product's language, walkthrough grammar and accessibility floor
+- `PRODUCT.md` - product truth, audience and brand commitments
+- `AGENTS.md` - the operating contract for contributors and agents
+- `docs/FINAL-REVIEW-1.7.0.md` and `docs/QA-1.7.0.md` - the recorded multi-role, adversarial, security and product review gate for 1.7.0, kept as the worked example of what that gate looks like

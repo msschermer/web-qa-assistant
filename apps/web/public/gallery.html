@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lumen state gallery</title>
+<!--
+  Every state of every surface, on one page.
+
+  Two things rot unseen, and this page is aimed at both.
+
+  The first is a state no audit conveniently produces. `corroborated` is one of
+  the four sealed confidence levels and drew an invisible dot for long enough to
+  be written into a known-gaps file and forgotten, because nothing in the
+  database ever carried that value. Template actions and open questions needed a
+  hand-built synthetic audit before anyone could look at the cards at all.
+
+  The second is drift between surfaces. Lumen ships four of them — the injected
+  Site Audit overlay, the side panel, the web app, and the exported client
+  report — and the same idea is drawn by four different mechanisms in four
+  different files. Nobody sees them side by side, because in the product they
+  are never on screen together: one is a shadow root on someone else's page, one
+  is a Chrome panel, one is a tab, and one is a file that arrives by email
+  months later. This page is the only place they meet.
+
+  FAITHFUL RENDERING CONTEXTS. A specimen is only worth looking at if it renders
+  through the cascade its surface actually renders through, so each surface gets
+  its own:
+
+  - The overlay is a shadow root under an inline `all:initial`, because that is
+    what the content script builds. The inline declaration outranks `:host`,
+    which is exactly why the overlay sets `color-scheme`, `accent-color` and
+    `scrollbar-color` on `.workspace` instead. A gallery that skipped it would
+    render correctly while the product did not, which is worse than no gallery.
+  - The side panel, the web app and the report are documents, so they are
+    rendered in iframes. A shadow root would be the wrong context for all three:
+    their stylesheets open with `html{...}` and `body{...}` rules that set the
+    canvas, the base type size and the line height, and inside a shadow root
+    those selectors match nothing. The specimens would inherit this page's 14px
+    instead of the panel's 12.5px and look fine while shipping wrong. The panel
+    frame is 360px because that is roughly the width Chrome gives it, and its
+    sheet has a 300px floor.
+
+  Every stylesheet is the one that ships. `scripts/build-extension.mjs` emits
+  `dist/extension/site-audit.css` from the same `siteAuditCss()` the extension
+  injects and `dist/extension/sidepanel.css` from the panel's own entry;
+  `apps/web/public/styles.css` is what the web app links; `/assets/report.css`
+  is `reportCss()`, the same function the exported document interpolates. None
+  of them is a copy, so a specimen that looks right here looks right in the
+  product.
+-->
+<link rel="stylesheet" href="/assets/fonts.css">
+<style>
+  /* The faces are loaded above rather than declared here. @font-face inside a
+     shadow root is ignored by the browser, so the overlay's own specimens can
+     only get the real typeface from this document — which is how the extension
+     does it too. */
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #07070B; color: #E9E9F2;
+    font: 14px/1.5 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  header { padding: 28px 32px 20px; border-bottom: 1px solid #2E2E3D; }
+  h1 { margin: 0 0 6px; font-size: 22px; font-weight: 650; letter-spacing: -.02em; }
+  header p { margin: 0 0 10px; max-width: 78ch; color: #A8A8BD; font-size: 13px; }
+  header p:last-child { margin-bottom: 0; }
+  header code, .why code { color: #A896FF; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .92em; }
+  main { padding: 8px 32px 64px; }
+  section { padding: 24px 0; border-bottom: 1px solid #2E2E3D; }
+  h2 { margin: 0 0 4px; font-size: 15px; font-weight: 650; }
+  .why { margin: 0 0 16px; max-width: 78ch; color: #8B8BA3; font-size: 12.5px; }
+
+  /* The band heading that separates the cross-surface half of the page from
+     the overlay's own states. */
+  .band { padding: 30px 0 0; border-bottom: 0; }
+  .band h2 { font-size: 11px; font-weight: 650; letter-spacing: .1em;
+    text-transform: uppercase; color: #6D6D85; }
+
+  .specimens { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+  /* border-box so a framed cell and an unframed one that are given the same
+     share of a row end up the same width on screen. */
+  .specimen { box-sizing: border-box; border: 1px solid #2E2E3D; border-radius: 8px;
+    background: #0E0E14; padding: 12px 14px; }
+  .specimen > .label { display: block; margin-bottom: 9px; font-size: 10.5px; font-weight: 650;
+    letter-spacing: .07em; text-transform: uppercase; color: #8B8BA3; }
+  .wide { flex: 1 1 640px; min-width: 0; }
+
+  /* A cross-surface cell names the surface and the context it is being drawn
+     in, because the context is half of what is being shown. */
+  .specimen > .label .context { display: block; margin-top: 3px; font-weight: 500;
+    font-size: 10.5px; letter-spacing: 0; text-transform: none; color: #6D6D85; }
+  .specimen.framed { padding: 12px 0 0; overflow: hidden; }
+  .specimen.framed > .label { padding: 0 14px; }
+  .specimen iframe { display: block; border: 0; width: 100%; background: transparent; }
+
+  /* The four surfaces stay on one line, because reading across is the entire
+     point of the row: a wrapped fourth cell is a comparison nobody makes. The
+     side panel keeps a real 360px because that is roughly what Chrome gives it
+     and its own sheet has a 300px floor. The other three have no canonical
+     width, so they share what is left. */
+  .cross { flex-wrap: nowrap; }
+  .cross > .specimen { flex: 1 1 0; min-width: 0; }
+  .cross > .specimen[data-fixed] { flex: 0 0 auto; }
+
+  /* A whole card needs more width than a quarter of the row gives it, and a
+     clipped specimen compares nothing. Two per line keeps every pair adjacent,
+     which is as much as a comparison needs. */
+  .cross.paired { flex-wrap: wrap; }
+  .cross.paired > .specimen { flex: 1 1 44%; }
+  .cross.paired > .specimen[data-fixed] { flex: 0 0 auto; }
+
+  @media (max-width: 1180px) {
+    .cross { flex-wrap: wrap; }
+    .cross > .specimen { flex: 1 1 320px; }
+  }
+
+  #status { padding: 10px 32px; font-size: 12.5px; color: #F0A93A; }
+  #status:empty { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Lumen state gallery</h1>
+  <p>
+    Every state of every surface, rendered from the stylesheets that ship.
+    The first half puts the four surfaces beside each other, because that is
+    where the drift is: the overlay, the side panel, the web app and the
+    exported report each draw the same ideas with their own mechanism, and in
+    the product they are never on screen at the same time. The second half is
+    the overlay's own states, ordered by how hard a state is to reach in a real
+    audit rather than by how common it is.
+  </p>
+  <p>
+    Each surface renders in the context it really renders in: the overlay in a
+    shadow root under an inline <code>all:initial</code>, the three document
+    surfaces in iframes, because their sheets style <code>html</code> and
+    <code>body</code> and a shadow root would silently drop those rules. Run
+    <code>npm run build:extension</code> first; this page reads what that build
+    emitted.
+  </p>
+</header>
+<p id="status" role="status"></p>
+<main id="gallery"></main>
+<script type="module" src="./gallery.js"></script>
+</body>
+</html>

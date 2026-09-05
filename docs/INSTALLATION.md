@@ -32,7 +32,7 @@ npx playwright install chromium
 3. Enable **Developer mode**.
 4. Choose **Load unpacked**.
 5. Select `web-qa-assistant\dist\extension`.
-6. Open a normal HTTP/HTTPS page and click the Web QA Assistant toolbar icon.
+6. Open a normal HTTP/HTTPS page and click the Lumen toolbar icon.
 
 The extension requests current-page access through the toolbar user gesture. **Watch this site** separately requests a persistent permission for that origin.
 
@@ -100,7 +100,7 @@ npm test
 git status
 ```
 
-Do not merge to `main` until the real-browser acceptance checklist in `docs/QA-1.7.0.md` passes.
+Do not merge to `main` until the product/browser gate in `docs/RELEASE-CHECKLIST.md` passes in a real Chrome.
 
 ## Branch -> main delivery
 

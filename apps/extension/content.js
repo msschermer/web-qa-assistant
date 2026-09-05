@@ -870,6 +870,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         font-size:13px;
         ${lumenTokens()}
 
+        --sa-backdrop:var(--wqa-backdrop);  /* the scrim over the audited page */
         --sa-canvas:var(--wqa-canvas);      /* app background behind panels */
         --sa-surface:var(--wqa-surface);    /* cards, tables, panels */
         --sa-subtle:var(--wqa-sunken);      /* table heads, inset rows, hover */
@@ -921,12 +922,41 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         --sa-mono:var(--wqa-mono);
         --sa-hatch:var(--wqa-hatch)}
       /* all:initial on the host resets inherited type, so this reset is what
-         actually puts Lumen's face on the overlay. */
-      *{box-sizing:border-box;font-family:var(--sa-sans)}
+         actually puts Lumen's face on the overlay. scrollbar-width rides along
+         because it is the one property in the palette's browser-chrome block
+         that does not inherit, so it cannot travel with the tokens; thin drops
+         the arrow buttons and the 15px rail. */
+      *{box-sizing:border-box;font-family:var(--sa-sans);scrollbar-width:thin}
       [hidden]{display:none!important}
-      .backdrop{position:fixed;inset:0;background:rgba(7,7,11,.72);z-index:1;backdrop-filter:blur(2px)}
+      /* Anchors get the product's voice rather than the browser's. Under
+         :host{all:initial} an unstyled <a> still takes the UA link colours, and
+         :visited paints a second one — so an ordinary list of URLs arrives in two
+         colours neither of which is ours, distinguished by whether the operator
+         happened to have opened that page before. --sa-primary-text is the primary
+         as text; the fill is never the ink. */
+      a{color:var(--sa-primary-text);text-decoration:none}
+      a:hover{color:var(--sa-primary-hover);text-decoration:underline}
+      a:focus-visible{outline:2px solid var(--sa-primary);outline-offset:2px;border-radius:2px}
+      /* The scrim over the audited page. It was .72, which over a white site
+         computed to a mid grey — and since the workspace is inset 24px, that grey
+         ran the full height of the right edge at almost exactly a scrollbar's
+         width, in almost exactly a scrollbar's tone. With both real scrollbars
+         gone it was the only thing left at that edge and read as a stray rail.
+         At .93 the page still comes through as shape and colour, which is the
+         point of a translucent backdrop, but never as something that could be
+         mistaken for chrome. The value is mixed from the palette rather than
+         restated as a literal triple. */
+      .backdrop{position:fixed;inset:0;background:color-mix(in srgb,var(--sa-backdrop) 93%,transparent);z-index:1;backdrop-filter:blur(2px)}
 
-      .workspace{position:fixed;inset:24px;z-index:2;background:var(--sa-canvas);border-radius:12px;box-shadow:var(--sa-shadow-lg);display:flex;flex-direction:column;overflow:hidden;color:var(--sa-ink)}
+      /* The browser's own chrome — scrollbars, carets, checkboxes, selects —
+         themed from the palette so it stops being the one light thing on a
+         near-black surface. tokens.css declares the same three properties, but
+         they cannot arrive that way here: the host element carries all:initial
+         as an inline style, and an inline declaration outranks :host, so every
+         inherited property reaching this tree is reset to the browser default.
+         The workspace is the first element the inline style does not touch,
+         which makes it the place the palette can take them back. */
+      .workspace{position:fixed;inset:24px;z-index:2;background:var(--sa-canvas);border-radius:12px;box-shadow:var(--sa-shadow-lg);display:flex;flex-direction:column;overflow:hidden;color:var(--sa-ink);color-scheme:dark;accent-color:var(--sa-primary);scrollbar-color:var(--sa-ink-faint) transparent}
 
       /* Top bar ------------------------------------------------------------ */
       .head{display:flex;align-items:center;gap:12px;padding:0 16px;height:56px;background:var(--sa-surface);border-bottom:1px solid var(--sa-line);flex:0 0 auto}
@@ -959,9 +989,23 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .tab.active{background:var(--sa-primary-soft);color:var(--sa-primary-text);font-weight:600}
       .tab-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .nav-foot{margin-top:auto;padding-top:14px;display:flex;flex-direction:column;gap:8px}
+      /* The sidebar scrolls, so a popover anchored inside it would be clipped
+         by its own container. The menu is positioned against the viewport and
+         placed from the button's rect when it opens. */
+      .download{position:relative}
+      .download-menu{position:fixed;z-index:40;width:308px;background:var(--sa-surface-raised);border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-lg);padding:13px 14px}
+      .download-head{margin:0 0 5px;padding:0 4px;font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--sa-ink-faint)}
+      .download-opt{display:grid;grid-template-columns:15px minmax(0,1fr);gap:10px;align-items:start;padding:7px 4px;border-radius:var(--sa-radius-sm);cursor:pointer}
+      .download-opt:hover{background:var(--sa-subtle)}
+      .download-opt input{margin:2px 0 0;width:14px;height:14px;accent-color:var(--sa-primary)}
+      .download-opt b{display:block;font-size:12.5px;font-weight:600;color:var(--sa-ink)}
+      .download-opt em{display:block;margin-top:2px;font-style:normal;font-size:11.5px;line-height:1.45;color:var(--sa-ink-faint)}
+      .download-what{margin:8px 0 11px;padding-top:9px;border-top:1px solid var(--sa-line);font-size:11.5px;line-height:1.45;color:var(--sa-ink-faint)}
+      .download-actions{display:flex;flex-direction:column;gap:4px}
+      .download-actions .link-btn{margin-left:0;text-align:left;padding:4px 2px}
 
       .main{flex:1 1 auto;min-width:0;overflow:auto;padding:20px 24px 28px;background:var(--sa-canvas)}
-      .main-narrow{max-width:none;margin:0;width:100%;padding-left:max(24px,calc((100% - 820px) / 2));padding-right:max(24px,calc((100% - 820px) / 2))}
+      .main-narrow{max-width:none;margin:0;width:100%;padding-left:max(24px,calc((100% - 960px) / 2));padding-right:max(24px,calc((100% - 960px) / 2))}
 
       /* A run in progress: full width, controls beside the title, and the
          activity feed taking whatever vertical space is left rather than
@@ -970,8 +1014,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .run-head{align-items:center}
       .run-target{margin:4px 0 0;font-size:13.5px;color:var(--sa-ink-faint);font-family:var(--sa-mono);overflow-wrap:anywhere}
       .run-actions{margin-left:auto;display:flex;gap:10px;flex-wrap:wrap}
-      .run-progress{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);padding:16px 18px;margin:0 0 16px}
-      .run-progress .progress-bar{margin:0}
       /* Six counters read as one instrument row, not as a ragged wrap. */
       .stat-grid.run-stats{grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:0 0 16px}
       .stat-grid.run-stats>div{padding:12px 14px}
@@ -979,9 +1021,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       @media(max-width:1180px){.stat-grid.run-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
       @media(max-width:720px){.stat-grid.run-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
       /* The feed is the live part of this screen, so it gets the leftover height. */
-      .run-feed{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;margin:0 0 4px}
-      .run-feed .recent-feed{flex:1 1 auto;min-height:120px;overflow:auto}
-      .run-feed .recent-feed:empty::after{content:"Waiting for the first page to come back…";display:block;padding:14px;font-size:13px;color:var(--sa-ink-faint)}
       .page-head{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin:0 0 18px}
       h2{margin:0;font-size:18px;font-weight:650;letter-spacing:-.02em;line-height:1.2}
       .results-summary{margin:6px 0 0;color:var(--sa-ink-soft);font-size:13.5px;line-height:1.55;max-width:82ch}
@@ -996,8 +1035,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .scope-banner::before{content:"";flex:0 0 auto;width:6px;background:var(--sa-subtle);background-image:var(--sa-hatch)}
       .scope-text{margin:0;padding:11px 14px;font-size:13px;line-height:1.55;color:var(--sa-ink-soft)}
       .scope-text b{color:var(--sa-ink);font-weight:650;font-variant-numeric:tabular-nums}
-      .sheet-scale:empty{display:none}
-      .sheet-scale{margin-left:auto;font-size:12.5px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:999px;padding:4px 12px;white-space:nowrap}
 
       /* Cards --------------------------------------------------------------- */
       .card{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm)}
@@ -1013,9 +1050,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .run-identity h2{margin:0}
       .run-identity h2 .run-target{font-family:var(--sa-mono);font-size:13px;color:var(--sa-ink-soft);font-weight:600}
       .chip-row{display:flex;flex-wrap:wrap;gap:8px;margin:9px 0 0}
-      .state-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--sa-line);background:var(--sa-subtle);border-radius:999px;padding:4px 11px;font-size:12.5px;color:var(--sa-ink-soft);white-space:nowrap}
-      .state-chip.live{border-color:var(--sa-primary-line);background:var(--sa-primary-soft);color:var(--sa-primary-text)}
-      .state-chip.provisional{border-color:color-mix(in srgb,var(--sa-warn) 40%,transparent);background:var(--sa-warn-soft);color:var(--sa-warn)}
       .pulse-dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:0 0 auto;animation:sa-pulse 1.8s ease-in-out infinite}
       @keyframes sa-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.72)}}
       .icon-btn{width:38px;padding:0;justify-content:center}
@@ -1039,7 +1073,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
       .phase-card{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);padding:15px 17px 16px;margin:0 0 14px}
       .phase-top{display:flex;align-items:center;gap:11px;margin:0 0 11px;flex-wrap:wrap}
-      .phase-badge{font-size:11px;font-weight:650;letter-spacing:.05em;text-transform:uppercase;color:var(--sa-primary-text);background:var(--sa-primary-soft);border:1px solid var(--sa-primary-line);border-radius:999px;padding:3px 10px}
       .phase-name{margin:0;font-size:15px;font-weight:650;color:var(--sa-ink)}
       .phase-count{margin-left:auto;font-size:12.5px;color:var(--sa-ink-soft);font-variant-numeric:tabular-nums}
       /* dt and dd are separate grid items, so each pair is wrapped rather than
@@ -1087,9 +1120,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .signal-list li:first-child{border-top:0}
       .signal-name{grid-area:1/1;font-size:13px;color:var(--sa-ink);overflow-wrap:anywhere}
       .signal-note{grid-area:2/1;font-size:11.5px;color:var(--sa-ink-faint)}
-      .signal-badge{grid-area:1/2;justify-self:end;font-size:11px;font-weight:600;border-radius:999px;padding:2px 9px;white-space:nowrap;border:1px solid transparent}
-      .signal-badge[data-kind=early]{background:var(--sa-warn-soft);color:var(--sa-warn);border-color:color-mix(in srgb,var(--sa-warn) 35%,transparent)}
-      .signal-badge[data-kind=confirmed]{background:var(--sa-success-soft);color:var(--sa-success);border-color:color-mix(in srgb,var(--sa-success) 35%,transparent)}
+      .signal-badge{grid-area:1/2;justify-self:end}
 
       .mix-rows{list-style:none;margin:0;padding:0;display:grid;gap:9px}
       .mix-rows li{display:grid;grid-template-columns:64px minmax(0,1fr) 38px;gap:11px;align-items:center;font-size:12.5px;color:var(--sa-ink-soft)}
@@ -1113,7 +1144,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .stat-grid dt{font-size:12.5px;font-weight:500;color:var(--sa-ink-faint);margin:0 0 6px;text-transform:none;letter-spacing:0}
       .stat-grid dd{margin:0;font-size:26px;font-weight:650;letter-spacing:-.02em;line-height:1.1;color:var(--sa-ink);font-variant-numeric:tabular-nums}
       .stat-sub{display:block;margin-top:5px;font-size:12.5px;line-height:1.4;color:var(--sa-ink-faint)}
-      .tb-quantities{display:none}
 
       .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 
@@ -1283,6 +1313,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .brief-lead h3{margin:0 0 7px;font-size:18px;font-weight:650;color:var(--sa-ink)}
       .brief-summary{margin:0 0 10px;font-size:13.5px;line-height:1.6;color:var(--sa-ink-soft);max-width:64ch}
       .brief-scope{margin:0 0 12px;font-size:12.5px;color:var(--sa-ink-faint)}
+      .brief-to-plan{margin:14px 0 0}
       .brief-list{list-style:none;margin:0;padding:0;display:grid;gap:4px;counter-reset:brief}
       .brief-item{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:11px;align-items:center;width:100%;padding:9px 10px;border:1px solid transparent;border-radius:var(--sa-radius-sm);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
       .brief-item:hover{background:var(--sa-subtle)}
@@ -1297,7 +1328,11 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .brief-item-pages b{font-size:13.5px;color:var(--sa-ink);font-variant-numeric:tabular-nums}
 
       .brief-detail{padding:16px;border-left:1px solid var(--sa-line);background:var(--sa-surface);min-width:0}
-      .brief-badges{display:flex;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+      /* align-items matters here: the three chips on this row are three
+         different type sizes, so the row stretches all of them to the tallest.
+         Without it a chip that does not centre its own text sits high in its
+         pill, which is what happened to the confidence chip. */
+      .brief-badges{display:flex;align-items:center;gap:8px;margin:0 0 10px;flex-wrap:wrap}
       .brief-detail h4{margin:0 0 8px;font-size:15px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
       .brief-why{margin:0 0 13px;font-size:13px;line-height:1.6;color:var(--sa-ink-soft)}
       .evidence-box{padding:11px 13px;border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);background:var(--sa-subtle);margin:0 0 13px}
@@ -1327,13 +1362,11 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .conditions{margin:0 0 18px;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);overflow:hidden}
       .conditions>.feed-heading{padding:14px 16px 0;margin:0}
       .conditions-list{list-style:none;margin:10px 0 0;padding:0}
-      /* The row is the grid; the toggle and the document link are siblings in
-         it, and the evidence spans both. */
-      .cond-row{border-top:1px solid var(--sa-line);display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}
-      .cond-row>.cond-head{grid-column:1}
-      .cond-row>.cond-open{grid-column:2;margin-right:16px}
-      .cond-row>.cond-evidence{grid-column:1/-1}
-      .cond-head{display:grid;grid-template-columns:22px 150px minmax(0,1fr) auto;gap:12px;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:11px 16px;font:inherit;color:inherit;cursor:pointer}
+      /* The row is the toggle and the evidence it opens, nothing beside them:
+         the document link moved inside the evidence, which is where the proof
+         belongs and what freed the row of its second column. */
+      .cond-row{border-top:1px solid var(--sa-line)}
+      .cond-head{display:grid;grid-template-columns:22px 150px minmax(0,1fr) auto 12px;gap:12px;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:11px 16px;font:inherit;color:inherit;cursor:pointer}
       .cond-head:hover{background:var(--sa-subtle)}
       .cond-head:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
       .cond-mark{width:18px;height:18px;border-radius:50%;display:block;background:var(--sa-info-soft);border:1px solid var(--sa-line-strong);position:relative}
@@ -1345,17 +1378,19 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .cond-row[data-state=unknown] .cond-mark::after{background:transparent;border:2px dashed var(--sa-ink-faint);inset:3px}
       .cond-label{font-size:13px;font-weight:600;color:var(--sa-ink)}
       .cond-headline{font-size:13px;color:var(--sa-ink-soft)}
-      .cond-state{font-size:11.5px;font-weight:600;color:var(--sa-ink-faint);white-space:nowrap;background:var(--sa-subtle);border-radius:999px;padding:3px 10px}
-      .cond-row[data-state=ok] .cond-state{background:var(--sa-success-soft);color:var(--sa-success)}
-      .cond-row[data-state=attention] .cond-state{background:var(--sa-critical-soft);color:var(--sa-critical)}
+      /* The caret is the row's only promise that there is something under it,
+         and it carries more weight now that the document link is behind it. */
+      .cond-caret{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;color:var(--sa-ink-faint);transition:transform .15s ease}
+      .cond-head[aria-expanded=true] .cond-caret{transform:rotate(90deg)}
       .cond-evidence{margin:0;padding:0 16px 14px 50px;list-style:none}
       .cond-evidence li{font-size:12.5px;line-height:1.55;color:var(--sa-ink-soft);margin-bottom:4px}
-      .cond-confidence{display:inline-block;margin-top:6px;font-size:11.5px;color:var(--sa-ink-faint);background:var(--sa-subtle);border-radius:999px;padding:2px 9px}
+      .cond-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 0}
       .conditions-note{margin:0;padding:0 16px 14px;font-size:12.5px;line-height:1.5;color:var(--sa-ink-faint)}
 
       /* The three published documents (robots.txt, sitemap, llms.txt) are rows
-         in the conditions readout, and each offers to open the file itself. */
-      .cond-open{flex:0 0 auto;font-size:12.5px;color:var(--sa-primary-text);background:none;border:0;padding:4px 2px;margin-left:2px;cursor:pointer;text-decoration:underline;font-family:inherit}
+         in the conditions readout, and each offers the file itself as the last
+         line of its evidence. */
+      .cond-open{flex:0 0 auto;font-size:12px;color:var(--sa-primary-text);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px;font-family:inherit}
       .cond-open:hover{color:var(--sa-primary-hover)}
       .cond-open:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
 
@@ -1374,7 +1409,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .f-toggle:hover{background:var(--sa-subtle)}
       .f-toggle:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
       .finding-row .f-top{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:12px;margin-bottom:4px}
-      .finding-row .f-top .badge{justify-self:start}
+      .finding-row .f-top .pill{justify-self:start}
       .finding-row .f-title{min-width:0;overflow-wrap:anywhere}
       .finding-row .f-top::before{content:none}
       .finding-row .f-title{font-weight:600;font-size:13.5px;color:var(--sa-ink)}
@@ -1389,17 +1424,10 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .finding-row.sev-info{box-shadow:inset 3px 0 0 var(--sa-line-strong),var(--sa-shadow-sm)}
       .empty-row{font-size:13px;color:var(--sa-ink-faint);padding:16px;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius)}
 
-      .badge{display:inline-flex;align-items:center;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600;letter-spacing:0;text-transform:capitalize;border:1px solid transparent}
-      .badge.fix{background:var(--sa-critical-soft);color:var(--sa-critical)}
-      .badge.review{background:var(--sa-warn-soft);color:var(--sa-warn)}
-      .badge.sev-critical{background:var(--sa-sev-critical);color:#fff}
-      .badge.sev-high{background:var(--sa-critical-soft);color:var(--sa-critical);border-color:color-mix(in srgb,var(--wqa-sev-high) 40%,transparent)}
-      .badge.sev-medium{background:var(--sa-warn-soft);color:var(--sa-warn);border-color:color-mix(in srgb,var(--wqa-sev-medium) 40%,transparent)}
-      .badge.sev-low{background:var(--sa-warn-soft);color:var(--sa-warn);border-color:color-mix(in srgb,var(--wqa-sev-medium) 40%,transparent)}
-      .badge.sev-info{background:var(--sa-info-soft);color:var(--sa-ink-faint);border-color:var(--sa-line-strong)}
 
       .confidence-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:0 0 auto}
       .confidence-dot.confirmed{background:var(--sa-success)}
+      .confidence-dot.corroborated{background:transparent;box-shadow:inset 0 0 0 2px var(--sa-success)}
       .confidence-dot.inferred{background:var(--sa-sev-medium)}
       .confidence-dot.inconclusive{background:var(--sa-line-strong)}
 
@@ -1444,6 +1472,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .fx-detail{align-self:start}
       .fx-kicker{margin:0 0 5px;font-size:11px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--sa-primary-text)}
       .fx-detail-title{margin:0 0 10px;font-size:18px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
+      .fx-to-plan{margin:0 0 12px}
       .fx-tabs{display:flex;gap:2px;margin:12px 0 12px;border-bottom:1px solid var(--sa-line)}
       .fx-tab{padding:7px 11px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--sa-ink-faint);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;margin-bottom:-1px}
       .fx-tab:hover{color:var(--sa-ink)}
@@ -1478,16 +1507,312 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .data-table th.sorted-asc::after{content:' \\25B2'}
       .data-table th.sorted-desc::after{content:' \\25BC'}
 
-      /* inline-block + nowrap: as an inline span in a narrow table cell the
-         pill used to break mid-word, rendering "broken" as "broke / n" across
-         two lines inside its own pill. A status label is a single token. */
-      .status-pill{display:inline-block;white-space:nowrap;word-break:normal;overflow-wrap:normal;font-size:11.5px;font-weight:600;text-transform:none;letter-spacing:0;padding:2px 9px;border-radius:999px;border:1px solid transparent}
       /* The status column sizes to its content instead of taking an equal
          share and squeezing the pill; the URL columns absorb the slack. */
       .data-table td.col-status,.data-table th.col-status{width:1%;white-space:nowrap}
-      .status-pill.healthy{background:var(--sa-success-soft);color:var(--sa-success);border-color:var(--sa-success-line)}
-      .status-pill.broken{background:var(--sa-critical-soft);color:var(--sa-critical);border-color:color-mix(in srgb,var(--wqa-sev-high) 40%,transparent)}
-      .status-pill.inconclusive,.status-pill.blocked{background:var(--sa-info-soft);color:var(--sa-ink-faint);border-color:var(--sa-line-strong)}
+
+      /* Pills ---------------------------------------------------------------
+         One implementation of the chip-and-pill component DESIGN.md documents.
+         There were nine — .badge, .status-pill, .signal-badge, .cond-state,
+         .cond-confidence, .phase-badge, .render-state, .sheet-scale and
+         .state-chip — each restating the radius, the padding and the type, and
+         only three of them seating their own label. A pill is a box drawn round
+         one line of text, and any flex or grid row can stretch it taller than
+         that line, so the seating lives here, once, where no new pill can be
+         born without it. line-height is declared for the same reason — inherited
+         from a paragraph it made the confidence pill 3px taller than the same
+         pill in a table cell, so it is pinned to the face's own metric here. scripts/check.mjs fails the build
+         on a second
+         implementation.
+
+         Two sizes and one tone vocabulary. The tones are the words the side
+         panel's own chip already uses — critical, warn, ok, muted — so the two
+         surfaces name the same state the same way instead of each inventing a
+         set. The classes that remain beside .pill (.status-pill, .render-state,
+         .signal-badge and the rest) now carry only where a pill sits and what
+         queries it, never what it looks like. */
+      .pill{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;line-height:normal;border:1px solid transparent;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600;letter-spacing:0;text-transform:none;white-space:nowrap;word-break:normal;overflow-wrap:normal;background:var(--sa-subtle);color:var(--sa-ink-soft)}
+      /* The roomier step: a chip that sits on a row of its own rather than
+         inside a table cell or beside a heading. */
+      .pill.roomy{gap:7px;padding:4px 11px;font-size:12.5px;font-weight:400}
+      /* One lowercase word from the scanner's own vocabulary — "high",
+         "confirmed" — rendered in the sentence case DESIGN.md asks badges for.
+         Never on a multi-word label, where it would produce title case, and
+         never on a technical literal such as "noindex". */
+      .pill.cap{text-transform:capitalize}
+      .pill[data-tone=ok]{background:var(--sa-success-soft);color:var(--sa-success);border-color:var(--sa-success-line)}
+      .pill[data-tone=warn]{background:var(--sa-warn-soft);color:var(--sa-warn);border-color:color-mix(in srgb,var(--sa-warn) 40%,transparent)}
+      .pill[data-tone=critical]{background:var(--sa-critical-soft);color:var(--sa-critical);border-color:color-mix(in srgb,var(--wqa-sev-high) 40%,transparent)}
+      /* The top of the ramp is the one solid fill — how critical announces
+         itself, and the only pill whose ground comes from the ramp. */
+      /* White ink on the ramp value itself measures 4.09:1, under the 4.5 floor
+         for text this size. The ramp is sealed and stays exactly as it is: the
+         pill deepens its own ground from it instead, which is the Fill Is Not
+         The Ink rule applied to the one place the fill has to carry ink. */
+      .pill[data-tone=critical-solid]{background:color-mix(in srgb,var(--sa-sev-critical) 78%,var(--wqa-backdrop));color:#fff}
+      .pill[data-tone=brand]{background:var(--sa-primary-soft);color:var(--sa-primary-text);border-color:var(--sa-primary-line)}
+      .pill[data-tone=muted]{background:var(--sa-info-soft);color:var(--sa-ink-faint);border-color:var(--sa-line-strong)}
+      .pill[data-tone=outline]{background:var(--sa-surface);border-color:var(--sa-line)}
+
+      /* The inputs screen. Two columns: what the audit already holds, and the
+         two things only the operator can answer. It replaced a button in an
+         empty page — a screen with nothing on it reads as unfinished, and this
+         one had plenty it could truthfully show. */
+      .optimize-inputs{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin:0 0 16px;align-items:start}
+      @media(max-width:980px){.optimize-inputs{grid-template-columns:minmax(0,1fr)}}
+      .optimize-input-card{border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);box-shadow:var(--sa-shadow-sm);padding:15px 17px}
+      .optimize-input-card h3{margin:0 0 3px;font-size:13.5px;font-weight:600;color:var(--sa-ink)}
+      .optimize-input-card>div>.hint{margin:0 0 13px;max-width:60ch}
+      .optimize-input-card .field{margin:0 0 14px}
+      .optimize-input-card .field:last-child{margin-bottom:0}
+      .optimize-input-card select{width:100%;border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius-sm);padding:8px 11px;font-size:13px;background:var(--sa-surface);color:var(--sa-ink);box-shadow:var(--sa-shadow-sm)}
+      .optimize-input-card select:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px;border-color:var(--sa-primary)}
+      .optimize-input-card .field>.hint{margin-top:5px}
+      /* Counts the audit can defend, set as a ledger rather than as prose. */
+      .optimize-facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px 16px;margin:0}
+      .optimize-facts dt{font-size:12.5px;color:var(--sa-ink-faint)}
+      .optimize-facts dd{margin:0;font-size:12.5px;color:var(--sa-ink);font-variant-numeric:tabular-nums;text-align:right}
+      /* Absent evidence is stated, never blanked: not run is a fact. */
+      .optimize-fact-absent{color:var(--sa-ink-faint)}
+      .optimize-build-actions{margin-top:0;align-items:flex-start;gap:16px}
+      .optimize-build-actions .hint{margin:0;max-width:74ch;flex:1 1 320px}
+
+      .optimize-start{border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);box-shadow:var(--sa-shadow-sm);padding:18px 20px;max-width:74ch}
+      .optimize-start b{display:block;margin-bottom:6px;font-size:15px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
+      .optimize-start .hint{margin:0 0 14px}
+      .optimize-working{display:flex;align-items:center}
+      /* Who wrote the words, above the words. */
+      .optimize-provenance{display:flex;align-items:center;margin:0 0 8px;font-size:11px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--sa-ink-faint)}
+
+      /* The working indicator -----------------------------------------------
+         One primitive, used wherever the product is waiting on something it does
+         not control. It exists because the alternative is a surface that looks
+         finished while a request is still out: the deterministic brief is on
+         screen either way, so without motion there is nothing to tell an
+         operator that better wording may still arrive.
+
+         Three dots on the product violet, sized to sit on a line of meta text.
+         Reduced motion gets a static row rather than nothing — the state still
+         has to be visible, it just stops moving. */
+      .work-dot{display:inline-flex;align-items:center;gap:3px;margin-left:7px;vertical-align:middle}
+      .work-dot::before,.work-dot::after,.work-dot>i{content:"";display:block;width:4px;height:4px;border-radius:50%;background:var(--sa-primary-text);opacity:.35;animation:sa-work 1.1s ease-in-out infinite}
+      .work-dot::after{animation-delay:.18s}
+      .work-dot>i{animation-delay:.36s}
+      @keyframes sa-work{0%,100%{opacity:.28;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}
+      @media(prefers-reduced-motion:reduce){
+        .work-dot::before,.work-dot::after,.work-dot>i{animation:none;opacity:.7}
+      }
+
+      /* Optimize ------------------------------------------------------------
+         The plan surface. It reuses the stat strip, pills, tables and card
+         shells the rest of the console already has; what is declared here is
+         only the sequence itself — the numbered steps, the priority cards and
+         the rule chips that carry traceability back to Findings. */
+      .optimize-focus{margin:0 0 12px;padding:9px 12px;border-radius:var(--sa-radius-sm);background:var(--sa-primary-soft);border:1px solid var(--sa-primary-line);font-size:12.5px;line-height:1.5;color:var(--sa-ink-soft);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+      .optimize-focus .link-btn{margin-left:auto}
+      .optimize-limits{display:flex;align-items:center;gap:16px;margin:0 0 18px;padding:12px 14px;border:1px solid var(--sa-line-strong);border-left:6px solid transparent;border-radius:var(--sa-radius);background-image:linear-gradient(var(--sa-surface),var(--sa-surface)),var(--sa-hatch);background-origin:padding-box,border-box;background-clip:padding-box,border-box}
+      .optimize-limit-text{margin:0;font-size:13px;line-height:1.55;color:var(--sa-ink-soft);max-width:88ch}
+      .optimize-limits .btn{margin-left:auto;flex:0 0 auto}
+      .stat-grid.optimize-stats{grid-template-columns:repeat(4,minmax(0,1fr));margin:0 0 16px}
+      @media(max-width:900px){.stat-grid.optimize-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      /* A phrase, not a figure. At the strip display size a long label would set
+         as a headline and read as a claim rather than as a reading to verify. */
+      .stat-grid.optimize-stats dd.stat-word{font-size:15px;letter-spacing:-.01em;line-height:1.25}
+      .optimize-why{margin:0 0 16px;padding:15px 17px}
+      .optimize-headline{margin:0 0 6px;font-size:15px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink);max-width:74ch}
+      .optimize-why .hint{margin:0;max-width:84ch}
+      /* The phase map: when each body of work happens, and how much of it there
+         is. Rows rather than cards, because four cards of heading-plus-text is
+         the scaffold this screen already spends its cards on below, and the map
+         has to read as one object the eye can run down. */
+      .attack-list{list-style:none;margin:14px 0 0;padding:0;border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);background:var(--sa-canvas);overflow:hidden}
+      .attack-row + .attack-row{border-top:1px solid var(--sa-line)}
+      /* What happens now gets the ground, not a bar down its side: the eye
+         should land on it before it reads a word. */
+      .attack-row.lead{background:var(--sa-primary-soft)}
+      .attack-open{display:grid;grid-template-columns:64px minmax(0,1fr) auto 12px;gap:14px;align-items:start;width:100%;text-align:left;border:0;background:transparent;padding:12px 14px;font:inherit;color:inherit;cursor:pointer}
+      .attack-open:hover{background:var(--sa-subtle)}
+      .attack-row.lead .attack-open:hover{background:color-mix(in srgb,var(--sa-primary-soft) 70%,var(--sa-subtle))}
+      .attack-open:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
+      .attack-when{justify-content:center;width:100%;padding-left:0;padding-right:0;margin-top:1px}
+      .attack-text{display:block;min-width:0}
+      .attack-text b{display:block;font-size:13.5px;font-weight:650;letter-spacing:-.01em;color:var(--sa-ink)}
+      .attack-summary{display:block;margin-top:2px;font-size:12.5px;line-height:1.5;color:var(--sa-ink-soft);max-width:78ch}
+      .attack-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+      /* Quieter than a pill: these name the disciplines a phase touches, which
+         is orientation rather than status, and pills in this product carry
+         state. */
+      .attack-tag{font-size:11px;letter-spacing:.01em;color:var(--sa-ink-faint);border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius-sm);padding:2px 7px;white-space:nowrap}
+      .attack-count{display:flex;flex-direction:column;align-items:flex-end;flex:0 0 auto;line-height:1.15}
+      .attack-count b{font-size:19px;font-weight:650;color:var(--sa-ink);font-variant-numeric:tabular-nums}
+      .attack-count span{font-size:11px;color:var(--sa-ink-faint)}
+      .attack-caret{width:12px;height:12px;margin-top:5px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;color:var(--sa-line-strong);transition:color .15s ease,transform .15s ease}
+      .attack-open:hover .attack-caret,.attack-open:focus-visible .attack-caret{color:var(--sa-ink-faint);transform:translateX(2px)}
+      @media(prefers-reduced-motion:reduce){.attack-caret{transition:none}}
+      @media(max-width:760px){
+        .attack-open{grid-template-columns:58px minmax(0,1fr) 12px;row-gap:8px}
+        .attack-count{grid-column:2;flex-direction:row;align-items:baseline;gap:6px}
+      }
+      .optimize-priority{border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);box-shadow:var(--sa-shadow-sm);padding:15px 17px;margin:0 0 14px}
+      .optimize-priority-head{display:flex;align-items:flex-start;gap:14px;margin:0 0 10px}
+      .optimize-priority-when{flex:0 0 auto;justify-content:center;min-width:56px;margin-top:2px}
+      .optimize-priority-head h3{margin:0 0 3px;font-size:15px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
+      .optimize-priority-head .hint{margin:0;max-width:78ch}
+      .optimize-priority-meta{margin-left:auto;display:flex;align-items:center;gap:8px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end}
+      .optimize-count{font-size:11.5px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+      /* What a group unblocks is the reason it sits where it does; without it
+         the sequence is an assertion. */
+      .optimize-unblocks{margin:0 0 13px;padding:10px 12px;border:1px solid var(--sa-primary-line);background:var(--sa-primary-soft);border-radius:var(--sa-radius-sm);font-size:12.5px;line-height:1.55;color:var(--sa-ink-soft);max-width:88ch}
+      .optimize-actions{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+      .optimize-actions>li{border-top:1px solid var(--sa-line);padding-top:11px}
+      .optimize-action-head{display:flex;align-items:baseline;gap:12px;margin-bottom:3px}
+      .optimize-action-head b{font-size:13.5px;font-weight:600;color:var(--sa-ink)}
+      .optimize-action-head span{margin-left:auto;font-size:11.5px;color:var(--sa-ink-faint);white-space:nowrap;font-variant-numeric:tabular-nums}
+      .optimize-actions .hint{margin:0 0 8px;max-width:84ch}
+      .optimize-rules{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+      /* Each rule behind an action, openable in Findings. This is the
+         traceability the plan exists to keep. */
+      .optimize-rule{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--sa-line-strong);background:var(--sa-subtle);color:var(--sa-ink-soft);border-radius:var(--sa-radius-sm);padding:4px 9px;font-family:var(--sa-sans);font-size:12px;cursor:pointer;text-align:left}
+      .optimize-rule:hover{border-color:var(--sa-primary-line);background:var(--sa-primary-soft);color:var(--sa-primary-text)}
+      .optimize-rule:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
+      .optimize-rule span{font-size:11px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
+      .optimize-rule:hover span{color:var(--sa-primary-text)}
+      .optimize-verify{margin:0;font-size:11.5px;line-height:1.5;color:var(--sa-ink-faint);max-width:84ch}
+      /* A change is the row a plan is executed from: an id you can cite in a
+         ticket, the thing on the page you edit, and what it says right now.
+         Everything else — the instruction, the test, the pages — is behind the
+         disclosure, because the reader scanning the plan is counting jobs, not
+         reading them. */
+      .change-list{list-style:none;margin:0;padding:0;border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);background:var(--sa-canvas);overflow:hidden}
+      .change-list>li+li{border-top:1px solid var(--sa-line)}
+      .change-head{display:grid;grid-template-columns:34px 68px minmax(120px,auto) minmax(0,1fr) auto 12px;gap:11px;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:8px 11px;font:inherit;color:inherit;cursor:pointer}
+      /* The priority pill is fixed-width so a column of them reads as a column
+         rather than as ragged text, which is what makes the list scannable. */
+      .change-priority{justify-content:center;width:100%;padding-left:0;padding-right:0}
+      .change-meta{display:flex;align-items:center;gap:9px;flex:0 0 auto;justify-content:flex-end}
+      .change-category{font-size:11.5px;color:var(--sa-ink-faint);white-space:nowrap}
+      .change-head:hover{background:var(--sa-subtle)}
+      .change-head:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
+      .change-id{font-family:var(--sa-mono);font-size:11.5px;font-weight:600;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
+      .change-loc{font-size:12.5px;font-weight:600;color:var(--sa-ink)}
+      /* The current value is quoted from the page, so it is set as the page's
+         text and not as ours. It is one line: the full string is in the body. */
+      .change-now{font-family:var(--sa-mono);font-size:11.5px;color:var(--sa-ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+      .change-now.absent{font-family:var(--sa-sans);color:var(--sa-ink-faint);font-style:italic}
+      .change-caret{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;color:var(--sa-ink-faint);transition:transform .15s ease}
+      .change-head[aria-expanded=true] .change-caret{transform:rotate(90deg)}
+      .change-body{padding:2px 11px 13px 56px}
+      .change-facts{display:grid;grid-template-columns:96px minmax(0,1fr);gap:5px 14px;margin:0 0 9px}
+      .change-facts dt{font-size:11px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--sa-ink-faint);padding-top:1px}
+      .change-facts dd{margin:0;font-size:12.5px;line-height:1.55;color:var(--sa-ink-soft);max-width:80ch}
+      .change-facts dd.mono{font-family:var(--sa-mono);font-size:12px;color:var(--sa-ink);word-break:break-word}
+      .change-more{margin:4px 0 0;font-size:11.5px;color:var(--sa-ink-faint)}
+      /* The one control in the product that produces something the scan could
+         not, and the one request that carries page text off the machine. It is
+         drawn as an action rather than as a result, and its output is labelled
+         as a draft for as long as it exists. */
+      .draft{margin:10px 0 0;padding:10px 0 0;border-top:1px solid var(--sa-line)}
+      .draft-row{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+      .draft-btn{flex:0 0 auto}
+      .draft-note{font-size:11.5px;line-height:1.45;color:var(--sa-ink-faint);max-width:52ch}
+      .draft-out{margin:9px 0 0;padding:10px 12px;border:1px solid var(--sa-primary-line);border-radius:var(--sa-radius-sm);background:var(--sa-primary-soft)}
+      .draft-label{display:inline-block;margin:0 0 5px;font-size:10.5px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--sa-primary-text)}
+      .draft-value{margin:0;font-family:var(--sa-mono);font-size:12.5px;line-height:1.5;color:var(--sa-ink);word-break:break-word}
+      .draft-meta{margin:6px 0 0;font-size:11px;color:var(--sa-ink-faint)}
+      .draft-problem{margin:0;font-size:12px;line-height:1.5;color:var(--sa-ink-soft)}
+      .draft-drop{margin-left:0;padding:2px 0;font-size:11.5px}
+      /* Conclusions drawn across findings, which no single scanner could make.
+         Drawn as proposals rather than results: a left rule and a quieter ground
+         than a phase card, so they read as something to weigh rather than
+         something already decided. */
+      .structure{border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);padding:14px 16px;margin:0 0 14px}
+      .structure-list{list-style:none;margin:11px 0 0;padding:0}
+      .structure-list>li+li{margin-top:11px;padding-top:11px;border-top:1px solid var(--sa-line)}
+      .structure-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+      .structure-row b{font-size:13px;font-weight:650;color:var(--sa-ink)}
+      .structure-count{font-size:12px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
+      .structure-basis{margin:5px 0 0;font-size:12px;line-height:1.5;color:var(--sa-ink-soft);max-width:86ch}
+      /* A heading, because two unlabelled cards floating above the phases give
+         the reader nothing to place them by. */
+      .reason-section{margin:0 0 11px}
+      .reason-section h3{margin:0 0 3px;font-size:15px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
+      .reason-section .hint{margin:0;max-width:84ch}
+      .reason-scope{margin-left:auto;font-size:11.5px;color:var(--sa-ink-faint);white-space:nowrap;font-variant-numeric:tabular-nums}
+      /* Four pages, then a count. The first version gave the affected URLs more
+         height than the question they were evidence for. */
+      .reason-urls{max-height:none;overflow:visible}
+      .reason-card{border:1px solid var(--sa-primary-line);border-radius:var(--sa-radius);background:var(--sa-surface);padding:13px 16px;margin:0 0 12px}
+      .reason-card.question{border-color:color-mix(in srgb,var(--sa-warn) 45%,transparent)}
+      .reason-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 7px}
+      .reason-head h3{margin:0;font-size:14px;font-weight:650;letter-spacing:-.01em;color:var(--sa-ink)}
+      .reason-body{margin:0 0 9px;font-size:12.5px;line-height:1.55;color:var(--sa-ink-soft);max-width:86ch}
+      .reason-covers{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 9px}
+      .reason-caveat{margin:0;font-size:11.5px;line-height:1.5;color:var(--sa-ink-faint);max-width:86ch}
+      .reason-settled{margin:7px 0 0;padding:8px 11px;border-radius:var(--sa-radius-sm);background:var(--sa-subtle);font-size:12px;line-height:1.5;color:var(--sa-ink-soft);max-width:86ch}
+      .reason-card .url-list{margin:9px 0 0}
+      .change-where{margin:9px 0 4px;font-size:11px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--sa-ink-faint)}
+      /* The list is already capped at eight, so it needs no scroller of its own:
+         a clipped ninth row inside a disclosure inside a modal is the third
+         scrollbar this product spent a day removing. */
+      .change-body .url-list{max-height:none;overflow:visible;margin:0}
+      .change-body .optimize-rules{margin:0}
+      /* The area's own count, stated where the changes are, so the phase total
+         and the rows under it can be reconciled without adding them up. */
+      .change-tally{font-size:11.5px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+      .optimize-rationale{margin:0 0 9px;font-size:12.5px;line-height:1.55;color:var(--sa-ink-soft);max-width:84ch}
+      .optimize-model{border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);padding:14px 16px;margin:0 0 12px}
+      .optimize-model.unestablished{border-color:var(--sa-line-strong);border-left:6px solid transparent;background-image:linear-gradient(var(--sa-surface),var(--sa-surface)),var(--sa-hatch);background-origin:padding-box,border-box;background-clip:padding-box,border-box}
+      .optimize-model .hint{margin:0;max-width:86ch}
+      .optimize-model-evidence{margin-top:10px}
+      .optimize-ruleids{font-family:var(--sa-mono);font-size:11px;color:var(--sa-ink-faint);overflow-wrap:anywhere}
+      .optimize-excluded td{color:var(--sa-ink-faint)}
+
+      /* Structured data ----------------------------------------------------
+         The section reuses the table, pill and url-list components rather than
+         growing its own: a fifth table style would be the same drift the pill
+         consolidation just undid. Only what is genuinely new to this surface is
+         declared here. */
+      .schema-scope{margin:0 0 14px;max-width:84ch}
+      .stat-grid.schema-stats{grid-template-columns:repeat(5,minmax(0,1fr));margin:0 0 16px}
+      @media(max-width:1180px){.stat-grid.schema-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+      @media(max-width:720px){.stat-grid.schema-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      .schema-conflicts{margin:0 0 16px;padding:14px 16px}
+      .schema-conflicts .card-head{padding:0 0 8px}
+      .schema-conflict-list{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:12px}
+      .schema-conflict{border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);background:var(--sa-subtle);padding:11px 13px}
+      .schema-conflict-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+      .schema-conflict-head b{font-size:13px;font-weight:600;color:var(--sa-ink)}
+      .schema-conflict .hint{margin:0 0 8px}
+      /* Each identity beside the number of pages asserting it: the shape of the
+         disagreement is the evidence, so it is drawn rather than summarised. */
+      .schema-variant{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:4px 0;border-top:1px solid var(--sa-line)}
+      .schema-variant code{font-family:var(--sa-mono);font-size:11.5px;color:var(--sa-ink-soft);overflow-wrap:anywhere}
+      .schema-variant span{font-size:11.5px;color:var(--sa-ink-faint);white-space:nowrap;font-variant-numeric:tabular-nums}
+      .schema-tabs{margin:0 0 12px}
+      .schema-table td{vertical-align:top}
+      .schema-table .col-num{width:1%;white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
+      /* The statement is the route to its own evidence, so it is a control
+         rather than a label. */
+      .schema-open{display:block;width:100%;text-align:left;background:none;border:0;padding:0;font:inherit;font-weight:600;color:var(--sa-ink);cursor:pointer}
+      .schema-open:hover{color:var(--sa-primary-text);text-decoration:underline}
+      .schema-open:focus-visible{outline:2px solid var(--sa-primary);outline-offset:2px;border-radius:2px}
+      .schema-detail{display:block;margin-top:3px;font-size:12px;line-height:1.5;color:var(--sa-ink-soft);max-width:78ch}
+      /* The affected pages sit under their finding rather than in a column, so
+         one broken template reads as one job with a list, not as N rows. */
+      .schema-urls td{padding-top:0;border-top:0}
+      .schema-urls .url-list{max-height:160px;margin:0 0 8px}
+      .schema-opportunities{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+      /* Hatched, not warned. An opportunity is an inference about markup the
+         crawl did not see — that is the not-established state, and DESIGN.md
+         draws it with the 45 degree hatch. A warn-coloured rail would have made
+         correct markup read as a defect, which is the one thing this lens must
+         never do. Same construction as the unrun render section. */
+      .schema-opportunities li{border:1px solid var(--sa-line-strong);border-left:6px solid transparent;border-radius:var(--sa-radius-sm);padding:12px 14px;background-image:linear-gradient(var(--sa-surface),var(--sa-surface)),var(--sa-hatch);background-origin:padding-box,border-box;background-clip:padding-box,border-box}
+      .schema-to-plan{margin-left:0;padding:6px 0 0}
+      .schema-opportunity-note{margin:0 0 12px;max-width:84ch}
+      .schema-empty{border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);padding:16px 18px}
+      .schema-empty b{display:block;margin-bottom:4px;font-size:13.5px;font-weight:600;color:var(--sa-ink)}
+      .schema-empty .hint{margin:0;max-width:80ch}
 
       /* Controls ------------------------------------------------------------ */
       .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius-sm);background:var(--sa-surface);color:var(--sa-ink);padding:8px 14px;font-family:var(--sa-sans);font-size:13.5px;font-weight:600;letter-spacing:0;text-transform:none;cursor:pointer;min-height:36px;box-shadow:var(--sa-shadow-sm);transition:background .12s ease,border-color .12s ease}
@@ -1500,7 +1825,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .btn.danger:hover:not(:disabled){background:var(--sa-critical-soft)}
       .btn .departs{width:13px;height:13px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;opacity:.8}
 
-      .chip{border:1px solid var(--sa-line-strong);background:var(--sa-surface);border-radius:999px;padding:6px 13px;font-family:var(--sa-sans);font-size:12.5px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--sa-ink-soft);cursor:pointer;min-height:32px;box-shadow:var(--sa-shadow-sm)}
+      .chip{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--sa-line-strong);background:var(--sa-surface);border-radius:999px;padding:6px 13px;font-family:var(--sa-sans);font-size:12.5px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--sa-ink-soft);cursor:pointer;min-height:32px;box-shadow:var(--sa-shadow-sm)}
       .chip:hover{background:var(--sa-subtle);color:var(--sa-ink)}
       .toolbar{display:flex;gap:10px;margin:0 0 12px;flex-wrap:wrap}
       .toolbar input[type="search"]{flex:1 1 260px;border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius-sm);padding:9px 12px;font-size:13.5px;background:var(--sa-surface);color:var(--sa-ink);box-shadow:var(--sa-shadow-sm)}
@@ -1513,10 +1838,10 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .links-table .link-same-source td:first-child{border-top:0}
       .links-table tbody tr:not(.link-same-source) td{border-top:1px solid var(--sa-line)}
       .links-source-head{width:34%}
+      .col-group{font-size:12px;color:var(--sa-ink-soft);white-space:nowrap}
       .urls-table td:first-child{font-family:var(--sa-mono);font-size:12.5px}
       .toolbar input:focus-visible,.toolbar select:focus-visible,.field input:focus-visible,.field textarea:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px;border-color:var(--sa-primary)}
       .filter-state{font-size:12.5px;color:var(--sa-ink-faint);margin-left:auto;font-variant-numeric:tabular-nums}
-      .hide-unconfirmed{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--sa-ink-soft);white-space:nowrap}
 
       .field{display:block;margin:0 0 16px}
       .field>span:not(.hint){display:block;font-size:13px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--sa-ink);margin-bottom:6px}
@@ -1530,7 +1855,16 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .check{display:flex;align-items:center;gap:9px;margin:0 0 6px;font-size:13.5px;color:var(--sa-ink)}
       .actions{display:flex;align-items:center;gap:10px;margin-top:18px;flex-wrap:wrap}
       .lede{margin:0 0 18px;color:var(--sa-ink-soft);font-size:13px;line-height:1.6;max-width:76ch}
-      .tier-note{padding:12px 14px;background:var(--sa-primary-soft);border:1px solid var(--sa-primary-line);border-radius:var(--sa-radius);font-size:13px;color:var(--sa-ink-soft)}
+
+      /* Setup: the form is the task, the explanation is reference. Side by
+         side they fit one screen; stacked they did not, and the primary action
+         sat below the fold on every window shorter than a laptop's. */
+      .setup-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,296px);gap:30px;align-items:start}
+      .setup-aside{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);padding:13px 15px 15px}
+      .setup-aside h3{margin:0 0 9px;font-size:13.5px;font-weight:600;letter-spacing:0;color:var(--sa-ink)}
+      .setup-aside .lede{margin:0;max-width:none;font-size:12.5px;line-height:1.6}
+      .setup-aside .lede+.lede{margin-top:12px;padding-top:12px;border-top:1px solid var(--sa-line)}
+      @media(max-width:880px){.setup-columns{grid-template-columns:minmax(0,1fr);gap:18px}.setup-aside{order:-1}}
       .resume-banner{display:flex;align-items:center;gap:14px;justify-content:space-between;border:1px solid var(--sa-primary-line);background:var(--sa-primary-soft);border-radius:var(--sa-radius);padding:12px 14px;margin:0 0 18px}
       .resume-text{margin:0;font-size:13px;color:var(--sa-ink-soft)}
       .setup-error{color:var(--sa-critical);font-size:13px}
@@ -1552,7 +1886,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .recent-feed .url{flex:1 1 auto;font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
       /* Severity + breakdown ------------------------------------------------- */
-      .severity-block{margin:0}
       .severity-bar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:var(--sa-info-soft);margin:0 0 12px}
       .severity-bar span{height:100%}
       .severity-legend{list-style:none;display:grid;gap:8px;margin:0;padding:0;font-size:13px;color:var(--sa-ink-soft)}
@@ -1566,7 +1899,6 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .ti-open{display:flex;align-items:center;gap:10px;width:100%;min-width:0;font:inherit;font-size:13px;text-align:left;border:0;background:transparent;padding:8px 10px;border-radius:var(--sa-radius-sm);color:var(--sa-ink-soft);cursor:pointer}
       .ti-open:hover{background:var(--sa-subtle)}
       .ti-open:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
-      .top-issues .badge{flex:0 0 auto}
       /* min-width:0 is what actually lets the title shrink and ellipsis inside
          a flex row; without it the row grew and pushed the count off the card. */
       .top-issues .ti-rule{font-weight:500;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sa-ink)}
@@ -1591,7 +1923,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .render-section{border:1px solid var(--sa-primary-line);border-radius:var(--sa-radius);padding:16px;margin:0 0 18px;background:var(--sa-primary-soft)}
       .render-section h3{margin:0;font-size:13.5px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--sa-ink)}
       .render-head{display:flex;align-items:center;gap:10px;margin:0 0 6px}
-      .render-state{margin-left:auto;flex:0 0 auto;font-size:11.5px;font-weight:600;white-space:nowrap;border-radius:999px;padding:3px 10px;background:var(--sa-subtle);color:var(--sa-ink-faint)}
+      .render-state{margin-left:auto}
       .render-status{margin:0 0 12px;font-size:13px;line-height:1.55;color:var(--sa-ink-soft);max-width:82ch}
       .render-section .actions{margin-top:0}
       /* Unrun is a coverage fact, not a defect: neutral surface with the same
@@ -1613,11 +1945,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .deliver-label{font-size:12.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--sa-ink-faint);margin-right:4px}
       .link-btn{background:none;border:0;padding:6px 2px;font:inherit;font-size:12.5px;color:var(--sa-ink-faint);text-decoration:underline;cursor:pointer;margin-left:auto}
       .link-btn:hover{color:var(--sa-ink)}
-      .actions-end{justify-content:flex-end}
 
       .pager{display:flex;align-items:center;gap:12px;margin:14px 0 4px}
       .pager-label{font-size:12.5px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
-      .csv-sep{font-size:12.5px;color:var(--sa-ink-faint);margin-left:4px}
 
       .section-index{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
       .section-cut{display:flex;align-items:baseline;gap:8px;border:1px solid var(--sa-line-strong);background:var(--sa-surface);border-radius:999px;padding:6px 13px;cursor:pointer;font-family:var(--sa-sans);font-size:12.5px;color:var(--sa-ink-soft);min-height:32px;box-shadow:var(--sa-shadow-sm)}
@@ -1637,11 +1967,19 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       .finding-detail{margin:0 14px 14px;padding-top:12px;border-top:1px solid var(--sa-line)}
       .finding-detail h4{margin:14px 0 5px;font-size:12.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--sa-ink-faint)}
       .detail-basis,.detail-explain{margin:0 0 8px;font-size:13px;line-height:1.6;color:var(--sa-ink-soft);max-width:84ch}
+      .detail-plan{margin:0 0 10px}
       .detail-rule{margin:0;font-size:12.5px;color:var(--sa-ink-faint)}
       .detail-rule code{font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-ink-soft)}
-      .finding-detail .url-list{max-height:220px;overflow:auto;border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);background:var(--sa-subtle);padding:6px 10px;margin:2px 0 4px}
-      .finding-detail .url-item{display:block;font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-primary-text);text-decoration:none;padding:3px 0;word-break:break-all}
-      .finding-detail .url-item:hover{text-decoration:underline}
+      /* A list of affected URLs, built in two places: the finding detail and the
+         findings inspector's Instances tab. These were scoped to .finding-detail,
+         so the Instances tab rendered bare anchors in Chrome's own link colours —
+         periwinkle for unvisited, purple for visited, which also put the operator's
+         browsing history on screen as if it meant something about the audit. The
+         rules carry no ancestor now: a component that only looks right inside one
+         parent is a component that will be wrong in the second place it is used. */
+      .url-list{max-height:220px;overflow:auto;border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);background:var(--sa-subtle);padding:6px 10px;margin:2px 0 4px}
+      .url-item{display:block;font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-primary-text);text-decoration:none;padding:3px 0;word-break:break-all}
+      .url-item:hover{text-decoration:underline}
       .detail-empty{margin:2px 0 4px;font-size:12.5px;color:var(--sa-ink-faint)}
       .row-expand{cursor:pointer}
       .detail-row{background:var(--sa-subtle)}
@@ -1677,12 +2015,12 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         .nav-foot{margin:0 0 0 auto;flex-direction:row;padding:0 12px 0 10px;flex:0 0 auto;position:sticky;right:0;background:var(--sa-nav);box-shadow:-10px 0 10px -8px rgba(0,0,0,.45)}
         .main{padding:16px 14px 22px}
         h2{font-size:18px}
-        .cond-head{grid-template-columns:22px minmax(0,1fr);gap:8px 12px}
+        .cond-head{grid-template-columns:22px minmax(0,1fr) 12px;gap:8px 12px}
         .cond-headline,.cond-state{grid-column:2}
         .cond-state{justify-self:start}
         .cond-evidence{padding-left:16px}
       }
-      @media(prefers-reduced-motion:reduce){.progress-fill,.f-chev{transition:none}}
+      @media(prefers-reduced-motion:reduce){.progress-fill,.f-chev,.cond-caret{transition:none}}
     `;
   }
 
@@ -1713,12 +2051,16 @@ if (!globalThis.__WEB_QA_CONTENT__) {
    */
   const SITE_AUDIT_NAV_GROUPS = [
     { label: '', items: ['overview', 'findings'] },
-    { label: 'Explore', items: ['urls', 'links'] },
-    { label: 'Validate', items: ['browser'] }
+    { label: 'Explore', items: ['urls', 'links', 'schema'] },
+    { label: 'Validate', items: ['browser'] },
+    // Optimize is its own destination rather than a tab inside Findings: it is
+    // the one place that answers "what do we do, and in what order" rather than
+    // "what is wrong", and burying that in a table is how a plan goes unread.
+    { label: 'Optimize', items: ['optimize'] }
   ];
 
   const SITE_AUDIT_TAB_LABEL = {
-    overview: 'Overview', findings: 'Findings', urls: 'Pages', links: 'Links', browser: 'Browser checks'
+    overview: 'Overview', findings: 'Findings', urls: 'Pages', links: 'Links', schema: 'Structured data', browser: 'Browser checks', optimize: 'Optimize'
   };
 
   /**
@@ -1787,7 +2129,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   const SITE_AUDIT_DISCIPLINE_META = {
     availability: {
       evidence: 'links',
-      lede: 'Whether the things this site links to actually resolve. A confirmed broken link is a functional failure, not a suggestion — which is why this section leads the report.',
+      lede: 'Whether the things this site links to actually resolve. A confirmed broken link is a functional failure, not a suggestion, which is why this section leads the report.',
       findingsNote: 'Broken destinations, error responses and interaction failures found on the crawled pages.'
     },
     indexability: {
@@ -1827,7 +2169,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     },
     performance: {
       evidence: 'render',
-      lede: 'Measured loading behaviour — largest contentful paint, layout shift, time to first byte, page weight. Every number here comes from opening the page in a real browser.',
+      lede: 'Measured loading behaviour: largest contentful paint, layout shift, time to first byte, page weight. Every number here comes from opening the page in a real browser.',
       findingsNote: 'Performance findings from the pages checked in this browser.'
     },
     accessibility: {
@@ -1868,6 +2210,52 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             </div>`).join('');
   }
 
+  /**
+   * The audited page must not scroll behind the Site Audit overlay.
+   *
+   * The overlay is a modal — `role="dialog" aria-modal="true"`, a backdrop, the
+   * whole viewport — but the document underneath was still a live scroller, which
+   * cost two things. Its scrollbar sat nine pixels to the right of the overlay's
+   * own, so the right edge read as a pair of parallel bars, one of them the
+   * browser's default light grey on a near-black surface and none of it ours to
+   * theme: we style Lumen's surfaces, never the page being audited. And a wheel
+   * gesture anywhere over the backdrop scrolled a page the operator could not see.
+   *
+   * So the page is locked for as long as the modal is open, the way Chrome's own
+   * dialogs lock it. The width the scrollbar occupied is handed straight back as
+   * padding, or the page reflows by that much the instant it locks and reflows
+   * again on close — visible through a 72%-opacity backdrop. Both values are
+   * captured from the inline style and restored exactly, because this is somebody
+   * else's document and Lumen leaves it as it found it.
+   */
+  let siteAuditScrollLock = null;
+
+  function lockAuditedPageScroll() {
+    if (siteAuditScrollLock) return;
+    try {
+      const root = document.documentElement;
+      const gutter = window.innerWidth - root.clientWidth;
+      // Per axis, not the shorthand: a page that set only overflow-y reads an
+      // empty style.overflow, so saving and restoring the shorthand would hand
+      // the page back with its own overflow silently dropped.
+      siteAuditScrollLock = { overflowX: root.style.overflowX, overflowY: root.style.overflowY, paddingRight: root.style.paddingRight };
+      root.style.overflowX = 'hidden';
+      root.style.overflowY = 'hidden';
+      if (gutter > 0) root.style.paddingRight = `${gutter}px`;
+    } catch { siteAuditScrollLock = null; }
+  }
+
+  function releaseAuditedPageScroll() {
+    if (!siteAuditScrollLock) return;
+    try {
+      const root = document.documentElement;
+      root.style.overflowX = siteAuditScrollLock.overflowX;
+      root.style.overflowY = siteAuditScrollLock.overflowY;
+      root.style.paddingRight = siteAuditScrollLock.paddingRight;
+    } catch { /* the page may be gone; the lock goes with it */ }
+    siteAuditScrollLock = null;
+  }
+
   function createSiteAuditRoot() {
     const old = document.getElementById('__web_qa_site_audit_root');
     if (old) old.remove();
@@ -1877,6 +2265,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     host.setAttribute('data-webqa-overlay', 'site-audit');
     host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483646;pointer-events:auto;';
     ensureLumenFontFaces();
+    lockAuditedPageScroll();
     document.documentElement.appendChild(host);
     const shadow = host.attachShadow({ mode: 'open' });
     shadow.innerHTML = `<!--
@@ -1896,8 +2285,13 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             <button type="button" class="btn resume-btn">Resume</button>
           </div>
           <div class="page-head"><div><h2 id="sa-title">Audit this site</h2></div></div>
-          <p class="lede">Crawls every page it can reach from this URL and checks it for broken links, missing SEO metadata, and heading structure. This step runs on the assistant server, not your computer — it's a plain page fetch, not a full browser render, which is what keeps it fast and cheap at any site size. It keeps going even if you close this window.</p>
-          <p class="lede tier-note">Deeper checks that need a real browser — accessibility (axe), JavaScript-dependent content, and image/performance sizing — are a separate, optional step after the crawl finishes. That step runs in your own browser instead, one page at a time, so it costs your computer's resources rather than the server's.</p>
+          <!-- Two columns, because the explanation is read once and the form is
+               used every time. Stacked, they pushed the primary action below
+               the fold on an ordinary window; beside each other, the whole
+               configuration is in view and only opening Advanced options
+               scrolls. -->
+          <div class="setup-columns">
+          <div class="setup-form">
           <label class="field"><span>Start URL</span><input type="url" class="start-url" /></label>
           <div class="row">
             <label class="field"><span>Max pages</span><input type="number" class="max-pages" min="1" max="300" value="40" /><span class="hint">Stops the crawl after this many pages, even if more are discovered. Up to 300.</span></label>
@@ -1912,14 +2306,14 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             <div class="advanced-body">
               <div class="row">
                 <label class="field"><span>Max link depth</span><input type="number" class="max-depth" min="0" max="50" placeholder="No limit" /><span class="hint">Stop following links more than this many hops from the start URL. Leave blank for no limit.</span></label>
-                <label class="field"><span>Delay between pages</span><input type="number" class="request-delay" min="0" max="5000" step="50" placeholder="0" /><span class="hint">Milliseconds to wait before each page fetch — a light rate limit if the target site is sensitive to burst traffic. 0 = off.</span></label>
+                <label class="field"><span>Delay between pages</span><input type="number" class="request-delay" min="0" max="5000" step="50" placeholder="0" /><span class="hint">Milliseconds to wait before each page fetch, a light rate limit if the target site is sensitive to burst traffic. 0 = off.</span></label>
               </div>
               <label class="field"><span>Only crawl paths containing</span><textarea class="include-patterns" placeholder="/blog/&#10;/products/"></textarea><span class="hint">One per line. If set, only URLs whose path contains at least one of these are crawled.</span></label>
               <label class="field"><span>Never crawl paths containing</span><textarea class="exclude-patterns" placeholder="/wp-admin/&#10;/tag/"></textarea><span class="hint">One per line. These are skipped even if linked from a crawled page.</span></label>
               <label class="check"><input type="checkbox" class="check-external-links" checked /><span>Check external links</span></label>
               <p class="hint hint-indent">Verify off-site links actually resolve. Turn off for a faster crawl, or if the target site's outbound links commonly trigger destination bot-protection.</p>
               <label class="check"><input type="checkbox" class="respect-nofollow" /><span>Don't follow rel="nofollow" links</span></label>
-              <p class="hint hint-indent">Links are still recorded and link-checked either way — this only controls whether the crawler follows them to discover more pages.</p>
+              <p class="hint hint-indent">Links are still recorded and link-checked either way; this only controls whether the crawler follows them to discover more pages.</p>
             </div>
           </details>
           <p class="setup-error" style="display:none"></p>
@@ -1929,16 +2323,23 @@ if (!globalThis.__WEB_QA_CONTENT__) {
           </div>
           <ul class="history-list" hidden></ul>
           </div>
+          <aside class="setup-aside">
+            <h3>How the audit runs</h3>
+            <p class="lede">Crawls every page it can reach from this URL and checks it for broken links, missing SEO metadata, and heading structure. This step runs on the assistant server, not your computer. It is a plain page fetch rather than a full browser render, which is what keeps it fast and cheap at any site size. It keeps going even if you close this window.</p>
+            <p class="lede">Deeper checks that need a real browser, such as accessibility (axe), JavaScript-dependent content and image or performance sizing, are a separate, optional step after the crawl finishes. That step runs in your own browser instead, one page at a time, so it costs your computer's resources rather than the server's.</p>
+          </aside>
+          </div>
+          </div>
         </div>
         <div class="view view-progress">
           <div class="main run-main">
           <div class="page-head run-head">
             <div class="run-identity">
-              <h2>Scanning <span class="run-target tb-project">&mdash;</span></h2>
+              <h2>Scanning <span class="run-target tb-project">&ndash;</span></h2>
               <div class="chip-row">
-                <span class="state-chip live"><span class="pulse-dot" aria-hidden="true"></span><span class="run-where">Running on gateway</span></span>
-                <span class="state-chip"><span class="stat-elapsed">Elapsed 0s</span></span>
-                <span class="state-chip">Progress saved continuously</span>
+                <span class="pill roomy state-chip live" data-tone="brand"><span class="pulse-dot" aria-hidden="true"></span><span class="run-where">Running on gateway</span></span>
+                <span class="pill roomy state-chip"><span class="stat-elapsed">Elapsed 0s</span></span>
+                <span class="pill roomy state-chip">Progress saved continuously</span>
               </div>
             </div>
             <div class="run-actions">
@@ -1954,7 +2355,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
           <section class="phase-card">
             <div class="phase-top">
-              <span class="phase-badge">Phase 1 of 4</span>
+              <span class="pill phase-badge" data-tone="brand">Phase 1 of 4</span>
               <h3 class="phase-name">Preparing</h3>
               <span class="phase-count"></span>
             </div>
@@ -1976,7 +2377,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             <section class="panel-card run-activity">
               <div class="card-head">
                 <h3 class="feed-heading">Live activity</h3>
-                <span class="state-chip live"><span class="pulse-dot" aria-hidden="true"></span>Updating live</span>
+                <span class="pill roomy state-chip live" data-tone="brand"><span class="pulse-dot" aria-hidden="true"></span>Updating live</span>
               </div>
               <p class="hint">Requests, discoveries and independently confirmed destinations.</p>
               <ul class="recent-feed"></ul>
@@ -1985,7 +2386,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
               <section class="panel-card early-signals">
                 <div class="card-head">
                   <h3 class="feed-heading">Lumen early signals</h3>
-                  <span class="state-chip provisional">Organizing</span>
+                  <span class="pill roomy state-chip" data-tone="warn">Organizing</span>
                 </div>
                 <p class="hint">Interpretation stays provisional until evidence collection ends.</p>
                 <div class="signal-lead" hidden></div>
@@ -2007,10 +2408,25 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         </div>
         <div class="view view-results">
           <aside class="sidenav">
-            <div class="nav-site"><b class="tb-project">&mdash;</b><span class="tb-scale">&mdash;</span></div>
+            <div class="nav-site"><b class="tb-project">&ndash;</b><span class="tb-scale">&ndash;</span></div>
             ${siteAuditNavMarkup()}
             <div class="nav-foot">
-              <button type="button" class="btn primary report-btn">Download report</button>
+              <!-- Two deliverables, one file. The choice is here rather than in
+                   a dialog because it is a two-checkbox decision, and a modal
+                   for two checkboxes is a modal for nothing. -->
+              <div class="download">
+                <button type="button" class="btn primary report-btn" aria-expanded="false" aria-haspopup="true">Download</button>
+                <div class="download-menu" hidden>
+                  <p class="download-head">What should the file contain?</p>
+                  <label class="download-opt"><input type="checkbox" class="dl-plan" checked><span><b>Action plan</b><em>Every change to make, sequenced, with what to edit and how to check it.</em></span></label>
+                  <label class="download-opt"><input type="checkbox" class="dl-scan" checked><span><b>Scan results</b><em>The evidence behind it: findings, pages and links as recorded.</em></span></label>
+                  <p class="download-what"></p>
+                  <div class="download-actions">
+                    <button type="button" class="btn primary dl-go">Download spreadsheet</button>
+                    <button type="button" class="link-btn dl-html">Client report (HTML)</button>
+                  </div>
+                </div>
+              </div>
               <button type="button" class="btn new-audit-btn">New audit</button>
               <span class="tb-date" hidden></span>
             </div>
@@ -2025,7 +2441,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
           <div class="tab-panel overview-panel">
           <div class="page-head ov-head">
             <div class="ov-identity">
-              <h2 class="ov-title">&mdash;</h2>
+              <h2 class="ov-title">&ndash;</h2>
               <div class="chip-row ov-chips"></div>
             </div>
             <div class="run-actions">
@@ -2046,13 +2462,17 @@ if (!globalThis.__WEB_QA_CONTENT__) {
           <!-- The brief. Composed deterministically from the findings, which is
                why the label says what it is grounded in. -->
           <section class="brief" hidden>
-            <p class="brief-kicker">Lumen brief <span aria-hidden="true">·</span> <span class="brief-source">grounded in scan evidence</span></p>
+            <p class="brief-kicker">Lumen brief <span aria-hidden="true">·</span> <span class="brief-source">grounded in scan evidence</span><span class="work-dot" hidden aria-hidden="true"><i></i></span></p>
             <div class="brief-body">
               <div class="brief-lead">
                 <h3>What needs attention</h3>
                 <p class="brief-summary"></p>
                 <p class="brief-scope"></p>
                 <ol class="brief-list"></ol>
+                <!-- The brief says what needs attention; the plan says what to do
+                     about it. Overview routed to Findings, Pages, Links and Browser
+                     checks and never to the surface the product exists for. -->
+                <button type="button" class="btn primary brief-to-plan">Build the action plan</button>
               </div>
               <div class="brief-detail"></div>
             </div>
@@ -2061,7 +2481,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
           <section class="render-section" data-state="idle" hidden>
             <div class="render-head">
               <h3 class="render-title">Deeper checks in your browser</h3>
-              <span class="render-state"></span>
+              <span class="pill render-state"></span>
             </div>
             <p class="render-status"></p>
             <div class="progress-bar render-progress-bar"><div class="progress-fill render-progress-fill"></div></div>
@@ -2170,7 +2590,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
                 <b>Lumen priority is a lens, not a replacement for evidence</b>
                 <span>Patterns are ordered by visitor impact, confidence and breadth. Severity and evidence labels stay exactly as the scanner recorded them.</span>
               </div>
-              <span class="state-chip lens-state">Priority order active</span>
+              <span class="pill roomy state-chip lens-state">Priority order active</span>
             </section>
 
             <div class="fx-split">
@@ -2197,7 +2617,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             </div>
             <div class="scoped-note" role="status" hidden><span class="scoped-text"></span><button type="button" class="link-btn scoped-clear">Show all pages</button></div>
             <nav class="section-index" aria-label="Site sections"></nav>
-            <table class="data-table urls-table"><thead><tr><th data-sort="url">Page</th><th data-sort="status" class="col-status">Status</th><th data-sort="indexable" class="col-status">Indexable</th><th data-sort="title">Title</th><th data-sort="word_count">Words</th><th data-sort="schema">Structured data</th></tr></thead><tbody class="urls-body"></tbody></table>
+            <table class="data-table urls-table"><thead><tr><th data-sort="url">Page</th><th data-sort="status" class="col-status">Status</th><th data-sort="indexable" class="col-status">Indexable</th><th data-sort="title">Title</th><th data-sort="group">Group</th><th data-sort="word_count">Words</th><th data-sort="schema">Structured data</th></tr></thead><tbody class="urls-body"></tbody></table>
             <div class="pager"><button type="button" class="btn pager-prev urls-prev">Prev</button><span class="pager-label urls-label"></span><button type="button" class="btn pager-next urls-next">Next</button></div>
           </div>
           <div class="tab-panel links-panel" hidden>
@@ -2208,6 +2628,46 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             </div>
             <table class="data-table links-table"><thead><tr><th class="links-source-head">Source page</th><th>Links to</th><th>Anchor text</th><th class="col-status">Status</th></tr></thead><tbody class="links-body"></tbody></table>
             <div class="pager"><button type="button" class="btn pager-prev links-prev">Prev</button><span class="pager-label links-label"></span><button type="button" class="btn pager-next links-next">Next</button></div>
+          </div>
+          <div class="tab-panel optimize-panel" hidden>
+            <div class="optimize-limits" hidden>
+              <p class="optimize-limit-text"></p>
+              <button type="button" class="btn optimize-complete">Complete evidence</button>
+            </div>
+            <div class="section-head">
+              <h2>Optimize</h2>
+              <p class="section-lede">The findings this audit recorded, clustered by what you would change to fix them and sequenced by what each group unblocks. Everything here is traceable back to the rules behind it.</p>
+            </div>
+            <div class="stat-grid optimize-stats"></div>
+            <p class="optimize-focus" role="status" hidden></p>
+            <section class="panel-card optimize-why"></section>
+            <nav class="fx-tabs optimize-tabs" aria-label="Optimize views"></nav>
+            <div class="optimize-body"></div>
+          </div>
+          <!-- Structured data. The section exists because the crawl now records
+               the items themselves rather than a list of type names, so every
+               number here is a count of something the audit is holding.
+
+               The three lenses are deliberately separated and never mixed into
+               one list: an error is a fault in an item we parsed, a conflict is
+               two pages disagreeing about one entity, and an opportunity is an
+               inference about markup we did not see. Only the first two are
+               defects. Presenting the third beside them as "issues" is how a
+               tool ends up telling a client their correct markup is broken. -->
+          <div class="tab-panel schema-panel" hidden>
+            <div class="section-head">
+              <h2>Structured data</h2>
+              <p class="section-lede">Every schema.org item the crawl parsed, what validation makes of it, and where the site disagrees with itself. Read from the served HTML, both JSON-LD and microdata, without running the page's JavaScript.</p>
+            </div>
+            <p class="schema-scope hint"></p>
+            <div class="stat-grid schema-stats"></div>
+            <section class="panel-card schema-conflicts" hidden>
+              <div class="card-head"><h3 class="feed-heading">Entity conflicts</h3></div>
+              <p class="hint">One entity, described more than one way. Confirmed: both descriptions were parsed from this site.</p>
+              <ul class="schema-conflict-list"></ul>
+            </section>
+            <nav class="fx-tabs schema-tabs" aria-label="Structured data views"></nav>
+            <div class="schema-body"></div>
           </div>
           <!-- One panel serves all ten discipline sections. Their shape is
                identical by design — heading, coverage statement, figures,
@@ -2238,7 +2698,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
           </div>
         </div>
       </div>
-      <p class="foot-note">Audit data is stored on the assistant gateway under this audit id — reopen Site Audit on this site to reconnect.</p>
+      <p class="foot-note">Audit data is stored on the assistant gateway under this audit id. Reopen Site Audit on this site to reconnect.</p>
     </section>`;
     return { host, shadow };
   }
@@ -2305,6 +2765,12 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       siteAudit.linksSearch = '';
       siteAudit.expandedFindingKey = null;
       siteAudit.expandedUrl = null;
+      siteAudit.schema = null;
+      siteAudit.schemaLens = 'validation';
+      siteAudit.plan = null;
+      siteAudit.planPhrasing = null;
+      siteAudit.planBuilding = false;
+      siteAudit.optimizeLens = 'priorities';
       setSiteAuditView('setup');
     });
     // Every summary tile opens the rows behind its number. A count with no way
@@ -2323,13 +2789,14 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     shadow.querySelector('.history-btn').addEventListener('click', () => loadSiteAuditHistory(origin));
     shadow.querySelector('.render-start-btn').addEventListener('click', startRenderPass);
     shadow.querySelector('.render-stop-btn').addEventListener('click', stopRenderPass);
-    shadow.querySelector('.report-btn').addEventListener('click', downloadFullReport);
+    wireDownloadMenu();
     shadow.querySelector('.report-btn-2')?.addEventListener('click', downloadFullReport);
     shadow.querySelector('.ov-settings-btn')?.addEventListener('click', () => setSiteAuditView('setup'));
     shadow.querySelector('.deliver-pages')?.addEventListener('click', () => switchSiteAuditTab('urls'));
     shadow.querySelector('.deliver-links')?.addEventListener('click', () => switchSiteAuditTab('links'));
     shadow.querySelector('.conditions-all')?.addEventListener('click', () => switchSiteAuditTab('browser'));
     shadow.querySelector('.mix-open')?.addEventListener('click', () => switchSiteAuditTab('findings'));
+    shadow.querySelector('.brief-to-plan')?.addEventListener('click', () => switchSiteAuditTab('optimize'));
     shadow.querySelector('.debug-btn').addEventListener('click', downloadDebugReport);
     // Both quick filters now write their value into the visible control they
     // drive, so the operator can see (and undo) what was applied on their behalf.
@@ -2394,7 +2861,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const when = new Date(mostRecent.createdAt).toLocaleString();
     banner.querySelector('.resume-text').textContent = mostRecent.status === 'running'
       ? `An audit of this site is still running (started ${when}).`
-      : `Last audit of this site: ${when} — ${mostRecent.status}, ${mostRecent.findingsCount} findings.`;
+      : `Last audit of this site: ${when} · ${mostRecent.status}, ${mostRecent.findingsCount} findings.`;
     banner.hidden = false;
     banner.querySelector('.resume-btn').onclick = () => {
       if (!siteAudit) return;
@@ -2417,6 +2884,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     siteAudit?.host?.remove();
     siteAudit = null;
     releaseLumenFontFaces();
+    releaseAuditedPageScroll();
   }
   function stopPolling() {
     if (siteAudit?.pollTimer) { clearInterval(siteAudit.pollTimer); siteAudit.pollTimer = null; }
@@ -2432,7 +2900,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     for (const audit of audits.slice(0, 8)) {
       const li = document.createElement('li');
       const label = document.createElement('span');
-      label.textContent = `${new Date(audit.createdAt).toLocaleString()} — ${audit.status} (${audit.findingsCount} findings)`;
+      label.textContent = `${new Date(audit.createdAt).toLocaleString()} · ${audit.status} (${audit.findingsCount} findings)`;
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.textContent = 'Open';
@@ -2542,7 +3010,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   }
 
   const SITE_AUDIT_PHASE_COPY = {
-    queued: 'Queued — waiting to start.',
+    queued: 'Queued, waiting to start.',
     discovering: 'Finding pages from the sitemap and homepage links…',
     crawling: 'Fetching and checking each page…',
     analyzing: 'Comparing pages against each other to finish the audit…',
@@ -2550,7 +3018,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   };
   const SITE_AUDIT_STATUS_COPY = {
     complete: 'Audit finished.',
-    cancelled: 'Audit cancelled — results below cover what was crawled first.',
+    cancelled: 'Audit cancelled. The results below cover what was crawled first.',
     failed: 'Audit failed before it could finish.'
   };
 
@@ -2592,7 +3060,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const fetched = Number(counts.fetched || 0);
     const discovered = Object.values(counts).reduce((s, n) => s + Number(n || 0), 0);
     const date = new Date(siteAudit.startedAt || Date.now());
-    for (const el of shadow.querySelectorAll('.tb-project')) el.textContent = project || '—';
+    for (const el of shadow.querySelectorAll('.tb-project')) el.textContent = project || '–';
     for (const el of shadow.querySelectorAll('.tb-date')) el.textContent = date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
     const pageWord = (n) => `${n} ${n === 1 ? 'page' : 'pages'}`;
     for (const el of shadow.querySelectorAll('.tb-scale')) {
@@ -2969,9 +3437,9 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       name.className = 'signal-name';
       name.textContent = findingLabel(g);
       const badge = document.createElement('span');
-      badge.className = 'signal-badge';
+      badge.className = 'pill signal-badge';
       const confirmed = g.confidence === 'confirmed' || g.confidence === 'corroborated';
-      badge.dataset.kind = confirmed ? 'confirmed' : 'early';
+      badge.dataset.tone = confirmed ? 'ok' : 'warn';
       badge.textContent = confirmed ? 'Confirmed' : 'Early signal';
       const note = document.createElement('span');
       note.className = 'signal-note';
@@ -3045,7 +3513,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const shadow = siteAudit.shadow;
     shadow.querySelector('.stat-elapsed').textContent = elapsedLabel(audit);
     shadow.querySelector('.run-where').textContent = audit?.paused ? 'Paused on gateway' : 'Running on gateway';
-    shadow.querySelector('.chip-row .state-chip.live').classList.toggle('provisional', Boolean(audit?.paused));
+    shadow.querySelector('.chip-row .state-chip.live').dataset.tone = audit?.paused ? 'warn' : 'brand';
     const pause = shadow.querySelector('.pause-btn');
     pause.textContent = audit?.paused ? 'Resume' : 'Pause';
     const finished = ['complete', 'cancelled', 'failed'].includes(String(audit?.status || ''));
@@ -3103,7 +3571,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       section.dataset.state = 'none';
       stateEl.textContent = 'Not established';
       titleEl.textContent = 'Accessibility, JavaScript and performance are unchecked';
-      statusEl.textContent = `None of the ${rp.total} crawled page${rp.total === 1 ? ' has' : 's have'} been opened in a real browser, so this audit carries no accessibility, runtime-error or performance evidence for ${rp.total === 1 ? 'it' : 'them'}. That is a gap in coverage, not a clean result. The pass runs in this browser, one page at a time — nothing is sent anywhere to do it.`;
+      statusEl.textContent = `None of the ${rp.total} crawled page${rp.total === 1 ? ' has' : 's have'} been opened in a real browser, so this audit carries no accessibility, runtime-error or performance evidence for ${rp.total === 1 ? 'it' : 'them'}. That is a gap in coverage, not a clean result. The pass runs in this browser, one page at a time, and nothing is sent anywhere to do it.`;
       startBtn.textContent = `Check ${rp.total} page${rp.total === 1 ? '' : 's'} in this browser`;
       startBtn.hidden = false;
       stopBtn.hidden = true;
@@ -3201,6 +3669,20 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     // The nav's state chips depend on both the audit facts and the finding
     // groups, so they are painted once both have landed.
     renderNavStates();
+    // The structured-data badge needs the inventory, and a destination whose
+    // count only appears after you visit it is not telling you anything. Fetched
+    // once, in the background, and the nav repainted when it lands — a failure
+    // here leaves the badge hidden rather than showing a wrong number.
+    if (siteAudit.auditId && !siteAudit.schema && !siteAudit.schemaLoading) {
+      siteAudit.schemaLoading = true;
+      chrome.runtime.sendMessage({ type: 'SITE_AUDIT_SCHEMA', auditId: siteAudit.auditId })
+        .then((r) => {
+          if (!siteAudit) return;
+          siteAudit.schemaLoading = false;
+          if (r?.schema) { siteAudit.schema = r.schema; renderNavStates(); }
+        })
+        .catch(() => { if (siteAudit) siteAudit.schemaLoading = false; });
+    }
     if (audit) {
       renderSummaryHeader(groupsResult?.groups || siteAudit.rawFindingGroups || [], audit);
 
@@ -3210,7 +3692,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       // fact about this session, not a site with nothing wrong in it.
       const summaryEl = shadow.querySelector('.results-summary');
       if (summaryEl && !/could not be read/.test(summaryEl.textContent)) {
-        summaryEl.textContent = 'The audit record could not be read just now — the figures below are from the last successful read. ' + summaryEl.textContent;
+        summaryEl.textContent = 'The audit record could not be read just now. The figures below are from the last successful read. ' + summaryEl.textContent;
       }
     }
     // A render pass (this browser's own tabs) or a still-running crawl both
@@ -3334,6 +3816,55 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
   const CONDITION_STATE_WORD = { ok: 'Observed', attention: 'Needs attention', unknown: 'Not established' };
 
+  /* The pill tone vocabulary ------------------------------------------------
+   *
+   * Every pill in the overlay takes its wash, its text colour and its hairline
+   * from one of these tones, and these three tables are the only places a state
+   * is turned into one. Before them each rendering site chose its own class —
+   * six of them built a severity badge, and any one could have drifted.
+   *
+   * Severity is the case that matters most: the ramp is fills only, so a
+   * severity badge takes the semantic wash-and-text pair, never --sa-sev-*.
+   * Critical is the single exception, and the solid fill at the top of the ramp
+   * is how it announces itself. */
+  const SEVERITY_TONE = { critical: 'critical-solid', high: 'critical', medium: 'warn', low: 'warn', info: 'muted' };
+  const STATUS_TONE = { healthy: 'ok', broken: 'critical', blocked: 'muted', inconclusive: 'muted' };
+  const CONDITION_STATE_TONE = { ok: 'ok', attention: 'critical' };
+
+  /** Casing belongs to the string, not to the stylesheet: text-transform
+   * capitalises every word, which turns "high priority" into title case and
+   * "Needs attention" into "Needs Attention". The scanner's vocabulary arrives
+   * lowercase and this is what puts one capital on the front of it. */
+  function sentenceCase(text) {
+    const s = String(text || '');
+    return s ? s[0].toUpperCase() + s.slice(1) : s;
+  }
+
+  /** A severity badge. One function, because six places built this span. */
+  function severityPill(severity, text) {
+    const el = document.createElement('span');
+    el.className = 'pill';
+    el.dataset.tone = SEVERITY_TONE[severity] || SEVERITY_TONE.info;
+    el.textContent = text === undefined ? sentenceCase(severity || 'info') : text;
+    return el;
+  }
+
+  /**
+   * How sure the scanner is, in the scanner's own closed vocabulary.
+   *
+   * Only 'confirmed' is drawn as settled. Everything softer reads as warn
+   * rather than as neutral, because a plan that renders 'inferred' the same way
+   * it renders 'confirmed' has quietly promoted a guess.
+   */
+  function confidencePill(confidence) {
+    const el = document.createElement('span');
+    el.className = 'pill cap';
+    el.dataset.tone = confidence === 'confirmed' ? 'ok' : 'warn';
+    el.textContent = confidence || 'inferred';
+    return el;
+  }
+
+
   /**
    * The factual state readout — the one place this screen says what is true of
    * the site.
@@ -3370,10 +3901,14 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       head.className = 'cond-head';
       head.setAttribute('aria-expanded', String(open));
       head.setAttribute('aria-controls', evidenceId);
-      head.innerHTML = '<span class="cond-mark" aria-hidden="true"></span><span class="cond-label"></span><span class="cond-headline"></span><span class="cond-state"></span>';
+      head.innerHTML = '<span class="cond-mark" aria-hidden="true"></span><span class="cond-label"></span><span class="cond-headline"></span><span class="pill cond-state"></span><svg class="cond-caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5L8 6l-3.5 3.5"/></svg>';
       head.querySelector('.cond-label').textContent = r.label;
       head.querySelector('.cond-headline').textContent = r.headline;
-      head.querySelector('.cond-state').textContent = CONDITION_STATE_WORD[r.state] || r.state;
+      const statePill = head.querySelector('.cond-state');
+      statePill.textContent = CONDITION_STATE_WORD[r.state] || r.state;
+      // The row already knows its state; the pill takes its tone from the same
+      // place rather than from one descendant selector per state.
+      if (CONDITION_STATE_TONE[r.state]) statePill.dataset.tone = CONDITION_STATE_TONE[r.state];
       const evidence = document.createElement('ul');
       evidence.className = 'cond-evidence';
       evidence.id = evidenceId;
@@ -3383,31 +3918,38 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         item.textContent = line;
         evidence.appendChild(item);
       }
+      // Confidence and the document behind the row close the evidence on one line.
+      const foot = document.createElement('li');
+      foot.className = 'cond-foot';
       const conf = document.createElement('span');
-      conf.className = 'cond-confidence';
+      conf.className = 'pill cond-confidence';
       conf.textContent = `Confidence: ${r.confidence}`;
-      evidence.appendChild(conf);
+      foot.appendChild(conf);
+      // The three rows backed by a document the reader can open for themselves.
+      // It sits inside the evidence, not on the row: the row states the
+      // condition, and the file that proves it belongs with the rest of the
+      // proof, named rather than left as a bare "Open". Never a child of the
+      // row's toggle either — a button inside a button is invalid and
+      // unreachable for half of assistive technology.
+      const docUrl = conditionDocumentUrl(r.id, signals, siteAudit.siteOrigin);
+      if (docUrl) {
+        const docName = r.label === 'Indexable' ? 'robots.txt' : r.label === 'Sitemap' ? 'the sitemap' : r.label;
+        const openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.className = 'cond-open';
+        openBtn.textContent = `Open ${docName}`;
+        openBtn.title = docUrl;
+        openBtn.setAttribute('aria-label', `Open ${docName} in a new tab`);
+        openBtn.addEventListener('click', () => window.open(docUrl, '_blank', 'noopener'));
+        foot.appendChild(openBtn);
+      }
+      evidence.appendChild(foot);
       head.addEventListener('click', () => {
         const showing = evidence.hidden;
         evidence.hidden = !showing;
         head.setAttribute('aria-expanded', String(showing));
       });
       li.appendChild(head);
-      // The three rows backed by a document the reader can open for themselves.
-      // A sibling of the row's toggle, never a child of it: a button inside a
-      // button is invalid, unreachable for half of assistive technology, and
-      // was what pushed this link onto a line of its own.
-      const docUrl = conditionDocumentUrl(r.id, signals, siteAudit.siteOrigin);
-      if (docUrl) {
-        const openBtn = document.createElement('button');
-        openBtn.type = 'button';
-        openBtn.className = 'cond-open';
-        openBtn.textContent = 'Open';
-        openBtn.title = docUrl;
-        openBtn.setAttribute('aria-label', `Open ${r.label === 'Indexable' ? 'robots.txt' : r.label === 'Sitemap' ? 'the sitemap' : r.label} in a new tab`);
-        openBtn.addEventListener('click', () => window.open(docUrl, '_blank', 'noopener'));
-        li.appendChild(openBtn);
-      }
       li.appendChild(evidence);
       list.appendChild(li);
     }
@@ -3472,9 +4014,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       button.className = 'ti-open';
       const rule = findingLabel(g);
       button.title = `Open "${rule}" in Findings`;
-      const badge = document.createElement('span');
-      badge.className = `badge sev-${g.severity || 'info'}`;
-      badge.textContent = g.severity || g.category || '';
+      const badge = severityPill(g.severity, sentenceCase(g.severity || g.category || ''));
       const label = document.createElement('span');
       label.className = 'ti-rule';
       label.textContent = rule;
@@ -3571,7 +4111,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         evidence: [`Served ${llms.bytes} byte${llms.bytes === 1 ? '' : 's'} at /llms.txt.`, 'A proposed convention for describing a site to language models. Publishing one is a deliberate choice, not a requirement.'] });
     } else if (llms.present === false) {
       rows.push({ id: 'llms', label: 'llms.txt', state: 'ok', headline: 'Not published', confidence: 'confirmed',
-        evidence: [`/llms.txt returned HTTP ${llms.status}. This is a proposed convention, not a standard — its absence is not a defect and is reported here as context only.`] });
+        evidence: [`/llms.txt returned HTTP ${llms.status}. This is a proposed convention, not a standard. Its absence is not a defect and is reported here as context only.`] });
     }
     return rows;
   }
@@ -3682,7 +4222,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const first = top[0];
     const parts = [];
     if (first.journeyFailure) {
-      parts.push(`Start with the ${first.pages === 1 ? 'destination' : 'destinations'} that fail for a visitor — those are confirmed journey failures, not stylistic warnings.`);
+      parts.push(`Start with the ${first.pages === 1 ? 'destination' : 'destinations'} that fail for a visitor: those are confirmed journey failures, not stylistic warnings.`);
     } else {
       parts.push(`Start with ${first.title.toLowerCase()}, the highest-severity established evidence in this audit.`);
     }
@@ -3716,7 +4256,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     const shadow = siteAudit.shadow;
     let host = siteAudit.siteOrigin || '';
     try { host = new URL(audit?.config?.startUrl || audit?.startUrl || siteAudit.siteOrigin).hostname; } catch {}
-    shadow.querySelector('.ov-title').textContent = host || '—';
+    shadow.querySelector('.ov-title').textContent = host || '–';
     const counts = audit?.urlCounts || {};
     const queued = Number(counts.queued || 0);
     const running = audit?.status === 'running';
@@ -3731,7 +4271,10 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     row.innerHTML = '';
     for (const chip of chips) {
       const el = document.createElement('span');
-      el.className = `state-chip${chip.tone ? ` ${chip.tone}` : ''}`;
+      el.className = 'pill roomy state-chip';
+      // 'live' and 'provisional' are what this row calls its two states; the
+      // pill knows them as brand and warn.
+      if (chip.tone) el.dataset.tone = chip.tone === 'live' ? 'brand' : 'warn';
       if (chip.tone === 'live') {
         const dot = document.createElement('span');
         dot.className = 'pulse-dot';
@@ -3767,11 +4310,80 @@ if (!globalThis.__WEB_QA_CONTENT__) {
    * of the words, not the source of the facts.
    */
   const BRIEF_PROVENANCE = {
-    deterministic: "grounded in scan evidence",
-    pending: "grounded in scan evidence · asking AI for wording",
-    model: "scan evidence · wording by on-device AI",
-    byo: "scan evidence · wording by your own AI"
+    deterministic: "written by Lumen from scan evidence",
+    pending: "written by Lumen from scan evidence · rewriting",
+    model: "scan evidence · written by the model on this device",
+    byo: "scan evidence · written by your model",
+    unavailable: "written by Lumen from scan evidence"
   };
+
+  /**
+   * Why the model did not write the words.
+   *
+   * Four different things used to render the same sentence: AI turned off, the
+   * model unavailable, the model's answer rejected for breaking the evidence
+   * rules, and the request never made. The brief read identically in all four,
+   * so an operator could not tell a deterministic brief from a failed one — and
+   * PRODUCT.md is explicit that unavailable reasoning is a coverage fact, never
+   * a silent omission. Each of these is short enough to sit in the kicker.
+   */
+  const BRIEF_UNAVAILABLE_REASON = {
+    BRIEF_AI_OFF: "no model is configured, by choice",
+    BRIEF_AI_NO_PROVIDER: "no model is configured",
+    LOCAL_AI_API_UNAVAILABLE: "this browser has no built-in model",
+    LOCAL_AI_DOWNLOADABLE: "the built-in model has not been downloaded",
+    LOCAL_AI_DOWNLOADING: "the built-in model is still downloading",
+    LOCAL_AI_UNAVAILABLE: "this device cannot run the built-in model",
+    LOCAL_AI_PROBE_FAILED: "the built-in model could not be reached",
+    LOCAL_AI_TIMEOUT: "the model did not answer in time",
+    BRIEF_AI_TIMEOUT: "the model did not answer in time",
+    BRIEF_AI_REJECTED: "the model's reply broke the evidence rules and was discarded",
+    BRIEF_AI_NOTHING_TO_SAY: "there was nothing to rewrite",
+    BYO_AI_NO_PERMISSION: "your endpoint has not been granted access",
+    BYO_AI_NO_MODEL: "your endpoint has no model name set",
+    BYO_AI_NO_ENDPOINT: "no endpoint is configured",
+    BYO_AI_TIMEOUT: "your endpoint did not answer in time",
+    BYO_AI_EMPTY: "your endpoint returned nothing",
+    BYO_AI_FAILED: "your endpoint could not be reached"
+  };
+
+  /** A model that never answers is the failure this had no defence against:
+   * session.prompt() is an unbounded await on someone else's runtime, and a
+   * stalled one left the brief saying "asking AI for wording" for as long as the
+   * overlay stayed open. The deterministic brief is already on screen, so the
+   * only thing waiting longer buys is a label that never resolves. */
+  /**
+   * Configured absence, as distinct from failure.
+   *
+   * A brief nobody asked a model to rewrite is a finished brief, not a degraded
+   * one, and badging it "unavailable" put an error on a screen where nothing
+   * went wrong. These codes mean the operator has no model set up, which is a
+   * choice rather than a fault, so the line says only who wrote the words.
+   *
+   * Everything else still states its reason. A configured endpoint that timed
+   * out, or a reply discarded for breaking the evidence rules, is a coverage
+   * fact the operator needs, and PRODUCT.md is explicit that it is never a
+   * silent omission.
+   */
+  const BRIEF_NOT_A_FAILURE = new Set([
+    "BRIEF_AI_OFF", "BRIEF_AI_NO_PROVIDER", "BYO_AI_NO_ENDPOINT", "BYO_AI_NO_MODEL",
+    "LOCAL_AI_API_UNAVAILABLE", "LOCAL_AI_UNAVAILABLE", "BRIEF_AI_NOTHING_TO_SAY"
+  ]);
+
+  function briefUnavailableReason(code) {
+    if (!code || BRIEF_NOT_A_FAILURE.has(code)) return "";
+    return BRIEF_UNAVAILABLE_REASON[code] || "the model did not answer";
+  }
+
+  const BRIEF_AI_DEADLINE_MS = 12000;
+
+  function withDeadline(promise, ms, code) {
+    let timer = null;
+    return Promise.race([
+      promise.finally(() => clearTimeout(timer)),
+      new Promise((resolve) => { timer = setTimeout(() => resolve({ ok: false, code }), ms); })
+    ]);
+  }
 
   /**
    * Ask the on-device model to phrase the brief.
@@ -3904,12 +4516,35 @@ if (!globalThis.__WEB_QA_CONTENT__) {
    * Every branch ends at the deterministic brief. There is no state in which
    * a failure leaves the operator worse off than not asking.
    */
+  /**
+   * Who will actually be asked.
+   *
+   * The worker resolves this from what can answer rather than from a fixed
+   * preference. The overlay's job is only to report whether Chrome's built-in
+   * model is usable here, which cannot be probed anywhere else, and to accept
+   * the answer. Preferring a provider that reports unavailable, and only then
+   * falling back, is what made this feature look broken on every machine where
+   * the built-in model does not run.
+   */
+  async function localModelUsable() {
+    try {
+      if (typeof LanguageModel === "undefined" || !LanguageModel?.availability) return false;
+      const status = await LanguageModel.availability({
+        expectedInputs: [{ type: "text", languages: ["en"] }],
+        expectedOutputs: [{ type: "text", languages: ["en"] }]
+      });
+      return status === "available" || status === "downloadable" || status === "downloading";
+    } catch { return false; }
+  }
+
   async function briefPhrasingProvider() {
     try {
-      const s = await chrome.runtime.sendMessage({ type: "BRIEF_AI_SETTINGS" });
-      return { provider: String(s?.provider || "on-device"), byoReady: Boolean(s?.byo?.configured) };
+      const localAvailable = await localModelUsable();
+      const s = await chrome.runtime.sendMessage({ type: "BRIEF_AI_SETTINGS", localAvailable });
+      const resolved = s?.resolved || {};
+      return { provider: String(resolved.id || "none"), reason: String(resolved.reason || ""), substituted: Boolean(resolved.substituted) };
     } catch {
-      return { provider: "on-device", byoReady: false };
+      return { provider: "none", reason: "", substituted: false };
     }
   }
 
@@ -3924,30 +4559,52 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       if (!siteAudit || String(siteAudit.auditId || "") !== auditId) return;
       siteAudit.briefPhrasing = result.ok
         ? { auditId, status: source, brief: result.brief }
-        : { auditId, status: "deterministic", code: result.code, message: result.message || "" };
+        : { auditId, status: "unavailable", code: result.code, message: result.message || "" };
       if (result.ok) renderLumenBrief(siteAudit.rawFindingGroups || [], siteAudit.audit);
       else renderBriefProvenance();
     };
 
-    briefPhrasingProvider().then(async ({ provider, byoReady }) => {
-      if (provider === "off") return settle({ ok: false, code: "BRIEF_AI_OFF" }, "deterministic");
-      if (provider === "on-device" || provider === "byo") {
+    // The whole chain is bounded, not just one call in it: a provider lookup
+    // that never answers stalls this as surely as a prompt that never returns.
+    withDeadline(briefPhrasingProvider().then(async ({ provider }) => {
+      if (provider === "off") return { ok: false, code: "BRIEF_AI_OFF" };
+      // One provider, chosen because it can answer. No speculative first
+      // attempt against something already known to be unavailable.
+      if (provider === "on-device") {
         const local = await phraseBriefOnDevice(brief, audit);
-        if (local.ok) return settle(local, "model");
-        if (provider === "byo" && byoReady) return settle(await phraseBriefWithOwnAi(brief, audit), "byo");
-        return settle(local, "deterministic");
+        return local.ok ? { ...local, source: "model" } : local;
       }
-      return settle({ ok: false, code: "BRIEF_AI_PROVIDER_UNKNOWN" }, "deterministic");
-    }).catch((error) => {
-      settle({ ok: false, code: "BRIEF_AI_FAILED", message: String(error?.message || error) }, "deterministic");
-    });
+      if (provider === "byo") {
+        const own = await phraseBriefWithOwnAi(brief, audit);
+        return own.ok ? { ...own, source: "byo" } : own;
+      }
+      return { ok: false, code: "BRIEF_AI_NO_PROVIDER" };
+    }), BRIEF_AI_DEADLINE_MS, "BRIEF_AI_TIMEOUT")
+      .then((result) => settle(result, result.ok ? (result.source || "model") : "deterministic"))
+      .catch((error) => {
+        settle({ ok: false, code: "BRIEF_AI_FAILED", message: String(error?.message || error) }, "deterministic");
+      });
   }
 
   function renderBriefProvenance() {
     const kicker = siteAudit?.shadow?.querySelector(".brief-kicker .brief-source");
     if (!kicker) return;
-    const status = siteAudit.briefPhrasing?.status || "deterministic";
+    const state = siteAudit.briefPhrasing || {};
+    const status = state.status || "deterministic";
     kicker.textContent = BRIEF_PROVENANCE[status] || BRIEF_PROVENANCE.deterministic;
+    // Why, not just what. A brief that says only "grounded in scan evidence"
+    // after a failed request reads exactly like one where AI was never asked.
+    const reason = status === "unavailable" ? briefUnavailableReason(state.code) : "";
+    if (reason) kicker.textContent += ` · ${reason}`;
+    // The code is kept whether or not it is shown, so an operator who goes
+    // looking for why can still find it without it shouting from the page.
+    kicker.title = state.code
+      ? `${state.code}${state.message ? ": " + state.message : ""}${reason ? "" : " (no model is configured; this is not an error)"}`
+      : "";
+    // Working, and visibly so. Without this the pending state is a line of text
+    // that looks the same as a finished one.
+    const spinner = siteAudit.shadow.querySelector(".brief-kicker .work-dot");
+    if (spinner) spinner.hidden = status !== "pending";
   }
   function renderLumenBrief(groups, audit) {
     const shadow = siteAudit.shadow;
@@ -3985,9 +4642,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       title.textContent = group.title;
       const meta = document.createElement('span');
       meta.className = 'brief-item-meta';
-      const sev = document.createElement('span');
-      sev.className = `badge sev-${group.severity}`;
-      sev.textContent = group.severity;
+      const sev = severityPill(group.severity);
       const where = document.createElement('span');
       where.textContent = `${SITE_AUDIT_AREA_LABEL[group.area] || group.area} · ${group.leadConfirmed ? 'confirmed' : group.sitewide ? 'repeated pattern' : `${group.rules.length} pattern${group.rules.length === 1 ? '' : 's'}`}`;
       meta.append(sev, where);
@@ -4018,13 +4673,11 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     pane.innerHTML = '';
     const badges = document.createElement('div');
     badges.className = 'brief-badges';
-    const priority = document.createElement('span');
-    priority.className = `badge sev-${group.severity}`;
-    priority.textContent = `${group.severity} priority`;
+    const priority = severityPill(group.severity, `${sentenceCase(group.severity)} priority`);
     const evidence = document.createElement('span');
-    evidence.className = 'signal-badge';
-    evidence.dataset.kind = group.leadConfirmed ? 'confirmed' : 'early';
-    evidence.textContent = String(group.lead?.confidence || 'inferred');
+    evidence.className = 'pill signal-badge';
+    evidence.dataset.tone = group.leadConfirmed ? 'ok' : 'warn';
+    evidence.textContent = sentenceCase(group.lead?.confidence || 'inferred');
     badges.append(priority, evidence);
 
     const h = document.createElement('h4');
@@ -4168,7 +4821,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       note: total ? 'The HTTP status each fetched URL returned. Hover a row for the exact codes behind it.' : '',
       totalLabel: `${total} response${total === 1 ? '' : 's'}`,
       rows: statusRows,
-      empty: 'No response was recorded — no URL was fetched.'
+      empty: 'No response was recorded: no URL was fetched.'
     }));
 
     // Third in the same row rather than alone in a grid of its own: all three
@@ -4284,7 +4937,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         chip.hidden = false;
         dot.hidden = false;
         chip.dataset.state = !renderTotal ? 'unknown' : rendered === 0 ? 'unknown' : rendered < renderTotal ? 'attention' : 'ok';
-        num.textContent = !renderTotal ? '—' : rendered === 0 ? 'Not run' : rendered < renderTotal ? `${rendered}/${renderTotal}` : 'Done';
+        num.textContent = !renderTotal ? '–' : rendered === 0 ? 'Not run' : rendered < renderTotal ? `${rendered}/${renderTotal}` : 'Done';
         btn.title = rendered === 0
           ? 'Accessibility, JavaScript and performance have not been measured on this site'
           : `${rendered} of ${renderTotal} pages checked in this browser`;
@@ -4297,11 +4950,23 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       // Findings opens on a table of patterns, not of observations. Until the
       // groups have landed the raw count is the only honest answer.
       const patterns = Array.isArray(groups) ? groups.length : observations;
-      const plain = { findings: patterns, urls: discovered, links: linkTotal }[id];
-      if (plain === undefined) { chip.hidden = true; continue; }
+      // Structured data counts what is wrong, not how many items exist. The
+      // inventory size is a fact about the site; the number beside a destination
+      // is a reason to open it. Opportunities are deliberately excluded — they
+      // are inferences, and a badge in the navigation is read as a defect count.
+      const schemaFaults = siteAudit.schema ? siteAudit.schema.errors.length + siteAudit.schema.conflicts.length : null;
+      const plain = { findings: patterns, urls: discovered, links: linkTotal, schema: schemaFaults }[id];
+      if (plain === undefined || plain === null) { chip.hidden = true; continue; }
       chip.hidden = false;
       delete chip.dataset.state;
       dot.hidden = true;
+      if (id === 'schema') {
+        chip.dataset.state = plain ? 'attention' : 'ok';
+        dot.hidden = false;
+        btn.title = plain
+          ? `${plain} confirmed structured-data fault${plain === 1 ? '' : 's'}`
+          : 'No validation errors or entity conflicts in the items that were parsed';
+      }
       num.textContent = fmtCount(plain);
       if (id === "findings" && Array.isArray(groups) && observations !== patterns) {
         btn.title = `${observations} observations grouped into ${patterns} issue patterns`;
@@ -4391,7 +5056,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       blocks.appendChild(card);
     }
     shadow.querySelector('.browser-panel .section-findings-note').textContent =
-      rendered ? `From the ${rendered} page${rendered === 1 ? '' : 's'} opened in this browser.` : 'None yet — the pass has not run.';
+      rendered ? `From the ${rendered} page${rendered === 1 ? '' : 's'} opened in this browser.` : 'None yet: the pass has not run.';
     renderFindingRowsInto(
       shadow.querySelector('.browser-findings-list'),
       groups,
@@ -4646,7 +5311,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
               note: 'Collected independently of whether this crawl obeyed it.',
               rows: [
                 ['Present', robots.present === true ? `Yes (HTTP ${robots.status})` : robots.present === false ? `No (HTTP ${robots.status})` : 'Could not be read'],
-                ['Site-wide block', robots.present === true ? (robots.blocksEverything ? 'Yes — Disallow: / for all agents' : 'No') : null],
+                ['Site-wide block', robots.present === true ? (robots.blocksEverything ? 'Yes, Disallow: / for all agents' : 'No') : null],
                 ['Disallow rules', robots.present === true ? robots.disallowCount : null],
                 ['Sitemaps declared', robots.present === true ? (robots.sitemaps?.length ? robots.sitemaps.join(', ') : 'None') : null],
                 ['Confidence', robots.confidence]
@@ -4655,7 +5320,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             // "Not checked" was wrong twice over: robots.txt is fetched before
             // the crawl starts, and while a crawl runs the answer simply has
             // not been read back yet. A pending check is not a skipped one.
-            : readoutBlock({ title: 'robots.txt', rows: [['Present', siteAudit.audit?.status === 'running' ? 'Being fetched — this audit reads it before it crawls' : 'Not checked in this audit']] })
+            : readoutBlock({ title: 'robots.txt', rows: [['Present', siteAudit.audit?.status === 'running' ? 'Being fetched; this audit reads it before it crawls' : 'Not checked in this audit']] })
         ]
       };
     },
@@ -4818,7 +5483,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         ? {
           state: 'unknown',
           text: running
-            ? 'The sitemap is being fetched — this audit reads it before it crawls.'
+            ? 'The sitemap is being fetched. This audit reads it before it crawls.'
             : 'Site signals were not collected for this audit, so the presence of a sitemap was never established.'
         }
         : sitemap?.present
@@ -4845,7 +5510,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
             // An em-dash, never a zero: this comparison did not run.
             reconciled
               ? { label: 'Never reached', value: unreached, sub: 'listed but not crawlable' }
-              : { label: 'Never reached', value: '—', sub: 'not compared' },
+              : { label: 'Never reached', value: '–', sub: 'not compared' },
             { label: 'Blocked by robots', value: blocked, sub: 'listed and disallowed' }
           ]
           : [],
@@ -4857,11 +5522,11 @@ if (!globalThis.__WEB_QA_CONTENT__) {
                 ['Declared in robots.txt', sitemap.declaredInRobots ? 'Yes' : 'No'],
                 ['Read from', sitemap.source || 'Nothing could be read'],
                 ['URLs read', sitemap.urlCount],
-                ['Truncated', sitemap.truncated ? 'Yes — longer than this audit reads' : 'No'],
-                ['Compared against the crawl', reconciled ? 'Yes' : `No — ${withheldReason || 'nothing was read to compare'}`],
+                ['Truncated', sitemap.truncated ? 'Yes, longer than this audit reads' : 'No'],
+                ['Compared against the crawl', reconciled ? 'Yes' : `No: ${withheldReason || 'nothing was read to compare'}`],
                 ['Confidence', sitemap.confidence]
               ]
-              : [['Checked', running ? 'Not yet — the crawl is still running' : 'No']]
+              : [['Checked', running ? 'Not yet, the crawl is still running' : 'No']]
           }),
           readoutBlock({
             title: 'What robots.txt declares',
@@ -4888,7 +5553,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       const opener = ruleInstances(/^security\.blank-opener/);
       const denom = fetched ? `of ${fetched} fetched pages` : '';
       const coverage = fetched
-        ? { state: (hsts || frame || mixed || insecureHop || forms) ? 'attention' : 'ok', text: `Taken from the HTTP responses of <b>${fetched}</b> fetched page${fetched === 1 ? '' : 's'}. Header facts are confirmed — no JavaScript can change them. TLS protocol and cipher inspection is not part of this audit.` }
+        ? { state: (hsts || frame || mixed || insecureHop || forms) ? 'attention' : 'ok', text: `Taken from the HTTP responses of <b>${fetched}</b> fetched page${fetched === 1 ? '' : 's'}. Header facts are confirmed: no JavaScript can change them. TLS protocol and cipher inspection is not part of this audit.` }
         : { state: 'unknown', text: 'No page was fetched, so no response header was read.' };
       return {
         coverage,
@@ -5046,7 +5711,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         // This is what makes the case for running it — an operator can see
         // which measurements are on offer — and an em-dash cannot be misread
         // as a measurement of zero.
-        tiles: tiles.map((t) => ({ label: t.label, value: '—', sub: 'not measured yet' })),
+        tiles: tiles.map((t) => ({ label: t.label, value: '–', sub: 'not measured yet' })),
         blocks: () => []
       };
     }
@@ -5166,14 +5831,14 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     if (pending > 0) {
       reasons.push(running
         ? `<b>${pending}</b> still to fetch`
-        : `<b>${pending}</b> never fetched${limitStopped ? ` — the ${limit}-page limit stopped the crawl first` : ''}`);
+        : `<b>${pending}</b> never fetched${limitStopped ? `; the ${limit}-page limit stopped the crawl first` : ''}`);
     }
     if (errored > 0) reasons.push(`<b>${errored}</b> could not be fetched`);
     if (skipped > 0) reasons.push(`<b>${skipped}</b> skipped by robots.txt`);
 
     const lead = running
-      ? `<b>Crawl in progress</b> — <b>${fetched}</b> of <b>${discovered}</b> discovered pages fetched so far.`
-      : `<b>Partial crawl</b> — <b>${fetched}</b> of <b>${discovered}</b> discovered pages were fetched.`;
+      ? `<b>Crawl in progress</b>: <b>${fetched}</b> of <b>${discovered}</b> discovered pages fetched so far.`
+      : `<b>Partial crawl</b>: <b>${fetched}</b> of <b>${discovered}</b> discovered pages were fetched.`;
     const tail = running
       ? 'Every count on this screen describes the pages fetched so far, not the whole site.'
       : `Every count on this screen describes those <b>${fetched}</b> page${fetched === 1 ? '' : 's'}, not the whole site.`;
@@ -5245,6 +5910,1716 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     return box;
   }
 
+
+  /* Structured data ---------------------------------------------------------
+   *
+   * The crawl records the items; packages/findings/schema-validation.js decides
+   * what is wrong with them. This renders that, and its only real job is to keep
+   * three kinds of statement from blurring into one list of "issues":
+   *
+   *   errors        faults in items we parsed          confirmed
+   *   conflicts     the site disagreeing with itself   confirmed
+   *   opportunities markup we did not see              inferred, not a defect
+   *
+   * The last one is where a schema tool normally starts lying. An opportunity is
+   * rendered in its own lens, labelled inferred, worded as something to confirm,
+   * and never counted in the invalid figure.
+   */
+  const SCHEMA_LENSES = [
+    { id: 'validation', label: 'Validation' },
+    { id: 'types', label: 'Schema types' },
+    { id: 'pages', label: 'Pages' },
+    { id: 'opportunities', label: 'Opportunities' }
+  ];
+
+  async function loadSiteAuditSchema() {
+    const shadow = siteAudit.shadow;
+    const body = shadow.querySelector('.schema-body');
+    if (!siteAudit.schema) {
+      body.innerHTML = '<p class="hint">Reading the structured-data inventory…</p>';
+      const r = await chrome.runtime.sendMessage({ type: 'SITE_AUDIT_SCHEMA', auditId: siteAudit.auditId }).catch(() => null);
+      if (!siteAudit) return;
+      if (!r?.schema) {
+        body.innerHTML = '<p class="hint">The structured-data inventory could not be read just now.</p>';
+        return;
+      }
+      siteAudit.schema = r.schema;
+    }
+    renderSchemaSection();
+  }
+
+  function renderSchemaSection() {
+    const shadow = siteAudit.shadow;
+    const s = siteAudit.schema;
+    if (!s) return;
+    const lens = siteAudit.schemaLens || 'validation';
+
+    // Scope before any count that depends on it, the same order the Overview uses.
+    const scope = shadow.querySelector('.schema-scope');
+    const truncatedNote = s.truncatedPages
+      ? ` ${s.truncatedPages} page${s.truncatedPages === 1 ? ' carried' : 's carried'} more items than the per-page limit and ${s.truncatedPages === 1 ? 'is' : 'are'} recorded as truncated.`
+      : '';
+    scope.textContent = `Parsed from ${s.pagesParsed} fetched page${s.pagesParsed === 1 ? '' : 's'}. Pages the crawl never fetched carry no structured-data evidence either way and are not counted here.${truncatedNote}`;
+
+    const invalidItems = s.errors.length;
+    const tiles = [
+      { label: 'Pages with schema', value: `${s.pagesWithSchema} / ${s.pagesParsed}`, sub: s.pagesParsed ? `${Math.round((s.pagesWithSchema / s.pagesParsed) * 100)}% of parsed pages` : '' },
+      { label: 'Items detected', value: String(s.itemCount), sub: `${s.types.length} schema type${s.types.length === 1 ? '' : 's'}` },
+      { label: 'Validation errors', value: String(invalidItems), sub: invalidItems ? 'confirmed faults in parsed items' : 'none in what was parsed' },
+      { label: 'Entity conflicts', value: String(s.conflicts.length), sub: s.conflicts.length ? 'the site disagreeing with itself' : 'identities agree' },
+      // Opportunities get a tile of their own rather than being folded into a
+      // total, because they are not defects and a combined figure would make
+      // correct markup look broken.
+      { label: 'Opportunities', value: String(s.opportunities.length), sub: 'inferred · confirm before acting' }
+    ];
+    const grid = shadow.querySelector('.schema-stats');
+    grid.innerHTML = '';
+    for (const tile of tiles) {
+      const cell = document.createElement('div');
+      const dt = document.createElement('dt');
+      dt.textContent = tile.label;
+      const dd = document.createElement('dd');
+      dd.textContent = tile.value;
+      cell.append(dt, dd);
+      if (tile.sub) {
+        const sub = document.createElement('span');
+        sub.className = 'stat-sub';
+        sub.textContent = tile.sub;
+        cell.appendChild(sub);
+      }
+      grid.appendChild(cell);
+    }
+
+    const conflictCard = shadow.querySelector('.schema-conflicts');
+    const conflictList = shadow.querySelector('.schema-conflict-list');
+    conflictCard.hidden = !s.conflicts.length;
+    conflictList.innerHTML = '';
+    for (const conflict of s.conflicts) {
+      const li = document.createElement('li');
+      li.className = 'schema-conflict';
+      const head = document.createElement('div');
+      head.className = 'schema-conflict-head';
+      const title = document.createElement('b');
+      title.textContent = conflict.title;
+      const pill = document.createElement('span');
+      pill.className = 'pill';
+      pill.dataset.tone = 'critical';
+      pill.textContent = 'Conflict';
+      head.append(title, pill);
+      const detail = document.createElement('p');
+      detail.className = 'hint';
+      detail.textContent = conflict.detail;
+      li.append(head, detail);
+      for (const variant of conflict.variants || []) {
+        const row = document.createElement('div');
+        row.className = 'schema-variant';
+        const id = document.createElement('code');
+        id.textContent = variant.id;
+        const count = document.createElement('span');
+        count.textContent = `${variant.pages} page${variant.pages === 1 ? '' : 's'}`;
+        row.append(id, count);
+        li.appendChild(row);
+      }
+      conflictList.appendChild(li);
+    }
+
+    const tabs = shadow.querySelector('.schema-tabs');
+    tabs.innerHTML = '';
+    for (const entry of SCHEMA_LENSES) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `fx-tab${entry.id === lens ? ' active' : ''}`;
+      btn.textContent = entry.label;
+      btn.addEventListener('click', () => { siteAudit.schemaLens = entry.id; renderSchemaSection(); });
+      tabs.appendChild(btn);
+    }
+
+    const body = shadow.querySelector('.schema-body');
+    body.innerHTML = '';
+    if (lens === 'validation') schemaValidationLens(body, s);
+    else if (lens === 'types') schemaTypesLens(body, s);
+    else if (lens === 'pages') schemaPagesLens(body, s);
+    else schemaOpportunityLens(body, s);
+  }
+
+  /** One row per distinct fault, with the pages behind it — the same grouping
+   * the findings inspector uses, because forty pages sharing one broken template
+   * is one job rather than forty. */
+  function schemaValidationLens(body, s) {
+    if (!s.errors.length) {
+      body.appendChild(schemaEmpty(
+        'No validation errors in the items that were parsed.',
+        `${s.itemCount} item${s.itemCount === 1 ? '' : 's'} across ${s.pagesWithSchema} page${s.pagesWithSchema === 1 ? '' : 's'} were checked. This is a clean result for what the crawl could read, not a statement about markup added by JavaScript.`
+      ));
+      return;
+    }
+    const groups = new Map();
+    for (const error of s.errors) {
+      const key = `${error.code}::${error.type || ''}::${error.property || ''}`;
+      if (!groups.has(key)) groups.set(key, { ...error, urls: [] });
+      groups.get(key).urls.push(error.url);
+    }
+    const rows = [...groups.values()].sort((a, b) => b.urls.length - a.urls.length);
+
+    const table = document.createElement('table');
+    table.className = 'data-table schema-table';
+    table.innerHTML = '<thead><tr><th>Validation finding</th><th>Type</th><th class="col-num">Pages</th><th class="col-status">Evidence</th></tr></thead>';
+    const tbody = document.createElement('tbody');
+    for (const row of rows) {
+      const tr = document.createElement('tr');
+      const first = document.createElement('td');
+      const title = document.createElement('button');
+      title.type = 'button';
+      title.className = 'schema-open';
+      title.textContent = row.title;
+      title.title = `Open ${row.code} in Findings`;
+      title.addEventListener('click', () => {
+        siteAudit.findingsSearch = row.code;
+        switchSiteAuditTab('findings');
+      });
+      const detail = document.createElement('span');
+      detail.className = 'schema-detail';
+      detail.textContent = row.detail;
+      first.append(title, detail);
+      const type = document.createElement('td');
+      type.textContent = row.type || '–';
+      const pages = document.createElement('td');
+      pages.className = 'col-num';
+      pages.textContent = String(new Set(row.urls).size);
+      const status = document.createElement('td');
+      status.className = 'col-status';
+      const pill = document.createElement('span');
+      pill.className = 'pill cap';
+      pill.dataset.tone = 'critical';
+      pill.textContent = row.confidence;
+      status.appendChild(pill);
+      tr.append(first, type, pages, status);
+      tbody.appendChild(tr);
+
+      const detailRow = document.createElement('tr');
+      detailRow.className = 'schema-urls';
+      const cell = document.createElement('td');
+      cell.colSpan = 4;
+      const list = document.createElement('div');
+      list.className = 'url-list';
+      for (const url of [...new Set(row.urls)].slice(0, 25)) {
+        const a = document.createElement('a');
+        a.className = 'url-item';
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = shortUrl(url);
+        a.title = url;
+        list.appendChild(a);
+      }
+      cell.appendChild(list);
+      detailRow.appendChild(cell);
+      tbody.appendChild(detailRow);
+    }
+    table.appendChild(tbody);
+    body.appendChild(table);
+  }
+
+  function schemaTypesLens(body, s) {
+    if (!s.types.length) {
+      body.appendChild(schemaEmpty('No schema.org items were parsed.', 'The crawl reads JSON-LD and microdata from the served HTML. Markup added by JavaScript is not visible to it.'));
+      return;
+    }
+    const table = document.createElement('table');
+    table.className = 'data-table schema-table';
+    table.innerHTML = '<thead><tr><th>Type</th><th class="col-num">Items</th><th class="col-num">Pages</th><th class="col-status">Format</th></tr></thead>';
+    const tbody = document.createElement('tbody');
+    for (const type of s.types) {
+      const tr = document.createElement('tr');
+      const name = document.createElement('td');
+      name.textContent = type.type;
+      const items = document.createElement('td');
+      items.className = 'col-num';
+      items.textContent = String(type.items);
+      const pages = document.createElement('td');
+      pages.className = 'col-num';
+      pages.textContent = String(type.pages);
+      const format = document.createElement('td');
+      format.className = 'col-status';
+      for (const f of type.formats) {
+        const pill = document.createElement('span');
+        pill.className = 'pill';
+        pill.textContent = f;
+        format.appendChild(pill);
+      }
+      tr.append(name, items, pages, format);
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    body.appendChild(table);
+  }
+
+  function schemaPagesLens(body, s) {
+    const byPage = new Map();
+    for (const error of s.errors) byPage.set(error.url, (byPage.get(error.url) || 0) + 1);
+    const table = document.createElement('table');
+    table.className = 'data-table schema-table';
+    table.innerHTML = '<thead><tr><th>Page</th><th class="col-num">Errors</th></tr></thead>';
+    const tbody = document.createElement('tbody');
+    const rows = [...byPage.entries()].sort((a, b) => b[1] - a[1]);
+    if (!rows.length) {
+      body.appendChild(schemaEmpty('No page carries a validation error.', 'Use the Schema types view to see what each page publishes.'));
+      return;
+    }
+    for (const [url, count] of rows) {
+      const tr = document.createElement('tr');
+      const first = document.createElement('td');
+      const a = document.createElement('a');
+      a.className = 'url-item';
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = shortUrl(url);
+      a.title = url;
+      first.appendChild(a);
+      const n = document.createElement('td');
+      n.className = 'col-num';
+      n.textContent = String(count);
+      tr.append(first, n);
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    body.appendChild(table);
+  }
+
+  /** The lens that has to work hardest not to overclaim. */
+  function schemaOpportunityLens(body, s) {
+    const note = document.createElement('p');
+    note.className = 'hint schema-opportunity-note';
+    note.textContent = 'These are inferences, not defects. The crawl does not run JavaScript, so markup it did not see may still be on the page. Confirm on one page before acting on any of them.';
+    body.appendChild(note);
+    if (!s.opportunities.length) {
+      body.appendChild(schemaEmpty('No template-level opportunities were inferred.', 'An opportunity is only raised where the site has already established the pattern elsewhere.'));
+      return;
+    }
+    const list = document.createElement('ul');
+    list.className = 'schema-opportunities';
+    for (const opportunity of s.opportunities) {
+      const li = document.createElement('li');
+      const head = document.createElement('div');
+      head.className = 'schema-conflict-head';
+      const title = document.createElement('b');
+      title.textContent = opportunity.title;
+      const pill = document.createElement('span');
+      pill.className = 'pill cap';
+      pill.dataset.tone = 'warn';
+      pill.textContent = opportunity.confidence;
+      head.append(title, pill);
+      const detail = document.createElement('p');
+      detail.className = 'hint';
+      detail.textContent = opportunity.detail;
+      li.append(head, detail);
+      if (opportunity.code) {
+        const toPlan = document.createElement('button');
+        toPlan.type = 'button';
+        toPlan.className = 'link-btn schema-to-plan';
+        toPlan.textContent = 'Show this in the plan';
+        toPlan.addEventListener('click', () => openPlanFor(opportunity.code));
+        li.appendChild(toPlan);
+      }
+      if (opportunity.urls?.length) {
+        const list2 = document.createElement('div');
+        list2.className = 'url-list';
+        for (const url of opportunity.urls.slice(0, 15)) {
+          const a = document.createElement('a');
+          a.className = 'url-item';
+          a.href = url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = shortUrl(url);
+          a.title = url;
+          list2.appendChild(a);
+        }
+        li.appendChild(list2);
+      }
+      list.appendChild(li);
+    }
+    body.appendChild(list);
+  }
+
+  /** An empty state that says what was checked, so "none" cannot be read as
+   * "not looked at". */
+  function schemaEmpty(headline, detail) {
+    const box = document.createElement('div');
+    box.className = 'schema-empty';
+    const b = document.createElement('b');
+    b.textContent = headline;
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.textContent = detail;
+    box.append(b, p);
+    return box;
+  }
+
+
+  /* Optimize -----------------------------------------------------------------
+   *
+   * The sequenced plan. Two things this surface has to keep saying, because both
+   * are easy for a reader to assume wrongly:
+   *
+   *   - The order is a dependency sequence, not a severity ranking. Group 1 is
+   *     first because the rest is measured on pages that resolve, not because it
+   *     matters most. Each group states what it unblocks, and the last one says
+   *     in as many words that being last is not being least important.
+   *   - Every action names the rules, counts and confidence behind it. A plan
+   *     whose recommendations cannot be traced back to findings is advice, and
+   *     this product does not give advice it cannot show the evidence for.
+   */
+  const OPTIMIZE_LENSES = [
+    { id: 'priorities', label: 'Priorities' },
+    { id: 'model', label: 'Site model' },
+    { id: 'trail', label: 'Evidence trail' }
+  ];
+
+
+  /* Optimize wording ---------------------------------------------------------
+   *
+   * The plan's sequence, counts, severities and confidence are decided before a
+   * model is asked anything, and are not on offer. What the model may do is word
+   * the plan for this site instead of leaving the generic headline every audit
+   * would get — the same contract the Lumen brief already runs under, validated
+   * by the same function rather than by a second copy of the rules.
+   *
+   * The plan is shaped into the brief's envelope to make that reuse literal: one
+   * set of phrasing rules, one validator, one definition of an invented number.
+   */
+  function planEnvelope(plan) {
+    const areas = plan.priorities.map((priority, index) => ({
+      id: String(priority.id),
+      rank: index + 1,
+      label: String(priority.title),
+      deterministicAction: String(priority.title),
+      severity: String(priority.severity || 'info'),
+      confidence: String(priority.confidence || 'inferred'),
+      leadRule: String(priority.actions?.[0]?.evidence?.ruleIds?.[0] || ''),
+      // Scope is now measured rather than assumed. The model uses it to decide
+      // whether a phase reads as one edit or as many, which was the single
+      // thing it most often got wrong while this was hardcoded false.
+      sitewide: priority.actions.some((a) => (a.changes || []).some((c) => c.scope === 'sitewide')),
+      changes: Number(priority.changes || 0),
+      journeyFailure: priority.id === 'integrity',
+      pages: Math.max(0, ...priority.actions.map((a) => Number(a.evidence.pages || 0))),
+      leadPages: Number(priority.actions?.[0]?.evidence?.pages || 0),
+      instances: Number(priority.findings || 0),
+      ruleCount: priority.actions.reduce((n, a) => n + a.evidence.ruleIds.length, 0)
+    }));
+    return {
+      scope: {
+        fetched: plan.coverage.fetched,
+        discovered: plan.coverage.discovered,
+        neverFetched: plan.coverage.uncrawled,
+        partial: plan.coverage.uncrawled > 0
+      },
+      totalInstances: Number(plan.totals.actionableFindings || 0),
+      deterministicSummary: String(siteAudit.shadow.querySelector('.optimize-headline')?.textContent || ''),
+      areas
+    };
+  }
+
+  const PLAN_PROVENANCE = {
+    pending: 'sequenced from scan evidence · rewriting',
+    deterministic: 'sequenced from scan evidence, written by Lumen',
+    model: 'sequence from scan evidence · written by the model on this device',
+    byo: 'sequence from scan evidence · written by your model',
+    unavailable: 'sequenced from scan evidence, written by Lumen'
+  };
+
+  async function phrasePlanOnDevice(plan) {
+    const api = globalThis.LumenBriefPhrasing;
+    const model = globalThis.LanguageModel;
+    if (!api?.validateBriefPhrasing || !model?.availability) return { ok: false, code: 'LOCAL_AI_API_UNAVAILABLE' };
+    const envelope = planEnvelope(plan);
+    if (!envelope.areas.length) return { ok: false, code: 'BRIEF_AI_NOTHING_TO_SAY' };
+
+    let status = 'unavailable';
+    try { status = await model.availability({ expectedInputs: [{ type: 'text' }] }); }
+    catch { return { ok: false, code: 'LOCAL_AI_PROBE_FAILED' }; }
+    // Same refusal as the brief: "downloadable" means Chrome would fetch a
+    // multi-gigabyte model, which an audit does not get to trigger on the
+    // operator's behalf.
+    if (status !== 'available') return { ok: false, code: 'LOCAL_AI_' + String(status).toUpperCase() };
+
+    const prompt = briefPromptFor(envelope);
+    let session = null;
+    try {
+      session = await model.create({
+        expectedInputs: [{ type: 'text' }],
+        initialPrompts: [{ role: 'system', content: prompt.system }]
+      });
+      const raw = await session.prompt(prompt.user);
+      let parsed = null;
+      try { parsed = JSON.parse(String(raw).replace(/^[^{]*/, '').replace(/[^}]*$/, '')); }
+      catch { return { ok: false, code: 'BRIEF_AI_REJECTED', message: 'the reply was not JSON' }; }
+      const verdict = api.validateBriefPhrasing(parsed, envelope);
+      if (!verdict.ok) return { ok: false, code: 'BRIEF_AI_REJECTED', message: verdict.reason || '' };
+      return { ok: true, phrasing: verdict.value || parsed };
+    } catch (error) {
+      return { ok: false, code: 'LOCAL_AI_FAILED', message: String(error?.message || error) };
+    } finally {
+      try { session?.destroy?.(); } catch {}
+    }
+  }
+
+  /** Words only. The sequence, the counts and the labels are re-read from the
+   * plan afterwards, so an accepted phrasing cannot move a priority even if the
+   * validator were to miss something. */
+  function applyPlanPhrasing(plan, phrasing) {
+    if (phrasing?.summary) plan.phrasedSummary = String(phrasing.summary);
+    for (const area of phrasing?.areas || []) {
+      const priority = plan.priorities.find((p) => p.id === area.id);
+      if (!priority) continue;
+      if (area.action) priority.phrasedTitle = String(area.action);
+      if (area.rationale) priority.phrasedSummary = String(area.rationale);
+    }
+  }
+
+  /**
+   * The plan, worded by the operator's own endpoint.
+   *
+   * The Optimize section had no path to it at all: it asked the built-in model
+   * and nothing else, so on every machine where that reports unavailable the
+   * plan could never be worded however the endpoint was configured. Same
+   * envelope, same prompt, same gate as the brief; only the transport differs.
+   */
+  async function phrasePlanWithOwnAi(plan) {
+    const api = globalThis.LumenBriefPhrasing;
+    if (!api?.validateBriefPhrasing) return { ok: false, code: 'BRIEF_AI_GATE_MISSING' };
+    const envelope = planEnvelope(plan);
+    if (!envelope.areas.length) return { ok: false, code: 'BRIEF_AI_NOTHING_TO_SAY' };
+    const prompt = briefPromptFor(envelope);
+    let response;
+    try {
+      response = await chrome.runtime.sendMessage({ type: 'BRIEF_AI_PHRASE', provider: 'byo', system: prompt.system, user: prompt.user });
+    } catch (error) {
+      return { ok: false, code: 'BYO_AI_FAILED', message: String(error?.message || error) };
+    }
+    if (!response?.ok) return { ok: false, code: response?.code || 'BYO_AI_FAILED', message: response?.message || '' };
+    let parsed = null;
+    try { parsed = JSON.parse(String(response.text).replace(/^[^{]*/, '').replace(/[^}]*$/, '')); }
+    catch { return { ok: false, code: 'BRIEF_AI_REJECTED', message: 'the reply was not JSON' }; }
+    const verdict = api.validateBriefPhrasing(parsed, envelope);
+    if (!verdict.ok) return { ok: false, code: 'BRIEF_AI_REJECTED', message: verdict.reason || verdict.message || '' };
+    return { ok: true, phrasing: verdict.value || parsed };
+  }
+
+  async function requestPlanPhrasing(plan) {
+    siteAudit.planPhrasing = { status: 'pending' };
+    renderOptimizeSection();
+    const result = await withDeadline(
+      briefPhrasingProvider().then(async ({ provider }) => {
+        if (provider === 'off') return { ok: false, code: 'BRIEF_AI_OFF' };
+        if (provider === 'byo') {
+          const own = await phrasePlanWithOwnAi(plan);
+          return own.ok ? { ...own, source: 'byo' } : own;
+        }
+        if (provider === 'on-device') {
+          const local = await phrasePlanOnDevice(plan);
+          return local.ok ? { ...local, source: 'model' } : local;
+        }
+        return { ok: false, code: 'BRIEF_AI_NO_PROVIDER' };
+      }),
+      BRIEF_AI_DEADLINE_MS,
+      'BRIEF_AI_TIMEOUT'
+    ).catch((error) => ({ ok: false, code: 'BRIEF_AI_FAILED', message: String(error?.message || error) }));
+    if (!siteAudit || siteAudit.plan !== plan) return;
+    if (result.ok) {
+      applyPlanPhrasing(plan, result.phrasing);
+      siteAudit.planPhrasing = { status: result.source || 'model' };
+    } else {
+      siteAudit.planPhrasing = { status: 'unavailable', code: result.code, message: result.message || '' };
+    }
+    renderOptimizeSection();
+  }
+
+  async function loadSiteAuditOptimize() {
+    if (siteAudit.plan) return renderOptimizeSection();
+    if (siteAudit.planBuilding) return;
+    renderOptimizeIdle();
+  }
+
+  /**
+   * Before the plan exists.
+   *
+   * This was a button in an empty page, which is the shape of a screen that has
+   * nothing to say. It has plenty to say: the plan is about to be built from
+   * evidence this audit already holds, and the operator can see exactly what
+   * that is before spending anything on it.
+   *
+   * It also asks for the two things the crawl cannot know. Only two, and each
+   * one demonstrably moves the output — a field that changes nothing is fake
+   * configuration, and the product does not ship those. Whatever is set here is
+   * labelled as stated by the operator wherever it appears afterwards: it is not
+   * evidence, carries no scanner confidence, and can never create, remove or
+   * re-rate a finding.
+   */
+  function renderOptimizeIdle() {
+    const shadow = siteAudit.shadow;
+    shadow.querySelector('.optimize-stats').innerHTML = '';
+    const why = shadow.querySelector('.optimize-why');
+    why.innerHTML = '';
+    // An emptied card is still a bordered box. Hide it rather than draw one.
+    why.hidden = true;
+    shadow.querySelector('.optimize-tabs').innerHTML = '';
+    shadow.querySelector('.optimize-limits').hidden = true;
+    const body = shadow.querySelector('.optimize-body');
+    body.innerHTML = '';
+
+    const audit = siteAudit.audit || {};
+    const counts = audit.urlCounts || {};
+    const fetched = Number(counts.fetched || 0);
+    const discovered = Object.values(counts).reduce((n, v) => n + Number(v || 0), 0);
+    const groups = siteAudit.rawFindingGroups || [];
+    const findings = groups.reduce((n, g) => n + Number(g.instances || 0), 0);
+    const rp = audit.renderProgress || {};
+    const schema = siteAudit.schema;
+    const linkTotal = Object.values(audit.linkCounts || {}).reduce((n, v) => n + Number(v || 0), 0);
+    // A page the crawl could not turn into evidence: queued when it stopped,
+    // errored, or skipped. The plan is built from what is left.
+    const gaps = ['queued', 'error', 'skipped'].reduce((n, k) => n + Number(counts[k] || 0), 0);
+
+    const grid = document.createElement('div');
+    grid.className = 'optimize-inputs';
+
+    // Column one: what is already in hand. Every row is a count this audit can
+    // defend, so the screen is made of evidence rather than of an explanation.
+    const have = document.createElement('section');
+    have.className = 'optimize-input-card';
+    have.appendChild(inputCardHead('Evidence this plan will use', 'Collected by the crawl. Nothing here needs anything from you.'));
+    const haveList = document.createElement('dl');
+    haveList.className = 'optimize-facts';
+    const rows = [
+      ['Findings', findings ? `${findings} across ${groups.length} pattern${groups.length === 1 ? '' : 's'}` : 'none recorded', Boolean(findings)],
+      ['Pages read', discovered ? `${fetched} of ${discovered} discovered` : `${fetched}`, fetched > 0],
+      ['Structured data', schema ? (schema.itemCount ? `${schema.itemCount} items · ${schema.errors.length + schema.conflicts.length} faults` : 'none parsed') : 'not read yet', Boolean(schema?.itemCount)],
+      ['Links checked', linkTotal ? String(linkTotal) : 'none recorded', linkTotal > 0],
+      ['Browser checks', Number(rp.total || 0) ? (Number(rp.rendered || 0) ? `${rp.rendered} of ${rp.total} pages` : 'not run') : 'not run', Number(rp.rendered || 0) > 0],
+      ['Coverage gaps', gaps ? `${gaps} page${gaps === 1 ? '' : 's'} never read` : 'none', gaps === 0],
+      // Off-site research is a row rather than an omission. A plan that simply
+      // leaves the question out implies it was considered and answered.
+      ['Off-site research', 'not connected', false]
+    ];
+    for (const [label, value, ok] of rows) {
+      const dt = document.createElement('dt');
+      dt.textContent = label;
+      const dd = document.createElement('dd');
+      dd.textContent = value;
+      if (!ok) dd.classList.add('optimize-fact-absent');
+      haveList.append(dt, dd);
+    }
+    have.appendChild(haveList);
+
+    // Column two: what only the operator can answer.
+    const ask = document.createElement('section');
+    ask.className = 'optimize-input-card';
+    ask.appendChild(inputCardHead('What the crawl cannot know', 'Optional. Both are recorded as your statement, never as scan evidence, and neither changes a finding.'));
+
+    const readModel = schema ? null : null;
+    const inputs = siteAudit.planInputs || { siteType: '', templateAccess: '' };
+
+    const typeField = document.createElement('label');
+    typeField.className = 'field';
+    const typeLabel = document.createElement('span');
+    typeLabel.textContent = 'What kind of site is this?';
+    const typeSelect = document.createElement('select');
+    for (const option of ['', 'Legal practice', 'Medical practice', 'Dental practice', 'Home services',
+      'Professional services', 'Financial services', 'Real estate', 'Retail', 'Ecommerce', 'Food service',
+      'Education', 'Publishing', 'Recruitment', 'Other']) {
+      const o = document.createElement('option');
+      o.value = option;
+      o.textContent = option || 'Let the crawl decide';
+      if (option === inputs.siteType) o.selected = true;
+      typeSelect.appendChild(o);
+    }
+    typeSelect.addEventListener('change', () => {
+      siteAudit.planInputs = { ...(siteAudit.planInputs || {}), siteType: typeSelect.value };
+    });
+    const typeHint = document.createElement('span');
+    typeHint.className = 'hint';
+    typeHint.textContent = 'Lumen reads this from published structured data where it can. Most sites publish an Organization, which names no industry, so it usually cannot.';
+    typeField.append(typeLabel, typeSelect, typeHint);
+
+    const accessField = document.createElement('label');
+    accessField.className = 'field';
+    const accessLabel = document.createElement('span');
+    accessLabel.textContent = 'Can shared templates be edited this cycle?';
+    const accessSelect = document.createElement('select');
+    for (const [value, text] of [['', 'Assume yes'], ['open', 'Yes, templates can be changed'], ['blocked', 'No, templates are frozen']]) {
+      const o = document.createElement('option');
+      o.value = value;
+      o.textContent = text;
+      if (value === inputs.templateAccess) o.selected = true;
+      accessSelect.appendChild(o);
+    }
+    accessSelect.addEventListener('change', () => {
+      siteAudit.planInputs = { ...(siteAudit.planInputs || {}), templateAccess: accessSelect.value };
+    });
+    const accessHint = document.createElement('span');
+    accessHint.className = 'hint';
+    accessHint.textContent = 'Template fixes are sequenced early because one edit changes many pages. If they are frozen, that ordering is advice you cannot act on, so the plan moves them and says you asked for it.';
+    accessField.append(accessLabel, accessSelect, accessHint);
+
+    ask.append(typeField, accessField);
+    grid.append(have, ask);
+    body.appendChild(grid);
+
+    const actions = document.createElement('div');
+    actions.className = 'actions optimize-build-actions';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn primary optimize-start-btn';
+    btn.textContent = 'Build the plan';
+    btn.addEventListener('click', () => buildOptimizePlanNow());
+    const note = document.createElement('p');
+    note.className = 'hint';
+    note.textContent = findings
+      ? 'Clusters the findings by technical cause, sequences them by dependency, then asks the on-device model to word the result. The sequence is decided from the evidence either way.'
+      : 'This audit recorded no findings that ask for a change, so the plan will be empty. That is a result, not a failure.';
+    actions.append(btn, note);
+    body.appendChild(actions);
+    void readModel;
+  }
+
+  function inputCardHead(title, detail) {
+    const head = document.createElement('div');
+    const h = document.createElement('h3');
+    h.textContent = title;
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.textContent = detail;
+    head.append(h, p);
+    return head;
+  }
+
+
+  async function buildOptimizePlanNow() {
+    const shadow = siteAudit.shadow;
+    const body = shadow.querySelector('.optimize-body');
+    siteAudit.planBuilding = true;
+    body.innerHTML = '';
+    const working = document.createElement('div');
+    working.className = 'optimize-start';
+    const label = document.createElement('b');
+    label.className = 'optimize-working';
+    label.textContent = 'Sequencing the findings';
+    const dots = document.createElement('span');
+    dots.className = 'work-dot';
+    dots.setAttribute('aria-hidden', 'true');
+    dots.appendChild(document.createElement('i'));
+    label.appendChild(dots);
+    const note = document.createElement('p');
+    note.className = 'hint';
+    note.textContent = 'Clustering by technical cause, then ordering by dependency.';
+    working.append(label, note);
+    body.appendChild(working);
+
+    const stated = siteAudit.planInputs || {};
+    const r = await chrome.runtime.sendMessage({
+      type: 'SITE_AUDIT_OPTIMIZE', auditId: siteAudit.auditId,
+      siteType: stated.siteType || '', templateAccess: stated.templateAccess || ''
+    }).catch(() => null);
+    if (!siteAudit) return;
+    siteAudit.planBuilding = false;
+    if (!r?.plan) {
+      body.innerHTML = '';
+      const fail = document.createElement('div');
+      fail.className = 'optimize-start';
+      const b = document.createElement('b');
+      b.textContent = 'The plan could not be built just now.';
+      const again = document.createElement('button');
+      again.type = 'button';
+      again.className = 'btn optimize-start-btn';
+      again.textContent = 'Try again';
+      again.addEventListener('click', () => buildOptimizePlanNow());
+      fail.append(b, again);
+      body.appendChild(fail);
+      return;
+    }
+    siteAudit.plan = r.plan;
+    renderOptimizeSection();
+    // The wording pass runs after the plan is on screen, never in front of it:
+    // the sequence is the product, and holding it back behind an optional model
+    // would make an unavailable model look like a broken audit.
+    requestPlanPhrasing(siteAudit.plan);
+  }
+
+  function renderOptimizeSection() {
+    const shadow = siteAudit.shadow;
+    const plan = siteAudit.plan;
+    if (!plan) return;
+    const lens = siteAudit.optimizeLens || 'priorities';
+
+    // Coverage first, before any number that depends on it.
+    const banner = shadow.querySelector('.optimize-limits');
+    const limitText = shadow.querySelector('.optimize-limit-text');
+    // The workspace already carries a partial-crawl banner above this one, and
+    // stacking two bordered cards that both say "the crawl stopped early" spent
+    // the plan's opening on a point already made. Only limits the reader has not
+    // already been told about earn a banner here.
+    const scopeBanner = shadow.querySelector('.scope-banner');
+    const scopeStated = Boolean(scopeBanner && !scopeBanner.hidden);
+    const limits = plan.coverage.limits.filter((l) => !(scopeStated && l.code.startsWith('pages')));
+    if (limits.length) {
+      banner.hidden = false;
+      limitText.textContent = `What this plan could not see: ${limits.map((l) => l.text).join(' ')}`;
+      const act = shadow.querySelector('.optimize-complete');
+      const wantsBrowser = limits.some((l) => l.code.startsWith('browser-checks'));
+      act.textContent = wantsBrowser ? 'Run browser checks' : 'Raise the page limit';
+      act.onclick = () => switchSiteAuditTab(wantsBrowser ? 'browser' : 'urls');
+    } else {
+      banner.hidden = true;
+    }
+
+    // The plan's claim, stated as the two numbers that carry it: this many
+    // findings are this many jobs, and this many of those jobs are made once
+    // and land on many pages. The priority-group count was dropped from here —
+    // the numbered phases are directly below, and a tile restating them spent
+    // the strip's most valuable slot on something already on screen.
+    const shared = plan.changeSummary.sitewide + plan.changeSummary.template;
+    const compression = plan.compression || {};
+    const groups = plan.siteStructure?.groups?.length || 0;
+    const tiles = [
+      { label: 'Changes', value: `${plan.changeSummary.findings} → ${compression.jobs || plan.changeSummary.total}`, sub: compression.templateActions ? `${compression.templateActions} of them one template edit` : 'findings, collapsed into jobs' },
+      { label: 'Shared fixes', value: `${shared} of ${plan.changeSummary.total}`, sub: shared ? 'one edit reaches many pages' : 'no change repeats across pages' },
+      { label: 'Page groups', value: groups ? String(groups) : 'None', sub: groups ? 'families the crawl could read' : 'no repeating structure found' },
+      { label: 'Site model', value: plan.siteModel.label, sub: plan.siteModel.established ? `${plan.siteModel.confidence} · verify` : 'not inferred from wording' },
+      { label: 'Connected research', value: plan.research.connected ? 'Connected' : 'Not connected', sub: 'no off-site claims' }
+    ];
+    const grid = shadow.querySelector('.optimize-stats');
+    grid.innerHTML = '';
+    for (const tile of tiles) {
+      const cell = document.createElement('div');
+      const dt = document.createElement('dt');
+      dt.textContent = tile.label;
+      const dd = document.createElement('dd');
+      dd.textContent = tile.value;
+      // The site model is a phrase, not a figure; at the strip's display size a
+      // long label would set as a headline and read as a claim.
+      if (String(tile.value).length > 6) dd.classList.add('stat-word');
+      cell.append(dt, dd);
+      const sub = document.createElement('span');
+      sub.className = 'stat-sub';
+      sub.textContent = tile.sub;
+      cell.appendChild(sub);
+      grid.appendChild(cell);
+    }
+
+    // Why this order — the sequence stated once, above the work.
+    const why = shadow.querySelector('.optimize-why');
+    why.hidden = false;
+    why.innerHTML = '';
+    // Who wrote these words. The sequence is identical either way, which is
+    // exactly why the label has to name the author rather than the source.
+    const state = siteAudit.planPhrasing || { status: 'deterministic' };
+    const prov = document.createElement('p');
+    prov.className = 'optimize-provenance';
+    prov.textContent = PLAN_PROVENANCE[state.status] || PLAN_PROVENANCE.deterministic;
+    if (state.status === 'unavailable') {
+      const reason = briefUnavailableReason(state.code);
+      if (reason) prov.textContent += ` · ${reason}`;
+      prov.title = `${state.code || ''}${state.message ? ': ' + state.message : ''}`;
+    }
+    if (state.status === 'pending') {
+      const dots = document.createElement('span');
+      dots.className = 'work-dot';
+      dots.setAttribute('aria-hidden', 'true');
+      dots.appendChild(document.createElement('i'));
+      prov.appendChild(dots);
+    }
+    why.appendChild(prov);
+    const headline = document.createElement('h3');
+    headline.className = 'optimize-headline';
+    // The fallback is the phase titles joined, which the map below states
+    // better. Shown only when there is no map to read it from, or when a model
+    // wrote something the map does not say.
+    headline.textContent = plan.phrasedSummary
+      || (plan.priorities.length ? '' : 'Nothing is sequenced: no actionable findings were recorded.');
+    headline.hidden = !headline.textContent;
+    const lede = document.createElement('p');
+    lede.className = 'hint';
+    lede.textContent = 'Findings are clustered by what you would change to fix them, then sequenced by what each group unblocks. This is a dependency order, not a severity ranking. Severity and confidence stay exactly as the scanner recorded them, and are shown on every group.';
+    why.append(headline, lede);
+    why.appendChild(planOfAttack(plan));
+
+    const tabs = shadow.querySelector('.optimize-tabs');
+    tabs.innerHTML = '';
+    for (const entry of OPTIMIZE_LENSES) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `fx-tab${entry.id === lens ? ' active' : ''}`;
+      btn.textContent = entry.label;
+      btn.addEventListener('click', () => { siteAudit.optimizeLens = entry.id; renderOptimizeSection(); });
+      tabs.appendChild(btn);
+    }
+
+    const body = shadow.querySelector('.optimize-body');
+    body.innerHTML = '';
+    if (lens === 'priorities') optimizePrioritiesLens(body, plan);
+    else if (lens === 'model') optimizeModelLens(body, plan);
+    else optimizeTrailLens(body, plan);
+    // The plan repaints while the wording request settles; a focus set once
+    // would not survive that, so it is re-applied with the rows it points at.
+    applyPlanFocus();
+  }
+
+  const CHANGE_SCOPE_TONE = { sitewide: 'brand', template: 'outline', page: 'muted' };
+  const PRIORITY_TONE = { blocker: 'critical-solid', high: 'critical', medium: 'warn', low: 'muted' };
+
+  /** A rule, openable in Findings. The plan never asserts anything it cannot
+   * hand back to the evidence it came from. */
+  function ruleChip(row) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'optimize-rule';
+    chip.title = `${row.ruleId}: ${row.instances} finding${row.instances === 1 ? '' : 's'} on ${row.pages} page${row.pages === 1 ? '' : 's'}, ${row.confidence}`;
+    chip.textContent = row.title;
+    const n = document.createElement('span');
+    n.textContent = String(row.instances);
+    chip.appendChild(n);
+    chip.addEventListener('click', () => {
+      siteAudit.findingsSearch = row.ruleId;
+      switchSiteAuditTab('findings');
+    });
+    return chip;
+  }
+
+  /**
+   * One change: the row a plan is executed from.
+   *
+   * Closed, it answers the three questions someone assigning work asks — which
+   * job, what do I edit, and what does it say now. Open, it answers the three
+   * the person doing the work asks: what do I change it to, how do I know it is
+   * done, and exactly which pages. Nothing here is inferred — an unknown
+   * current value is stated as unrecorded rather than filled with something
+   * plausible, because a plausible value in a plan is what gets a consultant
+   * caught in front of a client.
+   */
+  function changeRow(change) {
+    const li = document.createElement('li');
+    const bodyId = `change-${change.id}`;
+    const head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'change-head';
+    head.setAttribute('aria-expanded', 'false');
+    head.setAttribute('aria-controls', bodyId);
+    head.innerHTML = '<span class="change-id"></span><span class="pill change-priority"></span><span class="change-loc"></span><span class="change-now"></span><span class="change-meta"><span class="change-category"></span><span class="pill change-scope"></span></span><svg class="change-caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2.5L8 6l-3.5 3.5"/></svg>';
+    head.querySelector('.change-id').textContent = change.id;
+    // Four facts, closed: how soon, what kind of work, what to edit, how far it
+    // reaches. That is what someone deciding whether to open a row is asking.
+    const priority = head.querySelector('.change-priority');
+    priority.dataset.tone = PRIORITY_TONE[change.priority] || 'muted';
+    priority.textContent = change.priorityLabel || 'Low';
+    head.querySelector('.change-category').textContent = change.category || '';
+    head.querySelector('.change-loc').textContent = change.location;
+    const now = head.querySelector('.change-now');
+    now.textContent = change.current || change.absence || 'value not recorded';
+    if (change.current) now.title = change.current;
+    else now.classList.add('absent');
+    const scope = head.querySelector('.change-scope');
+    scope.dataset.tone = CHANGE_SCOPE_TONE[change.scope] || 'muted';
+    scope.textContent = change.scopeLabel;
+
+    const body = document.createElement('div');
+    body.className = 'change-body';
+    body.id = bodyId;
+    body.hidden = true;
+    const facts = document.createElement('dl');
+    facts.className = 'change-facts';
+    const fact = (term, value, mono) => {
+      if (!value) return;
+      const dt = document.createElement('dt');
+      dt.textContent = term;
+      const dd = document.createElement('dd');
+      if (mono) dd.className = 'mono';
+      dd.textContent = value;
+      facts.append(dt, dd);
+    };
+    fact('Change', change.action);
+    fact('Done when', change.doneWhen);
+    fact('Effort', change.effort);
+    fact('Priority', change.priorityReason);
+    body.appendChild(facts);
+
+    const evidence = document.createElement('div');
+    evidence.className = 'optimize-rules';
+    evidence.append(
+      // No severity pill here. The row already carries a priority pill, and two
+      // unlabelled pills both reading "High" while meaning different things is
+      // worse than one. The priority sentence above states the severity in
+      // words, and the rule chip carries it too.
+      confidencePill(change.confidence),
+      ruleChip({ ruleId: change.ruleId, title: change.title, instances: change.instances, pages: change.pages, confidence: change.confidence })
+    );
+    body.appendChild(evidence);
+
+    draftControls(change, body);
+
+    if (change.urls.length) {
+      const where = document.createElement('p');
+      where.className = 'change-where';
+      where.textContent = change.pages === 1 ? 'On this page' : `On ${change.pages} pages`;
+      body.appendChild(where);
+      const list = document.createElement('div');
+      list.className = 'url-list';
+      for (const url of change.urls.slice(0, 8)) {
+        const a = document.createElement('a');
+        a.className = 'url-item';
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = shortUrl(url);
+        a.title = url;
+        list.appendChild(a);
+      }
+      body.appendChild(list);
+      const notes = [];
+      const hidden = change.urls.length - 8;
+      if (hidden > 0) notes.push(`${hidden} further page${hidden === 1 ? '' : 's'} not listed.`);
+      // A template change carries one page's value as a sample. Saying so is
+      // the difference between an example and a claim about every page.
+      if (change.currentIsSample && change.pages > 1) notes.push('The value above is from the first of these pages; the others carry their own.');
+      if (notes.length) {
+        const more = document.createElement('p');
+        more.className = 'change-more';
+        more.textContent = notes.join(' ');
+        body.appendChild(more);
+      }
+    }
+
+    head.addEventListener('click', () => {
+      const showing = body.hidden;
+      body.hidden = !showing;
+      head.setAttribute('aria-expanded', String(showing));
+    });
+    li.append(head, body);
+    return li;
+  }
+
+  /**
+   * Drafting the replacement text for one change.
+   *
+   * The only place in Lumen where a model produces something the operator could
+   * not have got from the scan, and the only place where page text leaves the
+   * machine. Both facts are stated on the control rather than in a settings
+   * screen, and it never runs on its own: one change, one click, one draft.
+   *
+   * The draft is a proposal. It is never written to the site, never merged into
+   * a finding, and never treated as the current value; it sits beside the
+   * change and travels into the Action Plan's "Change it to" column, labelled
+   * as a draft, for a person to accept or edit.
+   */
+  const DRAFT_FAILURE = {
+    DRAFT_EMPTY: 'the model returned nothing',
+    DRAFT_SHORT: 'too short',
+    DRAFT_LONG: 'too long',
+    DRAFT_UNCHANGED: 'it repeated the current value',
+    DRAFT_DUPLICATE: 'it matched another page',
+    DRAFT_CLAIM: 'it made a claim the audit cannot support',
+    DRAFT_UNGROUNDED: 'it did not use this page\'s own words',
+    DRAFT_MARKUP: 'it contained markup',
+    DRAFT_URL: 'it contained a URL',
+    DRAFT_MARKDOWN: 'it contained markdown',
+    DRAFT_MULTILINE: 'it was more than one line'
+  };
+
+  async function draftChangeValue(change) {
+    const api = globalThis.LumenChangeDrafts;
+    if (!api?.draftEnvelope) return { ok: false, message: 'The draft rules are not loaded.' };
+    const envelope = api.draftEnvelope(change, change.page || {}, change.siblings || []);
+    if (!envelope) return { ok: false, message: 'This change has no single value to draft.' };
+    const { provider } = await briefPhrasingProvider();
+    if (provider === 'off' || provider === 'none') {
+      return { ok: false, message: 'No model is configured. Set one under Writing in the Lumen side panel.' };
+    }
+    const prompt = api.draftPrompt(envelope);
+
+    let raw = '';
+    if (provider === 'byo') {
+      const response = await chrome.runtime.sendMessage({
+        type: 'BRIEF_AI_PHRASE', provider: 'byo', system: prompt.system, user: prompt.user
+      }).catch((error) => ({ ok: false, message: String(error?.message || error) }));
+      if (!response?.ok) return { ok: false, message: response?.message || 'Your endpoint did not answer.' };
+      raw = String(response.text || '');
+    } else {
+      const model = globalThis.LanguageModel;
+      if (!model?.create) return { ok: false, message: 'This browser has no built-in model.' };
+      let session = null;
+      try {
+        session = await model.create({ expectedInputs: [{ type: 'text' }], initialPrompts: [{ role: 'system', content: prompt.system }] });
+        raw = String(await session.prompt(prompt.user));
+      } catch (error) {
+        return { ok: false, message: String(error?.message || error) };
+      } finally {
+        try { session?.destroy?.(); } catch {}
+      }
+    }
+
+    let parsed = raw;
+    try { parsed = JSON.parse(raw.replace(/^[^{]*/, '').replace(/[^}]*$/, '')); } catch { parsed = raw; }
+    const verdict = api.validateChangeDraft(parsed, envelope);
+    if (!verdict.ok) {
+      return { ok: false, message: `The draft was discarded: ${DRAFT_FAILURE[verdict.code] || verdict.message || verdict.code}.` };
+    }
+    return { ok: true, draft: verdict.draft, provider };
+  }
+
+  /** The control, and the two states it has after being pressed. */
+  function draftControls(change, body) {
+    const api = globalThis.LumenChangeDrafts;
+    if (!api?.draftableField?.(change.ruleId)) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'draft';
+    const row = document.createElement('div');
+    row.className = 'draft-row';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn draft-btn';
+    button.textContent = change.draft ? 'Draft again' : 'Draft a replacement';
+    const note = document.createElement('span');
+    note.className = 'draft-note';
+    // Said here, on the control, because this is the one request that carries
+    // the page's own text off the machine.
+    note.textContent = 'Sends this page\'s title, heading and address to your model.';
+    row.append(button, note);
+    wrap.appendChild(row);
+
+    const out = document.createElement('div');
+    out.className = 'draft-out';
+    out.hidden = !change.draft;
+    if (change.draft) paintDraft(out, change);
+    wrap.appendChild(out);
+
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      const was = button.textContent;
+      button.textContent = 'Drafting…';
+      out.hidden = false;
+      out.textContent = '';
+      const result = await draftChangeValue(change);
+      button.disabled = false;
+      button.textContent = 'Draft again';
+      if (!result.ok) {
+        out.textContent = '';
+        const problem = document.createElement('p');
+        problem.className = 'draft-problem';
+        problem.textContent = result.message;
+        out.appendChild(problem);
+        void was;
+        return;
+      }
+      change.draft = result.draft;
+      change.draftBy = result.provider;
+      paintDraft(out, change);
+    });
+    body.appendChild(wrap);
+  }
+
+  function paintDraft(out, change) {
+    out.textContent = '';
+    const label = document.createElement('span');
+    label.className = 'draft-label';
+    label.textContent = 'Drafted, not applied';
+    const value = document.createElement('p');
+    value.className = 'draft-value';
+    value.textContent = change.draft;
+    const meta = document.createElement('p');
+    meta.className = 'draft-meta';
+    meta.textContent = `${change.draft.length} characters · written by ${change.draftBy === 'byo' ? 'your model' : 'the model on this device'} · exported in the Action Plan for you to check`;
+    const drop = document.createElement('button');
+    drop.type = 'button';
+    drop.className = 'link-btn draft-drop';
+    drop.textContent = 'Discard';
+    drop.addEventListener('click', () => {
+      delete change.draft;
+      delete change.draftBy;
+      out.hidden = true;
+      out.textContent = '';
+    });
+    out.append(label, value, meta, drop);
+  }
+
+  function changeList(changes) {
+    const list = document.createElement('ul');
+    list.className = 'change-list';
+    for (const change of changes) list.appendChild(changeRow(change));
+    return list;
+  }
+
+  /**
+   * What the plan concluded across findings, above the work itself.
+   *
+   * Two kinds of claim live here and neither belongs to a single scanner:
+   * changes that look like one template edit, and situations where the site's
+   * own signals disagree and no instruction is defensible. Both are drawn as
+   * something to weigh rather than something decided.
+   *
+   * Questions come first. A template proposal is an efficiency; an open
+   * decision changes what the work should be, and sequencing around it is the
+   * next thing the reader does. Neither block appears at all when there is
+   * nothing to say, because a heading over an empty region is how a screen
+   * starts looking padded.
+   */
+  function renderPlanReasoning(body, plan) {
+    const merges = plan.templateActions || [];
+    const questions = plan.openQuestions || [];
+    if (!merges.length && !questions.length) return;
+
+    const head = document.createElement('div');
+    head.className = 'reason-section';
+    const title = document.createElement('h3');
+    title.textContent = 'Read across the findings';
+    const note = document.createElement('p');
+    note.className = 'hint';
+    note.textContent = 'Conclusions no single check could reach, because each is about how several findings relate. They sit before the sequence: an open decision changes what the work should be.';
+    head.append(title, note);
+    body.appendChild(head);
+
+    for (const question of questions) body.appendChild(questionCard(question));
+    for (const merge of merges) body.appendChild(templateCard(merge));
+  }
+
+  function questionCard(question) {
+    const card = document.createElement('section');
+    card.className = 'reason-card question';
+    const head = document.createElement('div');
+    head.className = 'reason-head';
+    const tag = document.createElement('span');
+    tag.className = 'pill';
+    tag.dataset.tone = 'warn';
+    tag.textContent = 'Needs a decision';
+    const title = document.createElement('h3');
+    title.textContent = question.question;
+    head.append(tag, title);
+
+    const why = document.createElement('p');
+    why.className = 'reason-body';
+    why.textContent = question.why;
+    const blocked = document.createElement('p');
+    blocked.className = 'reason-caveat';
+    blocked.textContent = question.blocked;
+    const settled = document.createElement('p');
+    settled.className = 'reason-settled';
+    settled.textContent = question.settledBy;
+    card.append(head, why, blocked, settled);
+
+    // Four pages, then a count. The first version listed every affected URL in
+    // a tall scroller that was taller than the question it was evidence for,
+    // which is the wrong thing to give the most room to. The full list travels
+    // in the export, where a reader is working through them one at a time.
+    if (question.urls?.length) {
+      const list = document.createElement('div');
+      list.className = 'url-list reason-urls';
+      for (const url of question.urls.slice(0, 4)) list.appendChild(urlLink(url));
+      card.appendChild(list);
+      const hidden = Number(question.count || question.urls.length) - Math.min(4, question.urls.length);
+      if (hidden > 0) {
+        const more = document.createElement('p');
+        more.className = 'change-more';
+        more.textContent = `and ${hidden} more page${hidden === 1 ? '' : 's'}, listed in the exported Action Plan.`;
+        card.appendChild(more);
+      }
+    }
+    return card;
+  }
+
+  function templateCard(merge) {
+    const card = document.createElement('section');
+    card.className = 'reason-card merge';
+    const head = document.createElement('div');
+    head.className = 'reason-head';
+    const tag = document.createElement('span');
+    tag.className = 'pill';
+    tag.dataset.tone = 'brand';
+    tag.textContent = merge.id;
+    const title = document.createElement('h3');
+    title.textContent = `These ${merge.resolves.length} changes look like one template edit`;
+    const scope = document.createElement('span');
+    scope.className = 'reason-scope';
+    scope.textContent = `${merge.pages} page${merge.pages === 1 ? '' : 's'} · ${merge.findings} finding${merge.findings === 1 ? '' : 's'}`;
+    head.append(tag, title, confidencePill(merge.confidence), scope);
+
+    const cause = document.createElement('p');
+    cause.className = 'reason-body';
+    cause.textContent = merge.rootCause;
+
+    const covers = document.createElement('div');
+    covers.className = 'reason-covers';
+    for (const step of merge.implementation) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'optimize-rule';
+      chip.textContent = `${step.id} ${step.location}`;
+      chip.title = step.action || '';
+      // The merge never replaces what it covers, so every chip opens the change
+      // it names rather than standing in for it.
+      chip.addEventListener('click', () => openChange(step.id));
+      covers.appendChild(chip);
+    }
+
+    const caveat = document.createElement('p');
+    caveat.className = 'reason-caveat';
+    caveat.textContent = merge.caveat;
+    card.append(head, cause, covers, caveat);
+    return card;
+  }
+
+  /** Open one change row by id and bring it into view. */
+  function openChange(id) {
+    const row = siteAudit.shadow.querySelector(`#change-${id}`);
+    const toggle = row?.previousElementSibling;
+    if (!row || !toggle) return;
+    row.hidden = false;
+    toggle.setAttribute('aria-expanded', 'true');
+    toggle.scrollIntoView({ block: 'center' });
+  }
+
+  function urlLink(url) {
+    const a = document.createElement('a');
+    a.className = 'url-item';
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = shortUrl(url);
+    a.title = url;
+    return a;
+  }
+
+  /**
+   * The route into the plan, from anywhere that shows a problem.
+   *
+   * Optimize links out to Findings from every rule chip, and until now nothing
+   * linked back. The flagship surface was reachable only from the nav, which
+   * left a reader looking at a confirmed fault with no way to ask the one
+   * question the product exists to answer.
+   *
+   * Passing a rule opens the plan and the change that resolves it. Where the
+   * plan has not been built yet, this builds it: making someone press a second
+   * button to see the answer they just asked for is a hop with no decision in
+   * it. Where the rule is not in the plan, the plan still opens and says why,
+   * because "this is informational and asks for no change" is an answer.
+   */
+  async function openPlanFor(ruleId) {
+    siteAudit.planFocusRule = String(ruleId || '');
+    switchSiteAuditTab('optimize');
+    if (!siteAudit.plan && !siteAudit.planBuilding) await buildOptimizePlanNow();
+    applyPlanFocus();
+  }
+
+  /**
+   * Reveal the changes that resolve the rule a reader arrived on.
+   *
+   * Applied at the end of every render rather than once on arrival. The plan
+   * repaints at least twice after it is built, because the wording request
+   * moves through pending and then settles, and a focus applied once was wiped
+   * by the next repaint a second later. Anything that survives a re-render has
+   * to be derived during one.
+   */
+  function applyPlanFocus() {
+    const ruleId = siteAudit.planFocusRule;
+    const note = siteAudit.shadow?.querySelector('.optimize-focus');
+    if (!note) return;
+    if (!ruleId || !siteAudit.plan) { note.hidden = true; return; }
+
+    const matches = [];
+    for (const priority of siteAudit.plan.priorities || []) {
+      for (const action of priority.actions || []) {
+        for (const change of action.changes || []) if (change.ruleId === ruleId) matches.push(change.id);
+      }
+    }
+
+    note.hidden = false;
+    note.textContent = matches.length
+      ? `Showing the ${matches.length === 1 ? 'change that resolves' : matches.length + ' changes that resolve'} ${ruleId}.`
+      // Not every finding becomes work, and saying so is a better answer than
+      // an empty result: an observation asks for no change by design.
+      : `${ruleId} is not in the plan. It was recorded as an observation rather than as work, so no change resolves it.`;
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'link-btn';
+    clear.textContent = 'Show the whole plan';
+    clear.addEventListener('click', () => {
+      siteAudit.planFocusRule = '';
+      note.hidden = true;
+    });
+    note.appendChild(clear);
+    for (const id of matches) openChange(id);
+  }
+
+  /**
+   * When each phase happens, rather than what number it is.
+   *
+   * The sequence was rendered as an ordered list, which is accurate and reads
+   * as a list of findings: a reader could see three headings and still not know
+   * which one to start on this afternoon. A dependency order has a *shape* —
+   * something is happening now, something waits on it — and the words for that
+   * are Now, Next, Then, Later, not 01, 02, 03.
+   *
+   * The labels describe position in the sequence that actually exists. A plan
+   * with two phases says Now and Next and stops; there is no fourth slot to
+   * fill, and padding one would be inventing work.
+   */
+  const PHASE_WHEN = ['Now', 'Next', 'Then', 'Later'];
+  // Position in a sequence is one idea, so it is one hue getting quieter.
+  // Severity has its own ramp in this product and a phase label must not borrow
+  // it: "do this first" is not "this is worse".
+  const PHASE_TONE = { Now: 'brand', Next: 'outline', Then: 'muted', Later: 'muted' };
+
+  function planOfAttack(plan) {
+    const wrap = document.createElement('div');
+    wrap.className = 'attack';
+    const list = document.createElement('ul');
+    list.className = 'attack-list';
+
+    plan.priorities.forEach((priority, index) => {
+      const li = document.createElement('li');
+      li.className = index === 0 ? 'attack-row lead' : 'attack-row';
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'attack-open';
+      // The whole row is the control: the reader's intent here is always "take
+      // me to that phase", and a link buried in the title would be a smaller
+      // target for the same intent.
+      button.addEventListener('click', () => {
+        const card = siteAudit.shadow.querySelectorAll('.optimize-priority')[index];
+        card?.scrollIntoView({ block: 'start' });
+      });
+
+      const when = document.createElement('span');
+      const word = PHASE_WHEN[index] || `Step ${index + 1}`;
+      when.className = 'pill attack-when';
+      when.dataset.tone = PHASE_TONE[word] || 'muted';
+      when.textContent = word;
+
+      const text = document.createElement('span');
+      text.className = 'attack-text';
+      const title = document.createElement('b');
+      title.textContent = priority.phrasedTitle || priority.title;
+      const summary = document.createElement('span');
+      summary.className = 'attack-summary';
+      summary.textContent = priority.phrasedSummary || priority.summary;
+      text.append(title, summary);
+
+      // What this phase touches, in the audit's own discipline names. Three at
+      // most: past that the tags stop narrowing anything and start wrapping.
+      const tags = document.createElement('span');
+      tags.className = 'attack-tags';
+      for (const discipline of (priority.disciplines || []).slice(0, 3)) {
+        const tag = document.createElement('span');
+        tag.className = 'attack-tag';
+        tag.textContent = discipline;
+        tags.appendChild(tag);
+      }
+      text.appendChild(tags);
+
+      const count = document.createElement('span');
+      count.className = 'attack-count';
+      const n = document.createElement('b');
+      n.textContent = String(priority.changes);
+      const unit = document.createElement('span');
+      // "changes" everywhere, because that is the unit the rows, the totals and
+      // the exported spreadsheet all use. A second word for one thing is how a
+      // plan and its export stop agreeing.
+      unit.textContent = priority.changes === 1 ? 'change' : 'changes';
+      count.append(n, unit);
+
+      // The row goes somewhere, and nothing on it said so. The same caret the
+      // conditions rows and the change rows use, pointing right because this
+      // navigates rather than expands.
+      const caret = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      caret.setAttribute('class', 'attack-caret');
+      caret.setAttribute('viewBox', '0 0 12 12');
+      caret.setAttribute('aria-hidden', 'true');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M4.5 2.5L8 6l-3.5 3.5');
+      caret.appendChild(path);
+      button.append(when, text, count, caret);
+      li.appendChild(button);
+      list.appendChild(li);
+    });
+
+    wrap.appendChild(list);
+    return wrap;
+  }
+
+  function optimizePrioritiesLens(body, plan) {
+    if (!plan.priorities.length) {
+      body.appendChild(schemaEmpty('No work is sequenced.', 'The crawl recorded no findings that ask for a change. Informational observations are in Findings.'));
+      return;
+    }
+    renderPlanReasoning(body, plan);
+    for (const priority of plan.priorities) {
+      const card = document.createElement('section');
+      card.className = 'optimize-priority';
+      const head = document.createElement('div');
+      head.className = 'optimize-priority-head';
+      const num = document.createElement('span');
+      num.className = 'pill optimize-priority-when';
+      const word = PHASE_WHEN[priority.order - 1] || `Step ${priority.order}`;
+      num.dataset.tone = PHASE_TONE[word] || 'muted';
+      num.textContent = word;
+      const titles = document.createElement('div');
+      const title = document.createElement('h3');
+      title.textContent = priority.phrasedTitle || priority.title;
+      const summary = document.createElement('p');
+      summary.className = 'hint';
+      summary.textContent = priority.phrasedSummary || priority.summary;
+      titles.append(title, summary);
+      const meta = document.createElement('div');
+      meta.className = 'optimize-priority-meta';
+      const sev = severityPill(priority.severity);
+      const conf = confidencePill(priority.confidence);
+      const count = document.createElement('span');
+      count.className = 'optimize-count';
+      // Changes lead: a plan is counted in jobs. The findings stay beside them
+      // so the phase can still be reconciled against the Findings section.
+      count.textContent = `${priority.changes} change${priority.changes === 1 ? '' : 's'} · ${priority.findings} finding${priority.findings === 1 ? '' : 's'}`;
+      meta.append(sev, conf, count);
+      head.append(num, titles, meta);
+
+      // What this group unblocks is the reason it sits where it does. Without it
+      // the order is just an assertion.
+      const unblocks = document.createElement('p');
+      unblocks.className = 'optimize-unblocks';
+      unblocks.textContent = priority.unblocks;
+
+      card.append(head, unblocks);
+
+      const list = document.createElement('ul');
+      list.className = 'optimize-actions';
+      for (const action of priority.actions) {
+        const li = document.createElement('li');
+        const actionHead = document.createElement('div');
+        actionHead.className = 'optimize-action-head';
+        const b = document.createElement('b');
+        b.textContent = action.title;
+        const pages = document.createElement('span');
+        pages.className = 'change-tally';
+        pages.textContent = action.changeCount
+          ? `${action.changeCount} change${action.changeCount === 1 ? '' : 's'} · ${action.evidence.findings} finding${action.evidence.findings === 1 ? '' : 's'}`
+          : `${action.evidence.findings} on ${action.evidence.pages} page${action.evidence.pages === 1 ? '' : 's'}`;
+        actionHead.append(b, pages);
+        li.appendChild(actionHead);
+
+        // Why the area matters, in the consequence the site owner feels rather
+        // than a restatement of the rule. The cluster description stands in
+        // where an area has not been given one.
+        const rationale = document.createElement('p');
+        rationale.className = action.rationale ? 'optimize-rationale' : 'hint';
+        rationale.textContent = action.rationale || action.detail;
+        li.appendChild(rationale);
+
+        if (action.changes && action.changes.length) {
+          // The work itself. Each row carries its own evidence chip, so
+          // traceability lives on the change rather than on the area above it.
+          li.appendChild(changeList(action.changes));
+        } else {
+          // No change could be derived from the evidence. The area is still
+          // traceable rather than silently empty.
+          const rules = document.createElement('div');
+          rules.className = 'optimize-rules';
+          for (const row of action.evidence.titles) rules.appendChild(ruleChip(row));
+          li.appendChild(rules);
+          const verify = document.createElement('p');
+          verify.className = 'optimize-verify';
+          verify.textContent = action.verify;
+          li.appendChild(verify);
+        }
+        list.appendChild(li);
+      }
+      card.appendChild(list);
+      body.appendChild(card);
+    }
+  }
+
+  /**
+   * How Lumen read the site's structure.
+   *
+   * This is the evidence behind every template claim the plan makes, so it is
+   * shown with the measurement rather than as an assertion: how many pages,
+   * how strongly they agree, and on what. A reader who does not believe a
+   * template proposal should be able to come here and see exactly what it rests
+   * on, including the pages that fitted nowhere.
+   */
+  function renderSiteStructure(body, plan) {
+    const model = plan.siteStructure;
+    if (!model) return;
+    const card = document.createElement('section');
+    card.className = 'structure';
+    const head = document.createElement('div');
+    head.className = 'card-head';
+    const h = document.createElement('h3');
+    h.textContent = 'Page groups';
+    const note = document.createElement('p');
+    note.className = 'hint';
+    note.textContent = model.groups.length
+      ? `${model.grouped} of ${model.pagesConsidered} pages read fall into ${model.groups.length} group${model.groups.length === 1 ? '' : 's'}. A group named by a path is something the site states; one named by shape is something Lumen measured.`
+      : `None of the ${model.pagesConsidered} pages read fall into a group. Nothing in the plan is treated as template work.`;
+    head.append(h, note);
+    card.appendChild(head);
+
+    if (model.groups.length) {
+      const list = document.createElement('ul');
+      list.className = 'structure-list';
+      for (const group of model.groups) {
+        const li = document.createElement('li');
+        const top = document.createElement('div');
+        top.className = 'structure-row';
+        const label = document.createElement('b');
+        label.textContent = group.label;
+        const count = document.createElement('span');
+        count.className = 'structure-count';
+        count.textContent = `${group.count} page${group.count === 1 ? '' : 's'}`;
+        const conf = confidencePill(group.confidence);
+        const template = document.createElement('span');
+        template.className = 'pill';
+        template.dataset.tone = group.probableTemplate ? 'brand' : 'muted';
+        template.textContent = group.probableTemplate ? 'Probably one template' : 'Not a template';
+        top.append(label, count, conf, template);
+        const basis = document.createElement('p');
+        basis.className = 'structure-basis';
+        basis.textContent = group.basis;
+        li.append(top, basis);
+        list.appendChild(li);
+      }
+      card.appendChild(list);
+    }
+
+    if (model.shapeSearchSkipped) {
+      const skipped = document.createElement('p');
+      skipped.className = 'hint';
+      skipped.textContent = `${model.shapeSearchSkipped.candidates} pages sit at addresses that say nothing about a family. Comparing them all with each other is more work than a plan should spend, so Lumen did not look for a shared shape among them. Any group named by a path above is unaffected.`;
+      body.lastElementChild.appendChild(skipped);
+    }
+    if (model.ungrouped.length) {
+      const rest = document.createElement('p');
+      rest.className = 'hint';
+      // Named rather than dropped: a model that silently assigns every page
+      // somewhere is a model nobody can check.
+      rest.textContent = `${model.ungrouped.length} page${model.ungrouped.length === 1 ? '' : 's'} fitted no group: ${[...new Set(model.ungrouped.map((u) => u.reason))].slice(0, 3).join('; ')}.`;
+      card.appendChild(rest);
+    }
+    body.appendChild(card);
+  }
+
+  function optimizeModelLens(body, plan) {
+    renderSiteStructure(body, plan);
+    const model = plan.siteModel;
+    const card = document.createElement('div');
+    card.className = model.established ? 'optimize-model' : 'optimize-model unestablished';
+    const head = document.createElement('div');
+    head.className = 'schema-conflict-head';
+    const b = document.createElement('b');
+    b.textContent = model.label;
+    const pill = document.createElement('span');
+    pill.className = 'pill cap';
+    pill.dataset.tone = model.established ? 'ok' : 'muted';
+    pill.textContent = model.confidence;
+    head.append(b, pill);
+    const basis = document.createElement('p');
+    basis.className = 'hint';
+    basis.textContent = model.basis;
+    card.append(head, basis);
+    if (model.evidence?.length) {
+      const list = document.createElement('div');
+      list.className = 'optimize-model-evidence';
+      for (const row of model.evidence) {
+        const item = document.createElement('div');
+        item.className = 'schema-variant';
+        const code = document.createElement('code');
+        code.textContent = row.type;
+        const count = document.createElement('span');
+        count.textContent = `${row.pages} page${row.pages === 1 ? '' : 's'} · ${row.items} item${row.items === 1 ? '' : 's'}`;
+        item.append(code, count);
+        list.appendChild(item);
+      }
+      card.appendChild(list);
+    }
+    body.appendChild(card);
+
+    const research = document.createElement('div');
+    research.className = 'optimize-model unestablished';
+    const rHead = document.createElement('div');
+    rHead.className = 'schema-conflict-head';
+    const rb = document.createElement('b');
+    rb.textContent = 'Connected research';
+    const rPill = document.createElement('span');
+    rPill.className = 'pill';
+    rPill.dataset.tone = 'muted';
+    rPill.textContent = plan.research.connected ? 'Connected' : 'Not connected';
+    rHead.append(rb, rPill);
+    const rNote = document.createElement('p');
+    rNote.className = 'hint';
+    rNote.textContent = plan.research.note;
+    research.append(rHead, rNote);
+    body.appendChild(research);
+  }
+
+  /** Where every finding went, including the ones the plan deliberately does not
+   * sequence. A plan whose totals cannot be reconciled against the Findings
+   * section is a plan the reader has to take on trust. */
+  function optimizeTrailLens(body, plan) {
+    const intro = document.createElement('p');
+    intro.className = 'hint schema-opportunity-note';
+    intro.textContent = `Every finding this audit recorded, and what the plan did with it. ${plan.totals.findings} findings across ${plan.totals.patterns} patterns: ${plan.totals.actionableFindings} sequenced into ${plan.totals.clusters} clusters, ${plan.informational.findings} recorded as informational and not sequenced.`;
+    body.appendChild(intro);
+
+    const table = document.createElement('table');
+    table.className = 'data-table schema-table';
+    table.innerHTML = '<thead><tr><th>Cluster</th><th>Sequenced into</th><th class="col-num">Findings</th><th>Rules</th></tr></thead>';
+    const tbody = document.createElement('tbody');
+    for (const priority of plan.priorities) {
+      for (const action of priority.actions) {
+        const tr = document.createElement('tr');
+        const cluster = document.createElement('td');
+        const cb = document.createElement('b');
+        cb.textContent = action.title;
+        cluster.appendChild(cb);
+        const into = document.createElement('td');
+        into.textContent = `Priority ${priority.order}: ${priority.title}`;
+        const n = document.createElement('td');
+        n.className = 'col-num';
+        n.textContent = String(action.evidence.findings);
+        const rules = document.createElement('td');
+        const code = document.createElement('code');
+        code.className = 'optimize-ruleids';
+        code.textContent = action.evidence.ruleIds.join(', ');
+        rules.appendChild(code);
+        tr.append(cluster, into, n, rules);
+        tbody.appendChild(tr);
+      }
+    }
+    if (plan.informational.patterns) {
+      const tr = document.createElement('tr');
+      tr.className = 'optimize-excluded';
+      const cluster = document.createElement('td');
+      const cb = document.createElement('b');
+      cb.textContent = 'Informational observations';
+      const note = document.createElement('span');
+      note.className = 'schema-detail';
+      note.textContent = plan.informational.note;
+      cluster.append(cb, note);
+      const into = document.createElement('td');
+      into.textContent = 'Not sequenced';
+      const n = document.createElement('td');
+      n.className = 'col-num';
+      n.textContent = String(plan.informational.findings);
+      const rules = document.createElement('td');
+      const code = document.createElement('code');
+      code.className = 'optimize-ruleids';
+      code.textContent = plan.informational.rules.join(', ');
+      rules.appendChild(code);
+      tr.append(cluster, into, n, rules);
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    body.appendChild(table);
+  }
+
   async function switchSiteAuditTab(tab, view) {
     siteAudit.tab = tab;
     const shadow = siteAudit.shadow;
@@ -5288,6 +7663,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       shadow.querySelector('.links-status').value = siteAudit.linksStatus;
       return loadSiteAuditLinks();
     }
+    if (tab === 'schema') return loadSiteAuditSchema();
+    if (tab === 'optimize') return loadSiteAuditOptimize();
     if (tab === 'browser') return renderBrowserChecks();
   }
 
@@ -5454,9 +7831,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       title.textContent = findingLabel(g);
       const meta = document.createElement('span');
       meta.className = 'fx-issue-meta';
-      const badge = document.createElement('span');
-      badge.className = `badge sev-${g.severity || 'info'}`;
-      badge.textContent = g.severity || 'info';
+      const badge = severityPill(g.severity);
       const where = document.createElement('span');
       where.textContent = `${SITE_AUDIT_AREA_LABEL[disciplineOf(g.rule_id)] || ''} · ${g.instances} instance${g.instances === 1 ? '' : 's'}`;
       meta.append(badge, where);
@@ -5512,17 +7887,15 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
     const badges = document.createElement('div');
     badges.className = 'brief-badges';
-    const sev = document.createElement('span');
-    sev.className = `badge sev-${group.severity || 'info'}`;
-    sev.textContent = group.severity || 'info';
+    const sev = severityPill(group.severity);
     const area = document.createElement('span');
-    area.className = 'state-chip';
+    area.className = 'pill state-chip';
     area.textContent = SITE_AUDIT_AREA_LABEL[disciplineOf(group.rule_id)] || '';
     const conf = document.createElement('span');
-    conf.className = 'signal-badge';
+    conf.className = 'pill signal-badge';
     const established = group.confidence === 'confirmed' || group.confidence === 'corroborated';
-    conf.dataset.kind = established ? 'confirmed' : 'early';
-    conf.textContent = group.confidence || 'inferred';
+    conf.dataset.tone = established ? 'ok' : 'warn';
+    conf.textContent = sentenceCase(group.confidence || 'inferred');
     badges.append(sev, area, conf);
 
     const tabs = document.createElement('nav');
@@ -5537,6 +7910,16 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       tabs.appendChild(btn);
     }
     pane.append(kicker, h, badges, tabs);
+
+    // Findings answers what is wrong; the plan answers what to do. An
+    // observation that asks for no change is honest about having no entry:
+    // openPlanFor says so rather than opening an empty search.
+    const toPlan = document.createElement('button');
+    toPlan.type = 'button';
+    toPlan.className = 'btn fx-to-plan';
+    toPlan.textContent = 'Show this in the plan';
+    toPlan.addEventListener('click', () => openPlanFor(group.rule_id));
+    pane.appendChild(toPlan);
 
     const body = document.createElement('div');
     body.className = 'fx-tab-body';
@@ -5760,9 +8143,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
 
       const top = document.createElement('div');
       top.className = 'f-top';
-      const badge = document.createElement('span');
-      badge.className = `badge sev-${g.severity || 'info'}`;
-      badge.textContent = g.severity || g.category || '';
+      const badge = severityPill(g.severity, sentenceCase(g.severity || g.category || ''));
       const title = document.createElement('span');
       title.className = 'f-title';
       title.textContent = findingLabel(g);
@@ -5861,6 +8242,15 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         detail.className = 'detail-explain';
         detail.textContent = String(findings[0].detail).slice(0, 400);
         block.appendChild(detail);
+      }
+
+      if (String(g.category || '') === 'fix' || String(g.severity || '') !== 'info') {
+        const toPlan = document.createElement('button');
+        toPlan.type = 'button';
+        toPlan.className = 'btn detail-plan';
+        toPlan.textContent = 'Show this in the plan';
+        toPlan.addEventListener('click', () => openPlanFor(g.rule_id));
+        block.appendChild(toPlan);
       }
 
       const ruleLine = document.createElement('p');
@@ -6090,9 +8480,29 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     }
   }
 
+  async function loadSiteModelOnce() {
+    if (siteAudit.siteModel || siteAudit.siteModelLoading) return;
+    siteAudit.siteModelLoading = true;
+    try {
+      const r = await chrome.runtime.sendMessage({ type: 'SITE_AUDIT_SITE_MODEL', auditId: siteAudit.auditId }).catch(() => null);
+      if (!siteAudit) return;
+      siteAudit.siteModel = r?.model || { groups: [] };
+      // The URL is the key everywhere else in the audit, so the lookup is built
+      // once rather than scanning every group's list per row.
+      siteAudit.pageGroupByUrl = new Map();
+      for (const group of siteAudit.siteModel.groups || []) {
+        for (const url of group.urls || []) siteAudit.pageGroupByUrl.set(url, group);
+      }
+      renderUrlsTable();
+    } finally {
+      siteAudit.siteModelLoading = false;
+    }
+  }
+
   function renderUrlsTable() {
     const shadow = siteAudit.shadow;
     const body = shadow.querySelector('.urls-body');
+    loadSiteModelOnce();
     renderSectionIndex();
     for (const th of shadow.querySelectorAll('.urls-panel th[data-sort]')) {
       th.classList.toggle('sorted-asc', th.dataset.sort === siteAudit.urlsSort.key && siteAudit.urlsSort.dir === 'asc');
@@ -6100,7 +8510,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     }
     const search = String(siteAudit.urlsSearch || '').trim().toLowerCase();
     const sortValue = (u, key) => key === 'status' ? (u.http_status || u.status || '')
-      : key === 'schema' ? (u.schema_types || '')
+      : key === 'group' ? (siteAudit.pageGroupByUrl?.get(u.final_url || u.url)?.label || '')
+        : key === 'schema' ? (u.schema_types || '')
         // Sort noindex to one end rather than mixing it through: the point of
         // sorting this column is to gather the exceptions.
         : key === 'indexable' ? (u.indexable === null || u.indexable === undefined ? 2 : Number(u.indexable))
@@ -6115,17 +8526,25 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       });
     body.innerHTML = '';
     for (const u of rows) {
-      let schemaLabel = '—';
+      let schemaLabel = '–';
       try { const types = JSON.parse(u.schema_types || '[]'); if (types.length) schemaLabel = types.join(', '); } catch {}
-      const tr = siteAuditRow([shortUrl(u.url), '', '', u.title || '', u.word_count ?? '—', schemaLabel], { mono: [0] });
+      // Which family this page belongs to, so the table stops presenting a
+      // templated site as a list of unrelated documents.
+      const group = siteAudit.pageGroupByUrl?.get(u.final_url || u.url) || null;
+      const tr = siteAuditRow([shortUrl(u.url), '', '', u.title || '', group ? group.label : '', u.word_count ?? '–', schemaLabel], { mono: [0] });
+      if (group) {
+        tr.cells[4].title = group.basis;
+        tr.cells[4].className = 'col-group';
+      }
       tr.cells[0].title = u.url;
       // Status carries a pill so a 404 among two hundred 200s is findable
       // by scanning rather than by reading every row.
       const code = Number(u.http_status || 0);
       const tone = !code ? 'inconclusive' : code >= 200 && code < 400 ? 'healthy' : 'broken';
       const statusPill = document.createElement('span');
-      statusPill.className = `status-pill ${tone}`;
-      statusPill.textContent = code ? String(code) : (u.status || '—');
+      statusPill.className = 'pill status-pill';
+      statusPill.dataset.tone = STATUS_TONE[tone];
+      statusPill.textContent = code ? String(code) : (u.status || '–');
       tr.cells[1].textContent = '';
       tr.cells[1].className = 'col-status';
       tr.cells[1].appendChild(statusPill);
@@ -6136,13 +8555,14 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       tr.cells[2].className = 'col-status';
       tr.cells[2].textContent = '';
       if (u.indexable === null || u.indexable === undefined) {
-        tr.cells[2].textContent = '—';
-        tr.cells[2].title = 'Not read — this page was never fetched.';
+        tr.cells[2].textContent = '–';
+        tr.cells[2].title = 'Not read: this page was never fetched.';
       } else if (Number(u.indexable) === 1) {
         tr.cells[2].textContent = 'Yes';
       } else {
         const pill = document.createElement('span');
-        pill.className = 'status-pill blocked';
+        pill.className = 'pill status-pill';
+        pill.dataset.tone = STATUS_TONE.blocked;
         pill.textContent = 'noindex';
         pill.title = 'This page asks search engines not to index it.';
         tr.cells[2].appendChild(pill);
@@ -6205,7 +8625,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
         const ul = document.createElement('ul');
         for (const f of findings.slice(0, 20)) {
           const li = document.createElement('li');
-          li.textContent = `${f.rule_id} — ${f.title || ''}`;
+          li.textContent = `${f.rule_id}: ${f.title || ''}`;
           ul.appendChild(li);
         }
         block.appendChild(ul);
@@ -6258,7 +8678,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     for (const l of rows) {
       const repeated = l.source_url === lastSource;
       lastSource = l.source_url;
-      const tr = siteAuditRow([repeated ? '' : shortUrl(l.source_url), shortUrl(l.target_url), l.anchor_text || '—'], { mono: [0, 1] });
+      const tr = siteAuditRow([repeated ? '' : shortUrl(l.source_url), shortUrl(l.target_url), l.anchor_text || '–'], { mono: [0, 1] });
       // A run of links from one page reads as one block instead of the same
       // URL restated fifteen times.
       if (repeated) tr.classList.add('link-same-source');
@@ -6267,7 +8687,8 @@ if (!globalThis.__WEB_QA_CONTENT__) {
       const statusTd = document.createElement('td');
       statusTd.className = 'col-status';
       const pill = document.createElement('span');
-      pill.className = `status-pill ${l.status}`;
+      pill.className = 'pill status-pill';
+      pill.dataset.tone = STATUS_TONE[l.status] || STATUS_TONE.inconclusive;
       pill.textContent = l.status;
       statusTd.appendChild(pill);
       tr.appendChild(statusTd);
@@ -6282,21 +8703,130 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     shadow.querySelector('.links-next').disabled = to >= total || shown < SITE_AUDIT_PAGE_SIZE;
   }
 
+  /**
+   * The download control.
+   *
+   * Both boxes start checked because both are what an audit is for, and the
+   * common case is handing over the whole thing. Unchecking both is not an
+   * error state to explain — the action simply cannot run, and says so.
+   */
+  function wireDownloadMenu() {
+    const shadow = siteAudit.shadow;
+    const btn = shadow.querySelector('.report-btn');
+    const menu = shadow.querySelector('.download-menu');
+    const plan = shadow.querySelector('.dl-plan');
+    const scan = shadow.querySelector('.dl-scan');
+    const go = shadow.querySelector('.dl-go');
+    const what = shadow.querySelector('.download-what');
+
+    // Say what the file will be before it is made, in tabs rather than in
+    // adjectives: the reader is deciding what to send someone.
+    const describe = () => {
+      const tabs = 1 + (plan.checked ? 2 : 0) + (scan.checked ? 3 : 0);
+      go.disabled = !plan.checked && !scan.checked;
+      what.textContent = go.disabled
+        ? 'Choose at least one.'
+        : `One .xlsx, ${tabs} tabs. Everything stays on this machine.`;
+    };
+    plan.addEventListener('change', describe);
+    scan.addEventListener('change', describe);
+    describe();
+
+    const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+    // Measured after it is shown, because a hidden element has no height to
+    // place against, and clamped so it never opens off the workspace.
+    const place = () => {
+      const rect = btn.getBoundingClientRect();
+      const left = Math.min(Math.max(12, rect.left), window.innerWidth - menu.offsetWidth - 12);
+      menu.style.left = `${Math.max(12, left)}px`;
+      menu.style.top = `${Math.max(12, rect.top - menu.offsetHeight - 8)}px`;
+    };
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const open = menu.hidden;
+      menu.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+      if (open) place();
+    });
+    menu.addEventListener('click', (event) => event.stopPropagation());
+    shadow.addEventListener('click', close);
+    shadow.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !menu.hidden) close(); });
+    go.addEventListener('click', () => downloadWorkbook({ scan: scan.checked, plan: plan.checked }));
+    shadow.querySelector('.dl-html').addEventListener('click', () => { close(); downloadFullReport(); });
+  }
+
+  /**
+   * Build and save the workbook.
+   *
+   * The gateway is local, so the file is assembled from data that never left
+   * this machine and is handed straight back. The base64 hop exists only
+   * because extension messaging cannot carry bytes.
+   */
+  async function downloadWorkbook(include) {
+    const shadow = siteAudit.shadow;
+    const go = shadow.querySelector('.dl-go');
+    const what = shadow.querySelector('.download-what');
+    const label = go.textContent;
+    go.disabled = true;
+    go.textContent = 'Building…';
+    try {
+      const r = await chrome.runtime.sendMessage({
+        type: 'SITE_AUDIT_WORKBOOK', auditId: siteAudit.auditId, scan: include.scan, plan: include.plan,
+        // The gateway rebuilds the plan to make the file, so anything drafted
+        // in this session travels with the request or it never reaches the
+        // spreadsheet it was written for.
+        drafts: collectDrafts()
+      }).catch((error) => ({ ok: false, error: error?.message }));
+      if (!r?.ok || !r.base64) {
+        what.textContent = 'The file could not be built. The gateway may not be running.';
+        return;
+      }
+      const binary = atob(r.base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      saveBlob(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), r.filename || 'audit.xlsx');
+      shadow.querySelector('.download-menu').hidden = true;
+      shadow.querySelector('.report-btn').setAttribute('aria-expanded', 'false');
+    } finally {
+      go.disabled = false;
+      go.textContent = label;
+    }
+  }
+
+  /** The drafts accepted in this session, keyed by the change they belong to.
+   * The rule id travels with each one so the gateway can refuse to land a draft
+   * on a change that is no longer the same kind of work. */
+  function collectDrafts() {
+    const out = {};
+    for (const priority of siteAudit.plan?.priorities || []) {
+      for (const action of priority.actions || []) {
+        for (const change of action.changes || []) {
+          if (change.draft) out[change.id] = { draft: change.draft, by: change.draftBy || '', ruleId: change.ruleId };
+        }
+      }
+    }
+    return out;
+  }
+
+  /** One place that turns a blob into a saved file. */
+  function saveBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
   async function downloadFullReport() {
     const btn = siteAudit.shadow.querySelector('.report-btn');
     btn.disabled = true;
     try {
       const r = await chrome.runtime.sendMessage({ type: 'SITE_AUDIT_REPORT', auditId: siteAudit.auditId }).catch((error) => ({ ok: false, error: error?.message }));
       if (!r?.ok) return;
-      const blob = new Blob([r.html], { type: 'text/html;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = r.filename || `audit-report.html`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      saveBlob(new Blob([r.html], { type: 'text/html;charset=utf-8' }), r.filename || 'audit-report.html');
     } finally {
       btn.disabled = false;
     }
@@ -6308,15 +8838,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
     try {
       const r = await chrome.runtime.sendMessage({ type: 'SITE_AUDIT_DEBUG', auditId: siteAudit.auditId }).catch((error) => ({ ok: false, error: error?.message }));
       if (!r?.ok) return;
-      const blob = new Blob([r.json], { type: 'application/json;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = r.filename || 'audit-debug.json';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      saveBlob(new Blob([r.json], { type: 'application/json;charset=utf-8' }), r.filename || 'audit-debug.json');
     } finally {
       btn.disabled = false;
     }
@@ -6325,15 +8847,7 @@ if (!globalThis.__WEB_QA_CONTENT__) {
   async function exportSiteAudit(dataset, ruleIds) {
     const r = await chrome.runtime.sendMessage({ type: 'SITE_AUDIT_EXPORT', auditId: siteAudit.auditId, dataset, ...(ruleIds ? { ruleIds } : {}) }).catch((error) => ({ ok: false, error: error?.message }));
     if (!r?.ok) return;
-    const blob = new Blob([r.text], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = r.filename || `audit-${dataset}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    saveBlob(new Blob([r.text], { type: 'text/csv;charset=utf-8' }), r.filename || `audit-${dataset}.csv`);
   }
 
   chrome.runtime.onMessage.addListener((msg, sender, send) => {

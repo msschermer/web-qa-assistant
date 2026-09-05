@@ -1,0 +1,1269 @@
+
+      :host{all:initial;
+        /* Lumen Site Audit — the operator's console. Near-black grounds,
+           violet as the single product voice, one sealed severity ramp, and
+           structure carried by hairlines rather than shadow.
+
+           all:initial means an unstyled size is the browser's 16px rather than
+           the product's, so the body step is declared here and inherited. The
+           Overview's coverage note rendered at 16px for exactly that reason.
+
+           Every value below is an alias of packages/ui/tokens.css, which is
+           injected directly above them. Nothing here may name a colour of its
+           own: a second definition is how the ramp drifted the first time. */
+        font-size:13px;
+        /* Grounds, darkest to lightest. The backdrop is what the overlay dims the
+     host page to; canvas is the app field; surface is a card. */
+  --wqa-backdrop:#07070B;
+  --wqa-canvas:#0E0E14;
+  --wqa-surface:#15151E;
+  --wqa-surface-raised:#22222E;
+  --wqa-sunken:#1B1B25;        /* table heads, inset rows, hover */
+
+  --wqa-ink:#E9E9F2;           /* 15.0:1 on surface */
+  --wqa-ink-soft:#A8A8BD;      /* 7.8:1 */
+  --wqa-ink-faint:#8B8BA3;     /* 5.5:1 — the floor, do not darken */
+  --wqa-line:#2E2E3D;          /* hairline between rows */
+  --wqa-line-strong:#3A3A4C;   /* control borders, panel edges */
+
+  /* One primary. White clears 4.5:1 on it, which is why it is this violet and
+     not the brighter one: every lighter candidate fails its own button. Hover
+     deepens rather than lightens, for the same reason. */
+  --wqa-brand:#7350F5;
+  --wqa-brand-strong:#6741E8;
+  --wqa-brand-soft:#1E1838;
+  --wqa-brand-line:#3A2E6B;
+  --wqa-brand-text:#A896FF;    /* the primary as text, 7.3:1 on surface */
+  --wqa-accent:#7350F5;
+  --wqa-accent-strong:#6741E8;
+  --wqa-accent-soft:#1E1838;
+  --wqa-violet:#7350F5;
+  --wqa-violet-soft:#1E1838;
+
+  /* Semantic TEXT colours: safe on their own wash and on every ground. */
+  --wqa-critical:#FF6B78;
+  --wqa-critical-soft:#2A1418;
+  --wqa-warn:#F0A93A;
+  --wqa-warn-soft:#2A1F0F;
+  --wqa-ok:#45D68F;
+  --wqa-ok-soft:#0F2419;
+  --wqa-info:#A896FF;
+  --wqa-info-soft:#1E1838;
+  --wqa-muted:#8B8BA3;
+
+  /* Severity ramp: fills for bars, rails and dots. Not text on a tint. */
+  --wqa-sev-critical:#E14356;
+  --wqa-sev-high:#FF5C6C;
+  --wqa-sev-medium:#F0A93A;
+  --wqa-sev-low:#D8873C;
+  --wqa-sev-info:#7A7A94;
+
+  --wqa-focus:#7350F5;
+
+  --wqa-r-xs:6px;
+  --wqa-r-sm:8px;
+  --wqa-r:10px;
+  --wqa-r-float:12px;   /* shells that actually float: the workspace, the coach */
+  --wqa-r-lg:14px;
+  --wqa-r-pill:999px;
+
+  /* On a dark ground a drop shadow reads as smudge, so elevation is carried by
+     the ground stepping lighter and by a hairline. These stay for the few
+     elements that genuinely float above the surface. */
+  --wqa-shadow:0 1px 2px rgba(0,0,0,.40);
+  --wqa-shadow-md:0 2px 6px rgba(0,0,0,.45),0 1px 2px rgba(0,0,0,.35);
+  --wqa-shadow-lg:0 28px 64px -16px rgba(0,0,0,.72);
+
+  --wqa-space-1:4px;
+  --wqa-space-2:8px;
+  --wqa-space-3:12px;
+  --wqa-space-4:16px;
+  --wqa-space-5:24px;
+
+  /* IBM Plex Sans and its own monospace sibling, self-hosted (packages/ui/
+     fonts.css). The stack behind them is load-bearing, not decoration: the
+     overlay is injected into third-party pages whose CSP we do not control, so
+     every surface must stay legible when the face does not arrive. */
+  --wqa-sans:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;
+  --wqa-draw:var(--wqa-sans);
+  --wqa-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;
+
+  /* Coverage still hatches what was not surveyed: not knowing is not the same
+     as being broken, and that distinction stays visual. Light-on-dark now. */
+  --wqa-hatch:repeating-linear-gradient(45deg,transparent 0 6px,rgba(233,233,242,.07) 6px 7px);
+  --wqa-grain:none;
+
+  /* The browser's own chrome, themed from the palette instead of left at the
+     defaults. Scrollbars, carets, checkboxes and select menus ship with a
+     light appearance that belongs to no design system, and on a near-black
+     ground they are the one part of the product that still looks like the
+     browser: `color-scheme` turns them dark, `accent-color` keeps a checked
+     box violet rather than the browser's blue — the only place a colour that
+     is not ours would carry meaning — and `scrollbar-color` names the thumb
+     against a transparent track, so a scroller reads as part of the panel it
+     sits in rather than as a pale rail down the side of it.
+
+     They live here because these are inherited properties and every surface
+     inherits this block: the two compiled sheets link it, and the report
+     embeds it. The two injected surfaces cannot take them this way — their
+     host elements carry `all:initial` as an inline style, which outranks
+     `:host` — so the overlay's .workspace and the coach's .coach alias the
+     same three values on the first element that inline style does not reach. */
+  color-scheme:dark;
+  accent-color:var(--wqa-brand);
+  scrollbar-color:var(--wqa-ink-faint) transparent;
+
+  --wqa-paper:var(--wqa-canvas);--wqa-surface-strong:var(--wqa-surface-raised);--wqa-rule:var(--wqa-line-strong);--wqa-rule-soft:var(--wqa-line);--wqa-blue:var(--wqa-brand);--wqa-blue-wash:var(--wqa-brand-soft);--wqa-live:var(--wqa-ok);--wqa-danger:var(--wqa-critical);--wqa-warning:var(--wqa-warn);--wqa-radius:var(--wqa-r);
+
+        --sa-backdrop:var(--wqa-backdrop);  /* the scrim over the audited page */
+        --sa-canvas:var(--wqa-canvas);      /* app background behind panels */
+        --sa-surface:var(--wqa-surface);    /* cards, tables, panels */
+        --sa-subtle:var(--wqa-sunken);      /* table heads, inset rows, hover */
+        --sa-nav:var(--wqa-surface);        /* side navigation */
+
+        --sa-ink:var(--wqa-ink);            /* primary text */
+        --sa-ink-soft:var(--wqa-ink-soft);  /* secondary text */
+        --sa-ink-faint:var(--wqa-ink-faint);/* meta, labels, placeholders */
+        --sa-line:var(--wqa-line);          /* hairline between rows */
+        --sa-line-strong:var(--wqa-line-strong);
+
+        /* One primary. Indigo carries the product's own voice: navigation,
+           primary actions, focus, selection. It never means severity. */
+        --sa-primary:var(--wqa-brand);
+        --sa-primary-hover:var(--wqa-brand-strong);
+        --sa-primary-soft:var(--wqa-brand-soft);
+        --sa-primary-line:var(--wqa-brand-line);
+        --sa-primary-text:var(--wqa-brand-text);
+        --sa-surface-raised:var(--wqa-surface-raised);
+
+        /* Semantic TEXT colours — safe on their own wash and on any ground.
+           These are what a badge, a pill or an error message uses. */
+        --sa-critical:var(--wqa-critical);
+        --sa-critical-soft:var(--wqa-critical-soft);
+        --sa-warn:var(--wqa-warn);
+        --sa-warn-soft:var(--wqa-warn-soft);
+        --sa-success:var(--wqa-ok);
+        --sa-success-soft:var(--wqa-ok-soft);
+        --sa-success-line:color-mix(in srgb,var(--wqa-ok) 40%,transparent);
+        
+        --sa-info-soft:var(--wqa-sunken);
+
+        /* Severity ramp — FILLS ONLY: bars, rails, dots, legend swatches.
+           Bright by design and not cleared for text on a tint, which is why
+           the pair above exists and why nothing here may be used as a colour. */
+        --sa-sev-critical:var(--wqa-sev-critical);
+        --sa-sev-high:var(--wqa-sev-high);
+        --sa-sev-medium:var(--wqa-sev-medium);
+        --sa-sev-low:var(--wqa-sev-low);
+        --sa-sev-info:var(--wqa-sev-info);
+
+        --sa-radius:var(--wqa-r);
+        --sa-radius-sm:var(--wqa-r-sm);
+        --sa-shadow-sm:var(--wqa-shadow);
+        --sa-shadow:var(--wqa-shadow-md);
+        --sa-shadow-lg:var(--wqa-shadow-lg);
+
+        --sa-sans:var(--wqa-sans);
+        --sa-mono:var(--wqa-mono);
+        --sa-hatch:var(--wqa-hatch)}
+      /* all:initial on the host resets inherited type, so this reset is what
+         actually puts Lumen's face on the overlay. scrollbar-width rides along
+         because it is the one property in the palette's browser-chrome block
+         that does not inherit, so it cannot travel with the tokens; thin drops
+         the arrow buttons and the 15px rail. */
+      *{box-sizing:border-box;font-family:var(--sa-sans);scrollbar-width:thin}
+      [hidden]{display:none!important}
+      /* Anchors get the product's voice rather than the browser's. Under
+         :host{all:initial} an unstyled <a> still takes the UA link colours, and
+         :visited paints a second one — so an ordinary list of URLs arrives in two
+         colours neither of which is ours, distinguished by whether the operator
+         happened to have opened that page before. --sa-primary-text is the primary
+         as text; the fill is never the ink. */
+      a{color:var(--sa-primary-text);text-decoration:none}
+      a:hover{color:var(--sa-primary-hover);text-decoration:underline}
+      a:focus-visible{outline:2px solid var(--sa-primary);outline-offset:2px;border-radius:2px}
+      /* The scrim over the audited page. It was .72, which over a white site
+         computed to a mid grey — and since the workspace is inset 24px, that grey
+         ran the full height of the right edge at almost exactly a scrollbar's
+         width, in almost exactly a scrollbar's tone. With both real scrollbars
+         gone it was the only thing left at that edge and read as a stray rail.
+         At .93 the page still comes through as shape and colour, which is the
+         point of a translucent backdrop, but never as something that could be
+         mistaken for chrome. The value is mixed from the palette rather than
+         restated as a literal triple. */
+      .backdrop{position:fixed;inset:0;background:color-mix(in srgb,var(--sa-backdrop) 93%,transparent);z-index:1;backdrop-filter:blur(2px)}
+
+      /* The browser's own chrome — scrollbars, carets, checkboxes, selects —
+         themed from the palette so it stops being the one light thing on a
+         near-black surface. tokens.css declares the same three properties, but
+         they cannot arrive that way here: the host element carries all:initial
+         as an inline style, and an inline declaration outranks :host, so every
+         inherited property reaching this tree is reset to the browser default.
+         The workspace is the first element the inline style does not touch,
+         which makes it the place the palette can take them back. */
+      .workspace{position:fixed;inset:24px;z-index:2;background:var(--sa-canvas);border-radius:12px;box-shadow:var(--sa-shadow-lg);display:flex;flex-direction:column;overflow:hidden;color:var(--sa-ink);color-scheme:dark;accent-color:var(--sa-primary);scrollbar-color:var(--sa-ink-faint) transparent}
+
+      /* Top bar ------------------------------------------------------------ */
+      .head{display:flex;align-items:center;gap:12px;padding:0 16px;height:56px;background:var(--sa-surface);border-bottom:1px solid var(--sa-line);flex:0 0 auto}
+      .mark{display:block;flex:0 0 auto;width:26px;height:26px;border-radius:8px;background:var(--sa-primary);position:relative}
+      .mark::after{content:"";position:absolute;inset:8px;border-radius:50%;border:2px solid #fff}
+      .identity{display:flex;align-items:baseline;gap:8px;margin-right:auto}
+      .identity .name{font-size:15px;font-weight:650;letter-spacing:-.01em;color:var(--sa-ink)}
+      .identity .device{font-size:12.5px;color:var(--sa-ink-faint)}
+      .close{border:1px solid var(--sa-line-strong);background:var(--sa-surface);width:32px;height:32px;display:grid;place-items:center;color:var(--sa-ink-faint);cursor:pointer;border-radius:var(--sa-radius-sm)}
+      .close .x{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round}
+      .close:hover{background:var(--sa-subtle);color:var(--sa-ink)}
+
+      /* The foot note is a child of .body, so .body stacks; the view inside it
+         is the row that carries nav and main. */
+      .body{flex:1 1 auto;overflow:hidden;padding:0;display:flex;flex-direction:column;min-height:0}
+
+      /* Views: side nav + scrolling main ----------------------------------- */
+      .view{display:none;flex:1 1 auto;min-width:0}
+      .view.active{display:flex;align-items:stretch;flex:1 1 auto;min-height:0}
+
+      .sidenav{width:216px;flex:0 0 auto;background:var(--sa-nav);border-right:1px solid var(--sa-line);display:flex;flex-direction:column;padding:14px 12px;overflow:auto}
+
+      .nav-site{padding:0 8px 12px;margin:0 0 12px;border-bottom:1px solid var(--sa-line)}
+      .nav-site b{display:block;font-size:13px;font-weight:600;color:var(--sa-ink);overflow-wrap:anywhere}
+      .nav-site span{display:block;margin-top:2px;font-size:11.5px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
+      .tabs{display:flex;flex-direction:column;gap:2px;border:0;margin:0}
+      .tab{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;padding:8px 10px;border-radius:var(--sa-radius-sm);font-size:13.5px;font-weight:500;color:var(--sa-ink-soft);cursor:pointer;text-align:left}
+      .tab:hover{background:var(--sa-subtle);color:var(--sa-ink)}
+      .tab:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
+      .tab.active{background:var(--sa-primary-soft);color:var(--sa-primary-text);font-weight:600}
+      .tab-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .nav-foot{margin-top:auto;padding-top:14px;display:flex;flex-direction:column;gap:8px}
+      /* The sidebar scrolls, so a popover anchored inside it would be clipped
+         by its own container. The menu is positioned against the viewport and
+         placed from the button's rect when it opens. */
+      .download{position:relative}
+      .download-menu{position:fixed;z-index:40;width:308px;background:var(--sa-surface-raised);border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-lg);padding:13px 14px}
+      .download-head{margin:0 0 5px;padding:0 4px;font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--sa-ink-faint)}
+      .download-opt{display:grid;grid-template-columns:15px minmax(0,1fr);gap:10px;align-items:start;padding:7px 4px;border-radius:var(--sa-radius-sm);cursor:pointer}
+      .download-opt:hover{background:var(--sa-subtle)}
+      .download-opt input{margin:2px 0 0;width:14px;height:14px;accent-color:var(--sa-primary)}
+      .download-opt b{display:block;font-size:12.5px;font-weight:600;color:var(--sa-ink)}
+      .download-opt em{display:block;margin-top:2px;font-style:normal;font-size:11.5px;line-height:1.45;color:var(--sa-ink-faint)}
+      .download-what{margin:8px 0 11px;padding-top:9px;border-top:1px solid var(--sa-line);font-size:11.5px;line-height:1.45;color:var(--sa-ink-faint)}
+      .download-actions{display:flex;flex-direction:column;gap:4px}
+      .download-actions .link-btn{margin-left:0;text-align:left;padding:4px 2px}
+
+      .main{flex:1 1 auto;min-width:0;overflow:auto;padding:20px 24px 28px;background:var(--sa-canvas)}
+      .main-narrow{max-width:none;margin:0;width:100%;padding-left:max(24px,calc((100% - 960px) / 2));padding-right:max(24px,calc((100% - 960px) / 2))}
+
+      /* A run in progress: full width, controls beside the title, and the
+         activity feed taking whatever vertical space is left rather than
+         stranding it. */
+      .run-main{max-width:none;margin:0;width:100%;display:flex;flex-direction:column;min-height:0;padding-left:max(24px,calc((100% - 1280px) / 2));padding-right:max(24px,calc((100% - 1280px) / 2))}
+      .run-head{align-items:center}
+      .run-target{margin:4px 0 0;font-size:13.5px;color:var(--sa-ink-faint);font-family:var(--sa-mono);overflow-wrap:anywhere}
+      .run-actions{margin-left:auto;display:flex;gap:10px;flex-wrap:wrap}
+      /* Six counters read as one instrument row, not as a ragged wrap. */
+      .stat-grid.run-stats{grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:0 0 16px}
+      .stat-grid.run-stats>div{padding:12px 14px}
+      .stat-grid.run-stats dd{font-size:22px}
+      @media(max-width:1180px){.stat-grid.run-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+      @media(max-width:720px){.stat-grid.run-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      /* The feed is the live part of this screen, so it gets the leftover height. */
+      .page-head{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin:0 0 18px}
+      h2{margin:0;font-size:18px;font-weight:650;letter-spacing:-.02em;line-height:1.2}
+      .results-summary{margin:6px 0 0;color:var(--sa-ink-soft);font-size:13.5px;line-height:1.55;max-width:82ch}
+
+      /* Scope banner: sits outside the tab panels so it stays on screen on
+         Findings, Pages and Links too — every count in all four sections is a
+         count of the pages that were actually fetched. Hatched rail, not a
+         severity colour: an unfinished survey is a coverage fact, not a
+         defect, and the drawing convention for "outside the survey" is
+         already the hatch (see .cov-unsurveyed). */
+      .scope-banner{display:flex;align-items:stretch;gap:0;margin:0 0 16px;background:var(--sa-surface);border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius);overflow:hidden;box-shadow:var(--sa-shadow-sm)}
+      .scope-banner::before{content:"";flex:0 0 auto;width:6px;background:var(--sa-subtle);background-image:var(--sa-hatch)}
+      .scope-text{margin:0;padding:11px 14px;font-size:13px;line-height:1.55;color:var(--sa-ink-soft)}
+      .scope-text b{color:var(--sa-ink);font-weight:650;font-variant-numeric:tabular-nums}
+
+      /* Cards --------------------------------------------------------------- */
+      .card{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm)}
+      .card-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--sa-line)}
+      .card-head h3{margin:0;font-size:13.5px;font-weight:600;color:var(--sa-ink)}
+      .feed-heading{margin:0 0 10px;font-size:13.5px;font-weight:600;color:var(--sa-ink);letter-spacing:0;text-transform:none;padding:0;border:0}
+
+      /* Scan progress -------------------------------------------------------
+         The screen an operator watches, so it answers "what is happening right
+         now" before it answers anything else: phase, rate, and the URL in
+         flight. Nothing here is a summary; summaries are the results view. */
+      .panel-title{margin:0 0 14px;font-size:26px;font-weight:650;letter-spacing:-.025em}
+      .run-identity h2{margin:0}
+      .run-identity h2 .run-target{font-family:var(--sa-mono);font-size:13px;color:var(--sa-ink-soft);font-weight:600}
+      .chip-row{display:flex;flex-wrap:wrap;gap:8px;margin:9px 0 0}
+      .pulse-dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:0 0 auto;animation:sa-pulse 1.8s ease-in-out infinite}
+      @keyframes sa-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.72)}}
+      .icon-btn{width:38px;padding:0;justify-content:center}
+      .stop-glyph{width:11px;height:11px;border-radius:2px;background:currentColor;display:block}
+      .btn.quiet{background:var(--sa-primary-soft);border-color:var(--sa-primary-line);color:var(--sa-primary-text)}
+      .btn.quiet:hover:not(:disabled){background:color-mix(in srgb,var(--sa-primary) 22%,transparent)}
+
+      /* Phase stepper. A crawl waiting on the browser pass is not a stuck
+         crawl, and the only way to tell from a single bar is to be told. */
+      .stepper{list-style:none;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:0;margin:0 0 16px;padding:0}
+      .step{display:flex;align-items:center;gap:10px;min-width:0}
+      .step-mark{flex:0 0 auto;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:650;border:1px solid var(--sa-line-strong);background:var(--sa-subtle);color:var(--sa-ink-faint)}
+      .step[data-state=done] .step-mark{background:var(--sa-success-soft);border-color:color-mix(in srgb,var(--sa-success) 45%,transparent);color:var(--sa-success)}
+      .step[data-state=active] .step-mark{background:var(--sa-primary);border-color:var(--sa-primary);color:#fff}
+      .step-body{min-width:0}
+      .step-name{display:block;font-size:13px;font-weight:600;color:var(--sa-ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .step[data-state=done] .step-name,.step[data-state=active] .step-name{color:var(--sa-ink)}
+      .step-note{display:block;margin-top:1px;font-size:11.5px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .step-rule{flex:1 1 auto;height:1px;background:var(--sa-line);margin:0 12px;min-width:12px}
+      .step[data-state=done] .step-rule{background:color-mix(in srgb,var(--sa-success) 40%,transparent)}
+
+      .phase-card{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);padding:15px 17px 16px;margin:0 0 14px}
+      .phase-top{display:flex;align-items:center;gap:11px;margin:0 0 11px;flex-wrap:wrap}
+      .phase-name{margin:0;font-size:15px;font-weight:650;color:var(--sa-ink)}
+      .phase-count{margin-left:auto;font-size:12.5px;color:var(--sa-ink-soft);font-variant-numeric:tabular-nums}
+      /* dt and dd are separate grid items, so each pair is wrapped rather than
+         relying on auto-placement, which laid them out side by side. */
+      .phase-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin:14px 0 0}
+      .metric-pair{min-width:0}
+      .phase-metrics dt{font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--sa-ink-faint);margin:0 0 4px}
+      .phase-metrics dd{margin:0;font-size:15px;font-weight:600;color:var(--sa-ink);font-variant-numeric:tabular-nums}
+      .now-requesting{display:flex;align-items:baseline;gap:10px;margin:14px 0 0;padding:10px 12px;background:var(--sa-subtle);border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);min-width:0}
+      .nr-label{flex:0 0 auto;font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--sa-ink-faint)}
+      .nr-url{font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+
+      .budget-callout{display:flex;align-items:center;gap:13px;margin:0 0 14px;padding:13px 15px;border:1px solid var(--sa-primary-line);background:var(--sa-primary-soft);border-radius:var(--sa-radius)}
+      .callout-mark{flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:var(--sa-primary)}
+      .budget-text{margin:0;flex:1 1 auto;font-size:13px;line-height:1.5;color:var(--sa-ink-soft)}
+      .budget-text b{color:var(--sa-ink);font-variant-numeric:tabular-nums}
+      .budget-callout .btn{flex:0 0 auto}
+      .budget-error{margin:-6px 0 14px;font-size:12.5px;color:var(--sa-critical)}
+
+      .run-columns{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:14px;margin:0 0 14px;align-items:start}
+      .run-side{display:grid;gap:14px;align-content:start}
+      .card-head{display:flex;align-items:center;gap:10px;margin:0 0 3px}
+      .card-head .feed-heading{margin:0}
+      .card-head .state-chip,.card-head .mix-total{margin-left:auto}
+      .mix-total{font-size:12.5px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
+      .panel-card>.hint{margin:0 0 11px}
+
+      .recent-feed li{align-items:flex-start;gap:11px;padding:10px 0;border-bottom:1px solid var(--sa-line);background:transparent}
+      .recent-feed li:last-child{border-bottom:0}
+      .feed-mark{flex:0 0 auto;width:20px;height:20px;margin-top:1px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;background:var(--sa-subtle);color:var(--sa-ink-faint);border:1px solid var(--sa-line)}
+      .feed-mark[data-kind=ok]{background:var(--sa-success-soft);border-color:color-mix(in srgb,var(--sa-success) 40%,transparent);color:var(--sa-success)}
+      .feed-mark[data-kind=found]{background:var(--sa-primary-soft);border-color:var(--sa-primary-line);color:var(--sa-primary-text)}
+      .feed-mark[data-kind=bad]{background:var(--sa-critical-soft);border-color:color-mix(in srgb,var(--sa-critical) 40%,transparent);color:var(--sa-critical)}
+      .feed-body{flex:1 1 auto;min-width:0}
+      .feed-title{display:block;font-size:13px;color:var(--sa-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .feed-title code{font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-ink)}
+      .feed-note{display:block;margin-top:2px;font-size:11.5px;color:var(--sa-ink-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .feed-age{flex:0 0 auto;font-size:11px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums;padding-top:2px}
+
+      .signal-lead{margin:0 0 12px;padding:12px 13px;border:1px solid var(--sa-primary-line);background:var(--sa-primary-soft);border-radius:var(--sa-radius-sm)}
+      .signal-lead b{display:block;margin-bottom:4px;font-size:13px;color:var(--sa-ink)}
+      .signal-lead span{font-size:12.5px;line-height:1.5;color:var(--sa-ink-soft)}
+      .signal-list{list-style:none;margin:0;padding:0;display:grid;gap:1px}
+      .signal-list li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:start;padding:9px 0;border-top:1px solid var(--sa-line)}
+      .signal-list li:first-child{border-top:0}
+      .signal-name{grid-area:1/1;font-size:13px;color:var(--sa-ink);overflow-wrap:anywhere}
+      .signal-note{grid-area:2/1;font-size:11.5px;color:var(--sa-ink-faint)}
+      .signal-badge{grid-area:1/2;justify-self:end}
+
+      .mix-rows{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+      .mix-rows li{display:grid;grid-template-columns:64px minmax(0,1fr) 38px;gap:11px;align-items:center;font-size:12.5px;color:var(--sa-ink-soft)}
+      .mix-track{height:7px;border-radius:999px;background:var(--sa-subtle);overflow:hidden}
+      .mix-fill{height:100%;border-radius:999px}
+      .mix-count{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;color:var(--sa-ink)}
+
+      .run-config{display:flex;align-items:center;gap:12px;margin:0;padding:11px 14px;border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);font-size:12.5px;color:var(--sa-ink-faint)}
+      .run-config-facts{flex:1 1 auto;overflow-wrap:anywhere}
+      .run-config .link-btn{margin-left:0}
+
+      @media(max-width:1040px){
+        .run-columns{grid-template-columns:minmax(0,1fr)}
+        .stepper{grid-auto-flow:row;gap:10px}
+        .step-rule{display:none}
+      }
+
+      /* Stat tiles ---------------------------------------------------------- */
+      .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:0 0 18px}
+      .stat-grid>div{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);padding:14px 16px}
+      .stat-grid dt{font-size:12.5px;font-weight:500;color:var(--sa-ink-faint);margin:0 0 6px;text-transform:none;letter-spacing:0}
+      .stat-grid dd{margin:0;font-size:26px;font-weight:650;letter-spacing:-.02em;line-height:1.1;color:var(--sa-ink);font-variant-numeric:tabular-nums}
+      .stat-sub{display:block;margin-top:5px;font-size:12.5px;line-height:1.4;color:var(--sa-ink-faint)}
+
+      .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+      /* Arriving from a tile means arriving at a pre-filtered list. Say which
+         filter is on and how to leave it — an unexplained subset reads as a
+         smaller site, which is the same mistake the scope banner exists to
+         stop. */
+      .scoped-note{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:8px 12px;background:var(--sa-primary-soft);border:1px solid var(--sa-primary-line);border-radius:var(--sa-radius);font-size:12.5px;color:var(--sa-ink-soft)}
+      .scoped-note .scoped-text b{color:var(--sa-ink);font-weight:650;font-variant-numeric:tabular-nums}
+      .scoped-note .link-btn{color:var(--sa-primary-text);flex:0 0 auto}
+
+      /* A tile stating "178 pages not fully checked" has to be able to show
+         those 178. The whole tile is the target, via an overlay button rather
+         than a wrapping <button> — the tiles are dt/dd pairs inside a <dl>,
+         and a button is not a valid child of a description list. The visible
+         number stays the label; the button carries the accessible name. */
+      .stat-tile{position:relative}
+      .stat-open{position:absolute;inset:0;width:100%;border:0;background:transparent;padding:0;margin:0;cursor:pointer;border-radius:var(--sa-radius);font:inherit;color:inherit}
+      .stat-open:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
+      .stat-tile:has(.stat-open:not(:disabled)):hover{border-color:var(--sa-primary-line);box-shadow:var(--sa-shadow)}
+      /* A tile whose count is zero has nothing behind it. It stays readable
+         and stops advertising a drill-in that would open an empty list. */
+      .stat-open:disabled{cursor:default}
+      /* The affordance is the arrow, not a colour change: the number itself
+         must keep reading as data. */
+      .stat-tile:has(.stat-open:not(:disabled)) dt::after{content:' \2192';color:var(--sa-ink-faint);font-weight:600}
+      .stat-tile:has(.stat-open:not(:disabled)):hover dt::after{color:var(--sa-primary-text)}
+
+      /* Grouped navigation --------------------------------------------------
+         Twelve report sections need grouping or they read as a list of
+         twenty. The groups also carry the one thing an operator has to know
+         before trusting a section: where its evidence comes from. "Browser
+         checks" is a separate group precisely because those two sections are
+         the ones that can honestly be empty. */
+      .nav-group{margin:0 0 14px}
+      .nav-group:last-of-type{margin-bottom:0}
+      .nav-group-label{font-size:11px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--sa-ink-faint);padding:0 10px;margin:0 0 6px}
+      .nav-block{display:grid;gap:2px}
+
+      /* A parent's scopes, revealed in place beneath it. The rail is what says
+         these belong to the row above rather than being siblings of it. */
+      .subnav{display:grid;gap:1px;margin:1px 0 5px 15px;padding-left:11px;border-left:1px solid var(--sa-line)}
+      .subnav[hidden]{display:none}
+      .subnav-item{display:flex;align-items:center;gap:8px;width:100%;min-height:28px;padding:0 8px;border:0;background:transparent;border-radius:var(--sa-radius-sm);color:var(--sa-ink-faint);font:inherit;font-size:12.5px;text-align:left;cursor:pointer}
+      .subnav-item>span:first-child{flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .subnav-count{flex:0 0 auto;font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--sa-ink-faint)}
+      .subnav-item:hover:not(:disabled){background:var(--sa-subtle);color:var(--sa-ink)}
+      .subnav-item.active{color:var(--sa-primary-text);font-weight:600}
+      .subnav-item.active .subnav-count{color:var(--sa-primary-text)}
+      .subnav-item:disabled{opacity:.45;cursor:default}
+      .subnav-item:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
+
+      /* The state chip is the answer to Sitebulb's score dial: the same
+         glanceable per-section signal without inventing a number. Three
+         states only, in the same words the Site conditions readout uses. */
+      .tab-state{margin-left:auto;display:inline-flex;align-items:center;gap:6px;flex:0 0 auto}
+      .tab-dot{width:7px;height:7px;border-radius:50%;background:var(--sa-line-strong);flex:0 0 auto}
+      .tab-state[data-state=attention] .tab-dot{background:var(--sa-sev-high)}
+      .tab-state[data-state=ok] .tab-dot{background:var(--sa-success)}
+      .tab-state[data-state=unknown] .tab-dot{background:transparent;border:1.5px dashed var(--sa-ink-faint);width:9px;height:9px}
+      .tab-num{font-size:11.5px;font-weight:600;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
+      .tab-state[data-state=attention] .tab-num{color:var(--sa-critical)}
+      .tab.active .tab-num{color:var(--sa-primary-text)}
+
+      /* Discipline section pages ------------------------------------------- */
+      .section-head{margin:0 0 14px}
+      .section-head h2{margin:0}
+      .section-lede{margin:5px 0 0;font-size:13.5px;line-height:1.55;color:var(--sa-ink-soft);max-width:82ch}
+
+      /* Every section states its own coverage before it states its findings.
+         Three shapes, because "we checked and found nothing" and "we never
+         checked" must never look alike. */
+      .coverage-line{display:flex;align-items:flex-start;gap:10px;margin:0 0 16px;padding:10px 13px;border-radius:var(--sa-radius);font-size:12.5px;line-height:1.55;border:1px solid var(--sa-line);background:var(--sa-surface);color:var(--sa-ink-soft)}
+      .coverage-line b{color:var(--sa-ink);font-variant-numeric:tabular-nums}
+      .coverage-line .cl-mark{flex:0 0 auto;width:9px;height:9px;border-radius:50%;margin-top:5px;background:var(--sa-line-strong)}
+      .coverage-line[data-state=ok] .cl-mark{background:var(--sa-success)}
+      .coverage-line[data-state=attention] .cl-mark{background:var(--sa-sev-high)}
+      .coverage-line[data-state=unknown]{border-style:dashed;border-color:var(--sa-line-strong);background-image:var(--sa-hatch)}
+      .coverage-line[data-state=unknown] .cl-mark{background:transparent;border:1.5px dashed var(--sa-ink-faint)}
+      .coverage-line .cl-action{margin-left:auto;flex:0 0 auto}
+
+      .section-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0 0 16px}
+      .section-stats>div{position:relative;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);padding:11px 13px}
+      .section-stats dt{font-size:12.5px;font-weight:500;color:var(--sa-ink-faint);margin:0 0 5px}
+      .section-stats dd{margin:0;font-size:22px;font-weight:650;letter-spacing:-.02em;line-height:1.1;color:var(--sa-ink);font-variant-numeric:tabular-nums}
+      .section-stats .stat-sub{margin-top:3px;font-size:11.5px}
+
+
+      /* Distributions -------------------------------------------------------
+         One horizontal bar-row form for every distribution in the product:
+         crawl depth, HTTP status, canonical, title/description length, word
+         count, H1 count. A shared form means the operator learns to read it
+         once, and it stays legible in a 320px panel where a column chart with
+         an axis would not. */
+      .dist{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);padding:13px 15px 14px;margin:0}
+      .dist-head{display:flex;align-items:baseline;gap:10px;margin:0 0 3px}
+      .dist-head h3{margin:0;font-size:13.5px;font-weight:600;color:var(--sa-ink)}
+      .dist-total{margin-left:auto;font-size:11.5px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
+      .dist-note{margin:0 0 10px;font-size:11.5px;line-height:1.5;color:var(--sa-ink-faint)}
+      .dist-rows{list-style:none;margin:0;padding:0;display:grid;gap:1px}
+      .dist-row{display:grid;grid-template-columns:minmax(88px,132px) minmax(0,1fr) 52px;align-items:center;gap:10px;width:100%;border:0;background:transparent;padding:5px 6px;border-radius:var(--sa-radius-sm);font:inherit;font-size:12.5px;color:var(--sa-ink-soft);text-align:left}
+      button.dist-row{cursor:pointer}
+      button.dist-row:hover{background:var(--sa-subtle);color:var(--sa-ink)}
+      button.dist-row:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
+      .dist-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .dist-track{height:9px;border-radius:999px;background:var(--sa-info-soft);overflow:hidden;display:flex;min-width:24px}
+      .dist-fill{height:100%;background:var(--sa-primary);border-radius:999px 0 0 999px}
+      .dist-fill:last-child{border-radius:999px}
+      .dist-fill.tone-gap{background-image:var(--sa-hatch);background-color:var(--sa-info-soft)}
+      .dist-fill.tone-attention{background:var(--sa-sev-high)}
+      .dist-fill.tone-warn{background:var(--sa-sev-medium)}
+      .dist-fill.tone-ok{background:var(--sa-success)}
+      .dist-fill.tone-quiet{background:var(--sa-line-strong)}
+      .dist-count{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;color:var(--sa-ink)}
+      .dist-empty{margin:0;font-size:12.5px;color:var(--sa-ink-faint)}
+
+      /* Two-column readouts for facts that are statements, not magnitudes:
+         robots.txt, the sitemap record, response-header coverage. */
+      .readout{list-style:none;margin:0;padding:0;display:grid;gap:0}
+      .readout li{display:grid;grid-template-columns:minmax(120px,180px) minmax(0,1fr);gap:12px;padding:7px 0;border-top:1px solid var(--sa-line);font-size:12.5px;line-height:1.5}
+      .readout li:first-child{border-top:0}
+      .readout dt,.readout .ro-key{color:var(--sa-ink-faint)}
+      .readout dd,.readout .ro-val{margin:0;color:var(--sa-ink);overflow-wrap:anywhere}
+      .readout .ro-val b{font-variant-numeric:tabular-nums}
+
+      .dup-table td.dup-value{font-size:12.5px;color:var(--sa-ink);overflow-wrap:anywhere}
+      /* Distribution blocks pair up rather than tiling three-across: the
+         sections that carry four of them then fill a 2x2 grid instead of
+         stranding the fourth card beside two cards' worth of empty canvas,
+         and a bar row gets the width to hold its label without truncating. */
+      .section-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:14px;margin:0 0 16px;align-items:start}
+      /* The crawl row carries three short cards — depth, status, coverage —
+         which fit across where a discipline's four long ones would not. */
+      .crawl-shape{grid-template-columns:repeat(auto-fit,minmax(290px,1fr));margin-bottom:18px}
+      .section-findings{margin:18px 0 0}
+      .section-findings h3{margin:0 0 4px;font-size:13.5px;font-weight:600;color:var(--sa-ink)}
+      .section-findings .hint{margin:0 0 10px}
+
+      /* Overview grid ------------------------------------------------------- */
+
+      .panel-card{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);padding:14px 16px 16px}
+
+      /* Overview -------------------------------------------------------------
+         Identity, then one instrument strip, then the brief. The brief is the
+         only element on this screen allowed to interpret, and it is fenced off
+         visually for exactly that reason. */
+      .ov-identity h2{margin:0;font-size:26px;font-weight:650;letter-spacing:-.025em}
+      .ov-head{align-items:flex-start}
+
+      /* One bordered strip with dividers rather than four floating cards:
+         these are four readings of one run. */
+      .summary-stats{grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0;border:1px solid var(--sa-line);border-radius:var(--sa-radius);overflow:hidden;background:var(--sa-surface)}
+      .summary-stats>div{border:0;border-right:1px solid var(--sa-line);border-radius:0;box-shadow:none;background:transparent;padding:13px 16px 14px}
+      .summary-stats>div:last-child{border-right:0}
+      .summary-stats dt{font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase}
+      .summary-stats dd{font-size:26px}
+      .tile-track{height:4px;margin-top:9px;border-radius:999px;background:var(--sa-subtle);overflow:hidden}
+      .tile-fill{display:block;height:100%;border-radius:999px;background:var(--sa-primary)}
+
+      /* The brief. A violet rail and a tinted ground mark the one region that
+         reads the evidence rather than reporting it. */
+      .brief{margin:0 0 16px;border:1px solid var(--sa-primary-line);border-left:3px solid var(--sa-primary);border-radius:var(--sa-radius);background:linear-gradient(180deg,var(--sa-primary-soft),transparent 70%),var(--sa-surface);overflow:hidden}
+      .brief-kicker{margin:0;padding:12px 16px 0;font-size:11px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--sa-primary-text)}
+      .brief-kicker span{margin:0 5px;opacity:.6}
+      .brief-body{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:0;align-items:stretch}
+      .brief-lead{padding:10px 16px 16px;min-width:0}
+      .brief-lead h3{margin:0 0 7px;font-size:18px;font-weight:650;color:var(--sa-ink)}
+      .brief-summary{margin:0 0 10px;font-size:13.5px;line-height:1.6;color:var(--sa-ink-soft);max-width:64ch}
+      .brief-scope{margin:0 0 12px;font-size:12.5px;color:var(--sa-ink-faint)}
+      .brief-to-plan{margin:14px 0 0}
+      .brief-list{list-style:none;margin:0;padding:0;display:grid;gap:4px;counter-reset:brief}
+      .brief-item{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:11px;align-items:center;width:100%;padding:9px 10px;border:1px solid transparent;border-radius:var(--sa-radius-sm);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+      .brief-item:hover{background:var(--sa-subtle)}
+      .brief-item.active{background:var(--sa-primary-soft);border-color:var(--sa-primary-line)}
+      .brief-item:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
+      .brief-rank{display:grid;place-items:center;width:26px;height:26px;border-radius:var(--sa-radius-sm);background:var(--sa-subtle);color:var(--sa-ink-faint);font-size:11px;font-weight:650;font-variant-numeric:tabular-nums}
+      .brief-item.active .brief-rank{background:var(--sa-primary);color:#fff}
+      .brief-item-body{min-width:0}
+      .brief-item-title{display:block;font-size:13.5px;font-weight:600;color:var(--sa-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .brief-item-meta{display:flex;align-items:center;gap:8px;margin-top:3px;font-size:11.5px;color:var(--sa-ink-faint)}
+      .brief-item-pages{display:grid;justify-items:end;font-size:11.5px;color:var(--sa-ink-faint);white-space:nowrap}
+      .brief-item-pages b{font-size:13.5px;color:var(--sa-ink);font-variant-numeric:tabular-nums}
+
+      .brief-detail{padding:16px;border-left:1px solid var(--sa-line);background:var(--sa-surface);min-width:0}
+      /* align-items matters here: the three chips on this row are three
+         different type sizes, so the row stretches all of them to the tallest.
+         Without it a chip that does not centre its own text sits high in its
+         pill, which is what happened to the confidence chip. */
+      .brief-badges{display:flex;align-items:center;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+      .brief-detail h4{margin:0 0 8px;font-size:15px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
+      .brief-why{margin:0 0 13px;font-size:13px;line-height:1.6;color:var(--sa-ink-soft)}
+      .evidence-box{padding:11px 13px;border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);background:var(--sa-subtle);margin:0 0 13px}
+      .evidence-label{display:block;margin-bottom:8px;font-size:11px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--sa-ink-faint)}
+      .evidence-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0}
+      .evidence-facts dt{font-size:11px;color:var(--sa-ink-faint);margin:0 0 2px}
+      .evidence-facts dd{margin:0;font-size:13.5px;font-weight:600;color:var(--sa-ink);font-variant-numeric:tabular-nums}
+      .brief-detail .actions{margin-top:0}
+
+      .ov-columns{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:14px;margin:0 0 16px;align-items:start}
+      .ov-columns .conditions{margin:0}
+      .ov-columns .conditions-list{margin:11px -16px 0}
+      .ov-columns .conditions-note{padding:12px 0 0;margin:0;border-top:1px solid var(--sa-line)}
+      .card-head .link-btn{margin-left:auto;padding:0}
+
+      .deliver-main{flex-wrap:wrap}
+      .deliver-main .deliver-data{padding:0;background:transparent;border:0;margin-left:auto}
+      .deliver-more{border-top:1px solid var(--sa-line)}
+
+      @media(max-width:1040px){
+        .brief-body{grid-template-columns:minmax(0,1fr)}
+        .brief-detail{border-left:0;border-top:1px solid var(--sa-line)}
+        .ov-columns{grid-template-columns:minmax(0,1fr)}
+      }
+
+      /* Site conditions ----------------------------------------------------- */
+      .conditions{margin:0 0 18px;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);overflow:hidden}
+      .conditions>.feed-heading{padding:14px 16px 0;margin:0}
+      .conditions-list{list-style:none;margin:10px 0 0;padding:0}
+      /* The row is the toggle and the evidence it opens, nothing beside them:
+         the document link moved inside the evidence, which is where the proof
+         belongs and what freed the row of its second column. */
+      .cond-row{border-top:1px solid var(--sa-line)}
+      .cond-head{display:grid;grid-template-columns:22px 150px minmax(0,1fr) auto 12px;gap:12px;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:11px 16px;font:inherit;color:inherit;cursor:pointer}
+      .cond-head:hover{background:var(--sa-subtle)}
+      .cond-head:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
+      .cond-mark{width:18px;height:18px;border-radius:50%;display:block;background:var(--sa-info-soft);border:1px solid var(--sa-line-strong);position:relative}
+      .cond-mark::after{content:"";position:absolute;inset:5px;border-radius:50%;background:var(--sa-ink-faint)}
+      .cond-row[data-state=ok] .cond-mark{background:var(--sa-success-soft);border-color:var(--sa-success-line)}
+      .cond-row[data-state=ok] .cond-mark::after{background:var(--sa-success)}
+      .cond-row[data-state=attention] .cond-mark{background:var(--sa-critical-soft);border-color:color-mix(in srgb,var(--wqa-sev-high) 40%,transparent)}
+      .cond-row[data-state=attention] .cond-mark::after{background:var(--sa-sev-high)}
+      .cond-row[data-state=unknown] .cond-mark::after{background:transparent;border:2px dashed var(--sa-ink-faint);inset:3px}
+      .cond-label{font-size:13px;font-weight:600;color:var(--sa-ink)}
+      .cond-headline{font-size:13px;color:var(--sa-ink-soft)}
+      /* The caret is the row's only promise that there is something under it,
+         and it carries more weight now that the document link is behind it. */
+      .cond-caret{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;color:var(--sa-ink-faint);transition:transform .15s ease}
+      .cond-head[aria-expanded=true] .cond-caret{transform:rotate(90deg)}
+      .cond-evidence{margin:0;padding:0 16px 14px 50px;list-style:none}
+      .cond-evidence li{font-size:12.5px;line-height:1.55;color:var(--sa-ink-soft);margin-bottom:4px}
+      .cond-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 0}
+      .conditions-note{margin:0;padding:0 16px 14px;font-size:12.5px;line-height:1.5;color:var(--sa-ink-faint)}
+
+      /* The three published documents (robots.txt, sitemap, llms.txt) are rows
+         in the conditions readout, and each offers the file itself as the last
+         line of its evidence. */
+      .cond-open{flex:0 0 auto;font-size:12px;color:var(--sa-primary-text);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px;font-family:inherit}
+      .cond-open:hover{color:var(--sa-primary-hover)}
+      .cond-open:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
+
+      /* Severity and the ranked issues, one card. The legend sits on the
+         heading line so the bar reads as a caption to the list beneath it
+         rather than as a chart in its own panel. */
+      .mix-card .severity-bar{margin:0 0 11px}
+      .mix-card .severity-legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin:0 0 12px;font-size:12.5px}
+      .mix-card .top-issues{margin-top:2px}
+
+      /* Findings ------------------------------------------------------------ */
+      .findings-list{list-style:none;margin:0;padding:0;display:grid;gap:10px;counter-reset:keynote}
+      .finding-row{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);overflow:hidden;counter-increment:keynote}
+      .finding-row:hover{border-color:var(--sa-line-strong)}
+      .f-toggle{display:block;width:100%;text-align:left;background:transparent;border:0;padding:12px 14px;font:inherit;color:inherit;cursor:pointer}
+      .f-toggle:hover{background:var(--sa-subtle)}
+      .f-toggle:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
+      .finding-row .f-top{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:12px;margin-bottom:4px}
+      .finding-row .f-top .pill{justify-self:start}
+      .finding-row .f-title{min-width:0;overflow-wrap:anywhere}
+      .finding-row .f-top::before{content:none}
+      .finding-row .f-title{font-weight:600;font-size:13.5px;color:var(--sa-ink)}
+      .finding-row .f-meta{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--sa-ink-faint);padding-left:0}
+      .f-chev{flex:0 0 auto;width:16px;text-align:right;color:var(--sa-ink-faint);font-size:15px;line-height:1;transition:transform .15s ease}
+      .f-toggle[aria-expanded="true"] .f-chev{transform:rotate(90deg)}
+      .finding-row .f-conf{flex:0 0 auto;width:112px;font-size:12.5px;color:var(--sa-ink-faint);display:flex;align-items:center;gap:6px;margin-left:auto}
+      .finding-row.sev-critical{box-shadow:inset 3px 0 0 var(--sa-sev-critical),var(--sa-shadow-sm)}
+      .finding-row.sev-high{box-shadow:inset 3px 0 0 var(--sa-sev-high),var(--sa-shadow-sm)}
+      .finding-row.sev-medium{box-shadow:inset 3px 0 0 var(--sa-sev-medium),var(--sa-shadow-sm)}
+      .finding-row.sev-low{box-shadow:inset 3px 0 0 var(--sa-sev-low),var(--sa-shadow-sm)}
+      .finding-row.sev-info{box-shadow:inset 3px 0 0 var(--sa-line-strong),var(--sa-shadow-sm)}
+      .empty-row{font-size:13px;color:var(--sa-ink-faint);padding:16px;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius)}
+
+
+      .confidence-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+      .confidence-dot.confirmed{background:var(--sa-success)}
+      .confidence-dot.corroborated{background:transparent;box-shadow:inset 0 0 0 2px var(--sa-success)}
+      .confidence-dot.inferred{background:var(--sa-sev-medium)}
+      .confidence-dot.inconclusive{background:var(--sa-line-strong)}
+
+      /* Findings -------------------------------------------------------------
+         Patterns on the left, one inspected pattern on the right. The count an
+         operator acts on is patterns, not observations, and the footer keeps
+         the larger number visible so nothing looks quietly reduced. */
+      .fx-head{align-items:flex-start;margin-bottom:14px}
+      .fx-head .panel-title{margin:0}
+      .fx-meta{margin:5px 0 0;font-size:12.5px;color:var(--sa-ink-faint)}
+      .fx-stats{margin-bottom:12px}
+
+      .fx-lenses{display:flex;align-items:center;gap:12px;margin:0 0 10px;flex-wrap:wrap}
+      .lens-tabs{display:flex;gap:4px;flex-wrap:wrap}
+      .lens{min-height:31px;padding:0 11px;border:1px solid transparent;border-radius:var(--sa-radius-sm);background:transparent;color:var(--sa-ink-faint);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+      .lens:hover{background:var(--sa-subtle);color:var(--sa-ink)}
+      .lens.active{background:var(--sa-primary-soft);border-color:var(--sa-primary-line);color:var(--sa-primary-text)}
+      .lens:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
+      .fx-lenses .filter-state{margin-left:auto}
+
+      .lens-note{display:flex;align-items:center;gap:14px;margin:0 0 12px;padding:11px 14px;border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface)}
+      .lens-note-body{flex:1 1 auto;min-width:0}
+      .lens-note-body b{display:block;font-size:13px;color:var(--sa-ink);margin-bottom:2px}
+      .lens-note-body span{font-size:12.5px;line-height:1.5;color:var(--sa-ink-soft)}
+      .lens-state{flex:0 0 auto}
+
+      .fx-split{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px;align-items:start;margin:0 0 12px}
+      .fx-list-card{padding:0;overflow:hidden}
+      .fx-list-card .card-head{padding:13px 15px 11px;margin:0;border-bottom:1px solid var(--sa-line)}
+      .fx-select-hint{margin:0}
+      .fx-table{border:0;border-radius:0;background:transparent}
+      .fx-table th{background:var(--sa-subtle)}
+      .fx-row{cursor:pointer}
+      .fx-row.selected{background:var(--sa-primary-soft)}
+      .fx-row.selected td{color:var(--sa-ink)}
+      .fx-row.selected td:first-child{box-shadow:inset 2px 0 0 var(--sa-primary)}
+      .fx-issue{display:block;font-size:13px;font-weight:600;color:var(--sa-ink);overflow-wrap:anywhere}
+      .fx-issue-meta{display:flex;align-items:center;gap:8px;margin-top:4px;font-size:11.5px;color:var(--sa-ink-faint)}
+      .fx-pages-word{color:var(--sa-ink-faint);font-weight:400}
+      .fx-list-card .pager{margin:0;padding:11px 15px;border-top:1px solid var(--sa-line)}
+
+      .fx-detail{align-self:start}
+      .fx-kicker{margin:0 0 5px;font-size:11px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--sa-primary-text)}
+      .fx-detail-title{margin:0 0 10px;font-size:18px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
+      .fx-to-plan{margin:0 0 12px}
+      .fx-tabs{display:flex;gap:2px;margin:12px 0 12px;border-bottom:1px solid var(--sa-line)}
+      .fx-tab{padding:7px 11px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--sa-ink-faint);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;margin-bottom:-1px}
+      .fx-tab:hover{color:var(--sa-ink)}
+      .fx-tab.active{color:var(--sa-primary-text);border-bottom-color:var(--sa-primary)}
+      .fx-tab:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
+      .fx-tab-body .evidence-label{margin-top:2px}
+      .fx-instances{display:grid;gap:2px;max-height:280px;overflow:auto;padding:2px 0}
+
+      .columns-wrap{position:relative}
+      .columns-menu{position:absolute;z-index:6;right:0;top:calc(100% + 6px);width:230px;padding:9px;background:var(--sa-surface-raised,var(--sa-surface));border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-lg)}
+      .columns-title{margin:0 0 7px;padding:0 4px;font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--sa-ink-faint)}
+      .columns-row{display:flex;align-items:center;gap:9px;padding:6px 4px;font-size:12.5px;color:var(--sa-ink-soft);cursor:pointer;border-radius:var(--sa-radius-sm)}
+      .columns-row:hover{background:var(--sa-subtle)}
+
+      .fx-foot{display:flex;align-items:center;gap:14px;margin:0;padding:11px 14px;border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);font-size:12.5px;color:var(--sa-ink-faint)}
+      .fx-foot-text{flex:1 1 auto}
+      .fx-foot .link-btn{margin-left:0}
+
+      @media(max-width:1040px){
+        .fx-split{grid-template-columns:minmax(0,1fr)}
+      }
+
+      /* Tables -------------------------------------------------------------- */
+      .data-table{width:100%;border-collapse:collapse;font-size:13px;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);overflow:hidden}
+      .data-table th{text-align:left;font-size:12.5px;font-weight:600;color:var(--sa-ink-faint);text-transform:none;letter-spacing:0;padding:10px 12px;border-bottom:1px solid var(--sa-line);background:var(--sa-subtle)}
+      .data-table td{padding:10px 12px;border-bottom:1px solid var(--sa-line);vertical-align:top;word-break:break-word;font-variant-numeric:tabular-nums;color:var(--sa-ink-soft)}
+      .data-table tbody tr:hover:not(.detail-row){background:var(--sa-subtle)}
+      .data-table tbody tr:nth-child(even):not(.detail-row){background:transparent}
+      .data-table td.mono{font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-ink)}
+      .data-table th[data-sort]{cursor:pointer;user-select:none}
+      .data-table th[data-sort]:hover{color:var(--sa-ink)}
+      .data-table th.sorted-asc::after{content:' \25B2'}
+      .data-table th.sorted-desc::after{content:' \25BC'}
+
+      /* The status column sizes to its content instead of taking an equal
+         share and squeezing the pill; the URL columns absorb the slack. */
+      .data-table td.col-status,.data-table th.col-status{width:1%;white-space:nowrap}
+
+      /* Pills ---------------------------------------------------------------
+         One implementation of the chip-and-pill component DESIGN.md documents.
+         There were nine — .badge, .status-pill, .signal-badge, .cond-state,
+         .cond-confidence, .phase-badge, .render-state, .sheet-scale and
+         .state-chip — each restating the radius, the padding and the type, and
+         only three of them seating their own label. A pill is a box drawn round
+         one line of text, and any flex or grid row can stretch it taller than
+         that line, so the seating lives here, once, where no new pill can be
+         born without it. line-height is declared for the same reason — inherited
+         from a paragraph it made the confidence pill 3px taller than the same
+         pill in a table cell, so it is pinned to the face's own metric here. scripts/check.mjs fails the build
+         on a second
+         implementation.
+
+         Two sizes and one tone vocabulary. The tones are the words the side
+         panel's own chip already uses — critical, warn, ok, muted — so the two
+         surfaces name the same state the same way instead of each inventing a
+         set. The classes that remain beside .pill (.status-pill, .render-state,
+         .signal-badge and the rest) now carry only where a pill sits and what
+         queries it, never what it looks like. */
+      .pill{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;line-height:normal;border:1px solid transparent;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600;letter-spacing:0;text-transform:none;white-space:nowrap;word-break:normal;overflow-wrap:normal;background:var(--sa-subtle);color:var(--sa-ink-soft)}
+      /* The roomier step: a chip that sits on a row of its own rather than
+         inside a table cell or beside a heading. */
+      .pill.roomy{gap:7px;padding:4px 11px;font-size:12.5px;font-weight:400}
+      /* One lowercase word from the scanner's own vocabulary — "high",
+         "confirmed" — rendered in the sentence case DESIGN.md asks badges for.
+         Never on a multi-word label, where it would produce title case, and
+         never on a technical literal such as "noindex". */
+      .pill.cap{text-transform:capitalize}
+      .pill[data-tone=ok]{background:var(--sa-success-soft);color:var(--sa-success);border-color:var(--sa-success-line)}
+      .pill[data-tone=warn]{background:var(--sa-warn-soft);color:var(--sa-warn);border-color:color-mix(in srgb,var(--sa-warn) 40%,transparent)}
+      .pill[data-tone=critical]{background:var(--sa-critical-soft);color:var(--sa-critical);border-color:color-mix(in srgb,var(--wqa-sev-high) 40%,transparent)}
+      /* The top of the ramp is the one solid fill — how critical announces
+         itself, and the only pill whose ground comes from the ramp. */
+      /* White ink on the ramp value itself measures 4.09:1, under the 4.5 floor
+         for text this size. The ramp is sealed and stays exactly as it is: the
+         pill deepens its own ground from it instead, which is the Fill Is Not
+         The Ink rule applied to the one place the fill has to carry ink. */
+      .pill[data-tone=critical-solid]{background:color-mix(in srgb,var(--sa-sev-critical) 78%,var(--wqa-backdrop));color:#fff}
+      .pill[data-tone=brand]{background:var(--sa-primary-soft);color:var(--sa-primary-text);border-color:var(--sa-primary-line)}
+      .pill[data-tone=muted]{background:var(--sa-info-soft);color:var(--sa-ink-faint);border-color:var(--sa-line-strong)}
+      .pill[data-tone=outline]{background:var(--sa-surface);border-color:var(--sa-line)}
+
+      /* The inputs screen. Two columns: what the audit already holds, and the
+         two things only the operator can answer. It replaced a button in an
+         empty page — a screen with nothing on it reads as unfinished, and this
+         one had plenty it could truthfully show. */
+      .optimize-inputs{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin:0 0 16px;align-items:start}
+      @media(max-width:980px){.optimize-inputs{grid-template-columns:minmax(0,1fr)}}
+      .optimize-input-card{border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);box-shadow:var(--sa-shadow-sm);padding:15px 17px}
+      .optimize-input-card h3{margin:0 0 3px;font-size:13.5px;font-weight:600;color:var(--sa-ink)}
+      .optimize-input-card>div>.hint{margin:0 0 13px;max-width:60ch}
+      .optimize-input-card .field{margin:0 0 14px}
+      .optimize-input-card .field:last-child{margin-bottom:0}
+      .optimize-input-card select{width:100%;border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius-sm);padding:8px 11px;font-size:13px;background:var(--sa-surface);color:var(--sa-ink);box-shadow:var(--sa-shadow-sm)}
+      .optimize-input-card select:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px;border-color:var(--sa-primary)}
+      .optimize-input-card .field>.hint{margin-top:5px}
+      /* Counts the audit can defend, set as a ledger rather than as prose. */
+      .optimize-facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px 16px;margin:0}
+      .optimize-facts dt{font-size:12.5px;color:var(--sa-ink-faint)}
+      .optimize-facts dd{margin:0;font-size:12.5px;color:var(--sa-ink);font-variant-numeric:tabular-nums;text-align:right}
+      /* Absent evidence is stated, never blanked: not run is a fact. */
+      .optimize-fact-absent{color:var(--sa-ink-faint)}
+      .optimize-build-actions{margin-top:0;align-items:flex-start;gap:16px}
+      .optimize-build-actions .hint{margin:0;max-width:74ch;flex:1 1 320px}
+
+      .optimize-start{border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);box-shadow:var(--sa-shadow-sm);padding:18px 20px;max-width:74ch}
+      .optimize-start b{display:block;margin-bottom:6px;font-size:15px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
+      .optimize-start .hint{margin:0 0 14px}
+      .optimize-working{display:flex;align-items:center}
+      /* Who wrote the words, above the words. */
+      .optimize-provenance{display:flex;align-items:center;margin:0 0 8px;font-size:11px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;color:var(--sa-ink-faint)}
+
+      /* The working indicator -----------------------------------------------
+         One primitive, used wherever the product is waiting on something it does
+         not control. It exists because the alternative is a surface that looks
+         finished while a request is still out: the deterministic brief is on
+         screen either way, so without motion there is nothing to tell an
+         operator that better wording may still arrive.
+
+         Three dots on the product violet, sized to sit on a line of meta text.
+         Reduced motion gets a static row rather than nothing — the state still
+         has to be visible, it just stops moving. */
+      .work-dot{display:inline-flex;align-items:center;gap:3px;margin-left:7px;vertical-align:middle}
+      .work-dot::before,.work-dot::after,.work-dot>i{content:"";display:block;width:4px;height:4px;border-radius:50%;background:var(--sa-primary-text);opacity:.35;animation:sa-work 1.1s ease-in-out infinite}
+      .work-dot::after{animation-delay:.18s}
+      .work-dot>i{animation-delay:.36s}
+      @keyframes sa-work{0%,100%{opacity:.28;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}
+      @media(prefers-reduced-motion:reduce){
+        .work-dot::before,.work-dot::after,.work-dot>i{animation:none;opacity:.7}
+      }
+
+      /* Optimize ------------------------------------------------------------
+         The plan surface. It reuses the stat strip, pills, tables and card
+         shells the rest of the console already has; what is declared here is
+         only the sequence itself — the numbered steps, the priority cards and
+         the rule chips that carry traceability back to Findings. */
+      .optimize-focus{margin:0 0 12px;padding:9px 12px;border-radius:var(--sa-radius-sm);background:var(--sa-primary-soft);border:1px solid var(--sa-primary-line);font-size:12.5px;line-height:1.5;color:var(--sa-ink-soft);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+      .optimize-focus .link-btn{margin-left:auto}
+      .optimize-limits{display:flex;align-items:center;gap:16px;margin:0 0 18px;padding:12px 14px;border:1px solid var(--sa-line-strong);border-left:6px solid transparent;border-radius:var(--sa-radius);background-image:linear-gradient(var(--sa-surface),var(--sa-surface)),var(--sa-hatch);background-origin:padding-box,border-box;background-clip:padding-box,border-box}
+      .optimize-limit-text{margin:0;font-size:13px;line-height:1.55;color:var(--sa-ink-soft);max-width:88ch}
+      .optimize-limits .btn{margin-left:auto;flex:0 0 auto}
+      .stat-grid.optimize-stats{grid-template-columns:repeat(4,minmax(0,1fr));margin:0 0 16px}
+      @media(max-width:900px){.stat-grid.optimize-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      /* A phrase, not a figure. At the strip display size a long label would set
+         as a headline and read as a claim rather than as a reading to verify. */
+      .stat-grid.optimize-stats dd.stat-word{font-size:15px;letter-spacing:-.01em;line-height:1.25}
+      .optimize-why{margin:0 0 16px;padding:15px 17px}
+      .optimize-headline{margin:0 0 6px;font-size:15px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink);max-width:74ch}
+      .optimize-why .hint{margin:0;max-width:84ch}
+      /* The phase map: when each body of work happens, and how much of it there
+         is. Rows rather than cards, because four cards of heading-plus-text is
+         the scaffold this screen already spends its cards on below, and the map
+         has to read as one object the eye can run down. */
+      .attack-list{list-style:none;margin:14px 0 0;padding:0;border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);background:var(--sa-canvas);overflow:hidden}
+      .attack-row + .attack-row{border-top:1px solid var(--sa-line)}
+      /* What happens now gets the ground, not a bar down its side: the eye
+         should land on it before it reads a word. */
+      .attack-row.lead{background:var(--sa-primary-soft)}
+      .attack-open{display:grid;grid-template-columns:64px minmax(0,1fr) auto 12px;gap:14px;align-items:start;width:100%;text-align:left;border:0;background:transparent;padding:12px 14px;font:inherit;color:inherit;cursor:pointer}
+      .attack-open:hover{background:var(--sa-subtle)}
+      .attack-row.lead .attack-open:hover{background:color-mix(in srgb,var(--sa-primary-soft) 70%,var(--sa-subtle))}
+      .attack-open:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
+      .attack-when{justify-content:center;width:100%;padding-left:0;padding-right:0;margin-top:1px}
+      .attack-text{display:block;min-width:0}
+      .attack-text b{display:block;font-size:13.5px;font-weight:650;letter-spacing:-.01em;color:var(--sa-ink)}
+      .attack-summary{display:block;margin-top:2px;font-size:12.5px;line-height:1.5;color:var(--sa-ink-soft);max-width:78ch}
+      .attack-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+      /* Quieter than a pill: these name the disciplines a phase touches, which
+         is orientation rather than status, and pills in this product carry
+         state. */
+      .attack-tag{font-size:11px;letter-spacing:.01em;color:var(--sa-ink-faint);border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius-sm);padding:2px 7px;white-space:nowrap}
+      .attack-count{display:flex;flex-direction:column;align-items:flex-end;flex:0 0 auto;line-height:1.15}
+      .attack-count b{font-size:19px;font-weight:650;color:var(--sa-ink);font-variant-numeric:tabular-nums}
+      .attack-count span{font-size:11px;color:var(--sa-ink-faint)}
+      .attack-caret{width:12px;height:12px;margin-top:5px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;color:var(--sa-line-strong);transition:color .15s ease,transform .15s ease}
+      .attack-open:hover .attack-caret,.attack-open:focus-visible .attack-caret{color:var(--sa-ink-faint);transform:translateX(2px)}
+      @media(prefers-reduced-motion:reduce){.attack-caret{transition:none}}
+      @media(max-width:760px){
+        .attack-open{grid-template-columns:58px minmax(0,1fr) 12px;row-gap:8px}
+        .attack-count{grid-column:2;flex-direction:row;align-items:baseline;gap:6px}
+      }
+      .optimize-priority{border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);box-shadow:var(--sa-shadow-sm);padding:15px 17px;margin:0 0 14px}
+      .optimize-priority-head{display:flex;align-items:flex-start;gap:14px;margin:0 0 10px}
+      .optimize-priority-when{flex:0 0 auto;justify-content:center;min-width:56px;margin-top:2px}
+      .optimize-priority-head h3{margin:0 0 3px;font-size:15px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
+      .optimize-priority-head .hint{margin:0;max-width:78ch}
+      .optimize-priority-meta{margin-left:auto;display:flex;align-items:center;gap:8px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end}
+      .optimize-count{font-size:11.5px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+      /* What a group unblocks is the reason it sits where it does; without it
+         the sequence is an assertion. */
+      .optimize-unblocks{margin:0 0 13px;padding:10px 12px;border:1px solid var(--sa-primary-line);background:var(--sa-primary-soft);border-radius:var(--sa-radius-sm);font-size:12.5px;line-height:1.55;color:var(--sa-ink-soft);max-width:88ch}
+      .optimize-actions{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+      .optimize-actions>li{border-top:1px solid var(--sa-line);padding-top:11px}
+      .optimize-action-head{display:flex;align-items:baseline;gap:12px;margin-bottom:3px}
+      .optimize-action-head b{font-size:13.5px;font-weight:600;color:var(--sa-ink)}
+      .optimize-action-head span{margin-left:auto;font-size:11.5px;color:var(--sa-ink-faint);white-space:nowrap;font-variant-numeric:tabular-nums}
+      .optimize-actions .hint{margin:0 0 8px;max-width:84ch}
+      .optimize-rules{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+      /* Each rule behind an action, openable in Findings. This is the
+         traceability the plan exists to keep. */
+      .optimize-rule{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--sa-line-strong);background:var(--sa-subtle);color:var(--sa-ink-soft);border-radius:var(--sa-radius-sm);padding:4px 9px;font-family:var(--sa-sans);font-size:12px;cursor:pointer;text-align:left}
+      .optimize-rule:hover{border-color:var(--sa-primary-line);background:var(--sa-primary-soft);color:var(--sa-primary-text)}
+      .optimize-rule:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
+      .optimize-rule span{font-size:11px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
+      .optimize-rule:hover span{color:var(--sa-primary-text)}
+      .optimize-verify{margin:0;font-size:11.5px;line-height:1.5;color:var(--sa-ink-faint);max-width:84ch}
+      /* A change is the row a plan is executed from: an id you can cite in a
+         ticket, the thing on the page you edit, and what it says right now.
+         Everything else — the instruction, the test, the pages — is behind the
+         disclosure, because the reader scanning the plan is counting jobs, not
+         reading them. */
+      .change-list{list-style:none;margin:0;padding:0;border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);background:var(--sa-canvas);overflow:hidden}
+      .change-list>li+li{border-top:1px solid var(--sa-line)}
+      .change-head{display:grid;grid-template-columns:34px 68px minmax(120px,auto) minmax(0,1fr) auto 12px;gap:11px;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:8px 11px;font:inherit;color:inherit;cursor:pointer}
+      /* The priority pill is fixed-width so a column of them reads as a column
+         rather than as ragged text, which is what makes the list scannable. */
+      .change-priority{justify-content:center;width:100%;padding-left:0;padding-right:0}
+      .change-meta{display:flex;align-items:center;gap:9px;flex:0 0 auto;justify-content:flex-end}
+      .change-category{font-size:11.5px;color:var(--sa-ink-faint);white-space:nowrap}
+      .change-head:hover{background:var(--sa-subtle)}
+      .change-head:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
+      .change-id{font-family:var(--sa-mono);font-size:11.5px;font-weight:600;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
+      .change-loc{font-size:12.5px;font-weight:600;color:var(--sa-ink)}
+      /* The current value is quoted from the page, so it is set as the page's
+         text and not as ours. It is one line: the full string is in the body. */
+      .change-now{font-family:var(--sa-mono);font-size:11.5px;color:var(--sa-ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+      .change-now.absent{font-family:var(--sa-sans);color:var(--sa-ink-faint);font-style:italic}
+      .change-caret{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;color:var(--sa-ink-faint);transition:transform .15s ease}
+      .change-head[aria-expanded=true] .change-caret{transform:rotate(90deg)}
+      .change-body{padding:2px 11px 13px 56px}
+      .change-facts{display:grid;grid-template-columns:96px minmax(0,1fr);gap:5px 14px;margin:0 0 9px}
+      .change-facts dt{font-size:11px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--sa-ink-faint);padding-top:1px}
+      .change-facts dd{margin:0;font-size:12.5px;line-height:1.55;color:var(--sa-ink-soft);max-width:80ch}
+      .change-facts dd.mono{font-family:var(--sa-mono);font-size:12px;color:var(--sa-ink);word-break:break-word}
+      .change-more{margin:4px 0 0;font-size:11.5px;color:var(--sa-ink-faint)}
+      /* The one control in the product that produces something the scan could
+         not, and the one request that carries page text off the machine. It is
+         drawn as an action rather than as a result, and its output is labelled
+         as a draft for as long as it exists. */
+      .draft{margin:10px 0 0;padding:10px 0 0;border-top:1px solid var(--sa-line)}
+      .draft-row{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+      .draft-btn{flex:0 0 auto}
+      .draft-note{font-size:11.5px;line-height:1.45;color:var(--sa-ink-faint);max-width:52ch}
+      .draft-out{margin:9px 0 0;padding:10px 12px;border:1px solid var(--sa-primary-line);border-radius:var(--sa-radius-sm);background:var(--sa-primary-soft)}
+      .draft-label{display:inline-block;margin:0 0 5px;font-size:10.5px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--sa-primary-text)}
+      .draft-value{margin:0;font-family:var(--sa-mono);font-size:12.5px;line-height:1.5;color:var(--sa-ink);word-break:break-word}
+      .draft-meta{margin:6px 0 0;font-size:11px;color:var(--sa-ink-faint)}
+      .draft-problem{margin:0;font-size:12px;line-height:1.5;color:var(--sa-ink-soft)}
+      .draft-drop{margin-left:0;padding:2px 0;font-size:11.5px}
+      /* Conclusions drawn across findings, which no single scanner could make.
+         Drawn as proposals rather than results: a left rule and a quieter ground
+         than a phase card, so they read as something to weigh rather than
+         something already decided. */
+      .structure{border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);padding:14px 16px;margin:0 0 14px}
+      .structure-list{list-style:none;margin:11px 0 0;padding:0}
+      .structure-list>li+li{margin-top:11px;padding-top:11px;border-top:1px solid var(--sa-line)}
+      .structure-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+      .structure-row b{font-size:13px;font-weight:650;color:var(--sa-ink)}
+      .structure-count{font-size:12px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
+      .structure-basis{margin:5px 0 0;font-size:12px;line-height:1.5;color:var(--sa-ink-soft);max-width:86ch}
+      /* A heading, because two unlabelled cards floating above the phases give
+         the reader nothing to place them by. */
+      .reason-section{margin:0 0 11px}
+      .reason-section h3{margin:0 0 3px;font-size:15px;font-weight:650;letter-spacing:-.015em;color:var(--sa-ink)}
+      .reason-section .hint{margin:0;max-width:84ch}
+      .reason-scope{margin-left:auto;font-size:11.5px;color:var(--sa-ink-faint);white-space:nowrap;font-variant-numeric:tabular-nums}
+      /* Four pages, then a count. The first version gave the affected URLs more
+         height than the question they were evidence for. */
+      .reason-urls{max-height:none;overflow:visible}
+      .reason-card{border:1px solid var(--sa-primary-line);border-radius:var(--sa-radius);background:var(--sa-surface);padding:13px 16px;margin:0 0 12px}
+      .reason-card.question{border-color:color-mix(in srgb,var(--sa-warn) 45%,transparent)}
+      .reason-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 7px}
+      .reason-head h3{margin:0;font-size:14px;font-weight:650;letter-spacing:-.01em;color:var(--sa-ink)}
+      .reason-body{margin:0 0 9px;font-size:12.5px;line-height:1.55;color:var(--sa-ink-soft);max-width:86ch}
+      .reason-covers{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 9px}
+      .reason-caveat{margin:0;font-size:11.5px;line-height:1.5;color:var(--sa-ink-faint);max-width:86ch}
+      .reason-settled{margin:7px 0 0;padding:8px 11px;border-radius:var(--sa-radius-sm);background:var(--sa-subtle);font-size:12px;line-height:1.5;color:var(--sa-ink-soft);max-width:86ch}
+      .reason-card .url-list{margin:9px 0 0}
+      .change-where{margin:9px 0 4px;font-size:11px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--sa-ink-faint)}
+      /* The list is already capped at eight, so it needs no scroller of its own:
+         a clipped ninth row inside a disclosure inside a modal is the third
+         scrollbar this product spent a day removing. */
+      .change-body .url-list{max-height:none;overflow:visible;margin:0}
+      .change-body .optimize-rules{margin:0}
+      /* The area's own count, stated where the changes are, so the phase total
+         and the rows under it can be reconciled without adding them up. */
+      .change-tally{font-size:11.5px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+      .optimize-rationale{margin:0 0 9px;font-size:12.5px;line-height:1.55;color:var(--sa-ink-soft);max-width:84ch}
+      .optimize-model{border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);padding:14px 16px;margin:0 0 12px}
+      .optimize-model.unestablished{border-color:var(--sa-line-strong);border-left:6px solid transparent;background-image:linear-gradient(var(--sa-surface),var(--sa-surface)),var(--sa-hatch);background-origin:padding-box,border-box;background-clip:padding-box,border-box}
+      .optimize-model .hint{margin:0;max-width:86ch}
+      .optimize-model-evidence{margin-top:10px}
+      .optimize-ruleids{font-family:var(--sa-mono);font-size:11px;color:var(--sa-ink-faint);overflow-wrap:anywhere}
+      .optimize-excluded td{color:var(--sa-ink-faint)}
+
+      /* Structured data ----------------------------------------------------
+         The section reuses the table, pill and url-list components rather than
+         growing its own: a fifth table style would be the same drift the pill
+         consolidation just undid. Only what is genuinely new to this surface is
+         declared here. */
+      .schema-scope{margin:0 0 14px;max-width:84ch}
+      .stat-grid.schema-stats{grid-template-columns:repeat(5,minmax(0,1fr));margin:0 0 16px}
+      @media(max-width:1180px){.stat-grid.schema-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+      @media(max-width:720px){.stat-grid.schema-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      .schema-conflicts{margin:0 0 16px;padding:14px 16px}
+      .schema-conflicts .card-head{padding:0 0 8px}
+      .schema-conflict-list{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:12px}
+      .schema-conflict{border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);background:var(--sa-subtle);padding:11px 13px}
+      .schema-conflict-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+      .schema-conflict-head b{font-size:13px;font-weight:600;color:var(--sa-ink)}
+      .schema-conflict .hint{margin:0 0 8px}
+      /* Each identity beside the number of pages asserting it: the shape of the
+         disagreement is the evidence, so it is drawn rather than summarised. */
+      .schema-variant{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:4px 0;border-top:1px solid var(--sa-line)}
+      .schema-variant code{font-family:var(--sa-mono);font-size:11.5px;color:var(--sa-ink-soft);overflow-wrap:anywhere}
+      .schema-variant span{font-size:11.5px;color:var(--sa-ink-faint);white-space:nowrap;font-variant-numeric:tabular-nums}
+      .schema-tabs{margin:0 0 12px}
+      .schema-table td{vertical-align:top}
+      .schema-table .col-num{width:1%;white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
+      /* The statement is the route to its own evidence, so it is a control
+         rather than a label. */
+      .schema-open{display:block;width:100%;text-align:left;background:none;border:0;padding:0;font:inherit;font-weight:600;color:var(--sa-ink);cursor:pointer}
+      .schema-open:hover{color:var(--sa-primary-text);text-decoration:underline}
+      .schema-open:focus-visible{outline:2px solid var(--sa-primary);outline-offset:2px;border-radius:2px}
+      .schema-detail{display:block;margin-top:3px;font-size:12px;line-height:1.5;color:var(--sa-ink-soft);max-width:78ch}
+      /* The affected pages sit under their finding rather than in a column, so
+         one broken template reads as one job with a list, not as N rows. */
+      .schema-urls td{padding-top:0;border-top:0}
+      .schema-urls .url-list{max-height:160px;margin:0 0 8px}
+      .schema-opportunities{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+      /* Hatched, not warned. An opportunity is an inference about markup the
+         crawl did not see — that is the not-established state, and DESIGN.md
+         draws it with the 45 degree hatch. A warn-coloured rail would have made
+         correct markup read as a defect, which is the one thing this lens must
+         never do. Same construction as the unrun render section. */
+      .schema-opportunities li{border:1px solid var(--sa-line-strong);border-left:6px solid transparent;border-radius:var(--sa-radius-sm);padding:12px 14px;background-image:linear-gradient(var(--sa-surface),var(--sa-surface)),var(--sa-hatch);background-origin:padding-box,border-box;background-clip:padding-box,border-box}
+      .schema-to-plan{margin-left:0;padding:6px 0 0}
+      .schema-opportunity-note{margin:0 0 12px;max-width:84ch}
+      .schema-empty{border:1px solid var(--sa-line);border-radius:var(--sa-radius);background:var(--sa-surface);padding:16px 18px}
+      .schema-empty b{display:block;margin-bottom:4px;font-size:13.5px;font-weight:600;color:var(--sa-ink)}
+      .schema-empty .hint{margin:0;max-width:80ch}
+
+      /* Controls ------------------------------------------------------------ */
+      .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius-sm);background:var(--sa-surface);color:var(--sa-ink);padding:8px 14px;font-family:var(--sa-sans);font-size:13.5px;font-weight:600;letter-spacing:0;text-transform:none;cursor:pointer;min-height:36px;box-shadow:var(--sa-shadow-sm);transition:background .12s ease,border-color .12s ease}
+      .btn:hover:not(:disabled){background:var(--sa-subtle)}
+      .btn:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
+      .btn:disabled{opacity:.5;cursor:default}
+      .btn.primary{background:var(--sa-primary);border-color:var(--sa-primary);color:#fff}
+      .btn.primary:hover:not(:disabled){background:var(--sa-primary-hover);border-color:var(--sa-primary-hover)}
+      .btn.danger{border-color:color-mix(in srgb,var(--wqa-critical) 45%,transparent);color:var(--sa-critical);background:var(--sa-surface)}
+      .btn.danger:hover:not(:disabled){background:var(--sa-critical-soft)}
+      .btn .departs{width:13px;height:13px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;opacity:.8}
+
+      .chip{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--sa-line-strong);background:var(--sa-surface);border-radius:999px;padding:6px 13px;font-family:var(--sa-sans);font-size:12.5px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--sa-ink-soft);cursor:pointer;min-height:32px;box-shadow:var(--sa-shadow-sm)}
+      .chip:hover{background:var(--sa-subtle);color:var(--sa-ink)}
+      .toolbar{display:flex;gap:10px;margin:0 0 12px;flex-wrap:wrap}
+      .toolbar input[type="search"]{flex:1 1 260px;border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius-sm);padding:9px 12px;font-size:13.5px;background:var(--sa-surface);color:var(--sa-ink);box-shadow:var(--sa-shadow-sm)}
+      .toolbar input[type="search"]::placeholder{color:var(--sa-ink-faint)}
+      .toolbar select{border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius-sm);padding:9px 12px;font-size:13.5px;background:var(--sa-surface);color:var(--sa-ink);box-shadow:var(--sa-shadow-sm)}
+      /* Link status filters carry their own counts. */
+      .status-chip b{font-variant-numeric:tabular-nums;font-weight:650;color:var(--sa-ink)}
+      /* A run of links from one page reads as a block, not the same URL
+         restated on every row. */
+      .links-table .link-same-source td:first-child{border-top:0}
+      .links-table tbody tr:not(.link-same-source) td{border-top:1px solid var(--sa-line)}
+      .links-source-head{width:34%}
+      .col-group{font-size:12px;color:var(--sa-ink-soft);white-space:nowrap}
+      .urls-table td:first-child{font-family:var(--sa-mono);font-size:12.5px}
+      .toolbar input:focus-visible,.toolbar select:focus-visible,.field input:focus-visible,.field textarea:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px;border-color:var(--sa-primary)}
+      .filter-state{font-size:12.5px;color:var(--sa-ink-faint);margin-left:auto;font-variant-numeric:tabular-nums}
+
+      .field{display:block;margin:0 0 16px}
+      .field>span:not(.hint){display:block;font-size:13px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--sa-ink);margin-bottom:6px}
+      .field>span.hint{display:block;font-weight:400;text-transform:none;letter-spacing:0}
+      .field input,.field textarea{width:100%;border:1px solid var(--sa-line-strong);border-radius:var(--sa-radius-sm);padding:9px 12px;font-size:13.5px;color:var(--sa-ink);background:var(--sa-surface);box-shadow:var(--sa-shadow-sm)}
+      .field input:disabled{background:var(--sa-subtle);color:var(--sa-ink-faint)}
+      .row{display:flex;gap:16px;flex-wrap:wrap}
+      .row .field{flex:1 1 200px}
+      .hint{margin:4px 0 0;font-size:12.5px;line-height:1.5;color:var(--sa-ink-faint)}
+      .hint-indent{margin:-2px 0 12px 26px}
+      .check{display:flex;align-items:center;gap:9px;margin:0 0 6px;font-size:13.5px;color:var(--sa-ink)}
+      .actions{display:flex;align-items:center;gap:10px;margin-top:18px;flex-wrap:wrap}
+      .lede{margin:0 0 18px;color:var(--sa-ink-soft);font-size:13px;line-height:1.6;max-width:76ch}
+
+      /* Setup: the form is the task, the explanation is reference. Side by
+         side they fit one screen; stacked they did not, and the primary action
+         sat below the fold on every window shorter than a laptop's. */
+      .setup-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,296px);gap:30px;align-items:start}
+      .setup-aside{background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);box-shadow:var(--sa-shadow-sm);padding:13px 15px 15px}
+      .setup-aside h3{margin:0 0 9px;font-size:13.5px;font-weight:600;letter-spacing:0;color:var(--sa-ink)}
+      .setup-aside .lede{margin:0;max-width:none;font-size:12.5px;line-height:1.6}
+      .setup-aside .lede+.lede{margin-top:12px;padding-top:12px;border-top:1px solid var(--sa-line)}
+      @media(max-width:880px){.setup-columns{grid-template-columns:minmax(0,1fr);gap:18px}.setup-aside{order:-1}}
+      .resume-banner{display:flex;align-items:center;gap:14px;justify-content:space-between;border:1px solid var(--sa-primary-line);background:var(--sa-primary-soft);border-radius:var(--sa-radius);padding:12px 14px;margin:0 0 18px}
+      .resume-text{margin:0;font-size:13px;color:var(--sa-ink-soft)}
+      .setup-error{color:var(--sa-critical);font-size:13px}
+
+      .advanced{border:1px solid var(--sa-line);border-radius:var(--sa-radius);margin:6px 0 18px;overflow:hidden;background:var(--sa-surface);box-shadow:var(--sa-shadow-sm)}
+      .advanced summary{cursor:pointer;padding:12px 14px;font-size:13.5px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--sa-ink);list-style:none;display:flex;align-items:center;gap:8px;background:var(--sa-surface)}
+      .advanced summary::-webkit-details-marker{display:none}
+      .advanced summary::before{content:'\25B8';display:inline-block;font-size:11px;color:var(--sa-ink-faint);transition:transform .15s ease}
+      .advanced[open] summary::before{transform:rotate(90deg)}
+      .advanced-body{padding:4px 14px 16px;border-top:1px solid var(--sa-line)}
+      .advanced textarea{font-family:var(--sa-mono);font-size:12.5px;resize:vertical;min-height:60px}
+
+      /* Progress ------------------------------------------------------------ */
+      .progress-bar{height:8px;border-radius:999px;background:var(--sa-info-soft);overflow:hidden;margin-bottom:22px}
+      .progress-fill{height:100%;background:var(--sa-primary);width:100%;transform:scaleX(.04);transform-origin:left center;transition:transform .3s ease;border-radius:999px}
+      .recent-feed{list-style:none;margin:0;padding:0;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);overflow:hidden;box-shadow:var(--sa-shadow-sm)}
+      .recent-feed li{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:9px 12px;border-bottom:1px solid var(--sa-line)}
+      .recent-feed li:last-child{border-bottom:0}
+      .recent-feed .url{flex:1 1 auto;font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+      /* Severity + breakdown ------------------------------------------------- */
+      .severity-bar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:var(--sa-info-soft);margin:0 0 12px}
+      .severity-bar span{height:100%}
+      .severity-legend{list-style:none;display:grid;gap:8px;margin:0;padding:0;font-size:13px;color:var(--sa-ink-soft)}
+      .severity-legend li{display:flex;align-items:center;gap:8px;font-variant-numeric:tabular-nums}
+      .severity-legend .sw{width:10px;height:10px;border-radius:12px;flex:0 0 auto}
+
+
+
+      .top-issues{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+      .top-issues li{min-width:0}
+      .ti-open{display:flex;align-items:center;gap:10px;width:100%;min-width:0;font:inherit;font-size:13px;text-align:left;border:0;background:transparent;padding:8px 10px;border-radius:var(--sa-radius-sm);color:var(--sa-ink-soft);cursor:pointer}
+      .ti-open:hover{background:var(--sa-subtle)}
+      .ti-open:focus-visible{outline:2px solid var(--sa-primary);outline-offset:-2px}
+      /* min-width:0 is what actually lets the title shrink and ellipsis inside
+         a flex row; without it the row grew and pushed the count off the card. */
+      .top-issues .ti-rule{font-weight:500;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--sa-ink)}
+      .top-issues .ti-scope{flex:0 0 auto;color:var(--sa-ink-faint);font-size:12.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+
+      /* Coverage ------------------------------------------------------------- */
+
+      .cov-plan{display:flex;height:10px;border-radius:999px;overflow:hidden;margin:0 0 12px;background:var(--sa-info-soft)}
+      .cov-surveyed{background:var(--sa-primary)}
+      .cov-unsurveyed{background-image:var(--sa-hatch);flex:1 1 auto}
+      /* Inside all:initial an unstyled size is the browser's 16px, not the
+         product's. This block states coverage limits, so it reads at the body
+         step like every other sentence on the screen. */
+      .cov-note{display:grid;gap:8px;font-size:13px;line-height:1.55;color:var(--sa-ink-soft)}
+
+      /* The render pass is where every accessibility, runtime-error and
+         performance finding comes from. When it has not run, the audit is
+         missing three whole disciplines — so the panel states which of the
+         three coverage states it is in, in the same words the Site conditions
+         readout uses, instead of reading as an optional extra tucked under the
+         fold. */
+      .render-section{border:1px solid var(--sa-primary-line);border-radius:var(--sa-radius);padding:16px;margin:0 0 18px;background:var(--sa-primary-soft)}
+      .render-section h3{margin:0;font-size:13.5px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--sa-ink)}
+      .render-head{display:flex;align-items:center;gap:10px;margin:0 0 6px}
+      .render-state{margin-left:auto}
+      .render-status{margin:0 0 12px;font-size:13px;line-height:1.55;color:var(--sa-ink-soft);max-width:82ch}
+      .render-section .actions{margin-top:0}
+      /* Unrun is a coverage fact, not a defect: neutral surface with the same
+         hatched rail the survey drawings use, never a severity colour. */
+      .render-section[data-state=none]{background:var(--sa-surface);border-color:var(--sa-line-strong);border-left:6px solid transparent;background-image:linear-gradient(var(--sa-surface),var(--sa-surface)),var(--sa-hatch);background-origin:padding-box,border-box;background-clip:padding-box,border-box}
+      .render-section[data-state=none] .render-state{background:var(--sa-subtle);color:var(--sa-ink);border:1px dashed var(--sa-line-strong)}
+      .render-section[data-state=none] .render-progress-bar{display:none}
+      .render-section[data-state=done]{background:var(--sa-success-soft);border-color:var(--sa-success-line)}
+      .render-section[data-state=done] .render-state{background:var(--sa-surface);color:var(--sa-success)}
+      .render-section[data-state=done] .render-progress-bar{display:none}
+      .render-section[data-state=running] .render-state,.render-section[data-state=partial] .render-state{background:var(--sa-surface);color:var(--sa-primary-text)}
+
+      .deliver{border:1px solid var(--sa-line);border-radius:var(--sa-radius);margin:0;overflow:hidden;background:var(--sa-surface);box-shadow:var(--sa-shadow-sm)}
+      .deliver-main{display:flex;align-items:center;gap:18px;padding:16px}
+      .deliver-copy{flex:1 1 auto}
+      .deliver-copy h3{margin:0 0 3px;font-size:13.5px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--sa-ink)}
+      .deliver-copy .hint{margin:0;color:var(--sa-ink-faint)}
+      .deliver-data{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;background:var(--sa-subtle);border-top:1px solid var(--sa-line)}
+      .deliver-label{font-size:12.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--sa-ink-faint);margin-right:4px}
+      .link-btn{background:none;border:0;padding:6px 2px;font:inherit;font-size:12.5px;color:var(--sa-ink-faint);text-decoration:underline;cursor:pointer;margin-left:auto}
+      .link-btn:hover{color:var(--sa-ink)}
+
+      .pager{display:flex;align-items:center;gap:12px;margin:14px 0 4px}
+      .pager-label{font-size:12.5px;color:var(--sa-ink-faint);font-variant-numeric:tabular-nums}
+
+      .section-index{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+      .section-cut{display:flex;align-items:baseline;gap:8px;border:1px solid var(--sa-line-strong);background:var(--sa-surface);border-radius:999px;padding:6px 13px;cursor:pointer;font-family:var(--sa-sans);font-size:12.5px;color:var(--sa-ink-soft);min-height:32px;box-shadow:var(--sa-shadow-sm)}
+      .section-cut:hover{background:var(--sa-subtle)}
+      .section-cut:focus-visible{outline:2px solid var(--sa-primary);outline-offset:1px}
+      .section-cut.active{background:var(--sa-primary-soft);border-color:var(--sa-primary-line);color:var(--sa-primary-text);box-shadow:none}
+      .section-cut .sc-count{font-variant-numeric:tabular-nums;color:var(--sa-ink-faint);font-weight:600}
+      .section-cut.active .sc-count{color:var(--sa-primary-text)}
+
+      .history-list{list-style:none;margin:16px 0 0;padding:0;background:var(--sa-surface);border:1px solid var(--sa-line);border-radius:var(--sa-radius);overflow:hidden}
+      .history-list li{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--sa-line);padding:11px 14px;font-size:13px;font-variant-numeric:tabular-nums}
+      .history-list li:last-child{border-bottom:0}
+      .history-list button{border:0;background:transparent;color:var(--sa-primary-text);font-weight:600;cursor:pointer;font-size:13px}
+
+      .foot-note{margin:0;padding:10px 16px;border-top:1px solid var(--sa-line);background:var(--sa-surface);color:var(--sa-ink-faint);font-size:12.5px;flex:0 0 auto;font-family:var(--sa-sans)}
+
+      .finding-detail{margin:0 14px 14px;padding-top:12px;border-top:1px solid var(--sa-line)}
+      .finding-detail h4{margin:14px 0 5px;font-size:12.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--sa-ink-faint)}
+      .detail-basis,.detail-explain{margin:0 0 8px;font-size:13px;line-height:1.6;color:var(--sa-ink-soft);max-width:84ch}
+      .detail-plan{margin:0 0 10px}
+      .detail-rule{margin:0;font-size:12.5px;color:var(--sa-ink-faint)}
+      .detail-rule code{font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-ink-soft)}
+      /* A list of affected URLs, built in two places: the finding detail and the
+         findings inspector's Instances tab. These were scoped to .finding-detail,
+         so the Instances tab rendered bare anchors in Chrome's own link colours —
+         periwinkle for unvisited, purple for visited, which also put the operator's
+         browsing history on screen as if it meant something about the audit. The
+         rules carry no ancestor now: a component that only looks right inside one
+         parent is a component that will be wrong in the second place it is used. */
+      .url-list{max-height:220px;overflow:auto;border:1px solid var(--sa-line);border-radius:var(--sa-radius-sm);background:var(--sa-subtle);padding:6px 10px;margin:2px 0 4px}
+      .url-item{display:block;font-family:var(--sa-mono);font-size:12.5px;color:var(--sa-primary-text);text-decoration:none;padding:3px 0;word-break:break-all}
+      .url-item:hover{text-decoration:underline}
+      .detail-empty{margin:2px 0 4px;font-size:12.5px;color:var(--sa-ink-faint)}
+      .row-expand{cursor:pointer}
+      .detail-row{background:var(--sa-subtle)}
+      .detail-row td{padding:12px 14px}
+      .detail-block{font-size:13px;color:var(--sa-ink-soft)}
+      .detail-block h4{margin:0 0 5px;font-size:12.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--sa-ink-faint)}
+      .detail-block ul{margin:0 0 12px;padding-left:18px}
+      .detail-block li{margin-bottom:3px}
+
+      /* Narrow: the nav becomes a horizontal strip above the content. */
+      @media(max-width:900px){
+        .workspace{inset:10px}
+        .body{flex-direction:column}
+        .view.active{flex-direction:column}
+        /* No right padding on the strip itself: the pinned actions below stick
+           to the content edge, and a right padding here left the last button
+           clipped by exactly that much. */
+        .sidenav{width:auto;border-right:0;border-bottom:1px solid var(--sa-line);flex-direction:row;align-items:center;gap:10px;padding:10px 0 10px 12px;overflow-x:auto}
+        .nav-site{border-bottom:0;border-right:1px solid var(--sa-line);padding:0 12px 0 0;margin:0 4px 0 0;flex:0 0 auto}
+        /* Narrow: the groups collapse into one scrolling strip. Their labels
+           go, but the separators stay, so the reading order that puts
+           availability before accessibility survives the reflow. */
+        .nav-group{display:flex;align-items:center;margin:0;flex:0 0 auto}
+        .nav-group+.nav-group{padding-left:10px;margin-left:2px;border-left:1px solid var(--sa-line)}
+        .nav-group-label{display:none}
+        .tabs{flex-direction:row;gap:4px}
+        .tab{width:auto;white-space:nowrap}
+        .tab-state{margin-left:6px}
+        /* Fourteen sections make the strip wider than the window, and the
+           actions used to be the last flex item inside it — reachable only by
+           scrolling past every section. Pinned to the visible right edge, they
+           stay put while the sections scroll underneath. */
+        .nav-foot{margin:0 0 0 auto;flex-direction:row;padding:0 12px 0 10px;flex:0 0 auto;position:sticky;right:0;background:var(--sa-nav);box-shadow:-10px 0 10px -8px rgba(0,0,0,.45)}
+        .main{padding:16px 14px 22px}
+        h2{font-size:18px}
+        .cond-head{grid-template-columns:22px minmax(0,1fr) 12px;gap:8px 12px}
+        .cond-headline,.cond-state{grid-column:2}
+        .cond-state{justify-self:start}
+        .cond-evidence{padding-left:16px}
+      }
+      @media(prefers-reduced-motion:reduce){.progress-fill,.f-chev,.cond-caret{transition:none}}
+    

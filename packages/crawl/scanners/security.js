@@ -20,7 +20,7 @@ function perPage(meta, pageUrl) {
     out.push({ ruleId: 'security.clickjacking-exposure', title: 'Page has no clickjacking protection', detail: `${pageUrl} sent neither an X-Frame-Options header nor a Content-Security-Policy frame-ancestors directive. Either one alone is sufficient to prevent the page being embedded in a hidden iframe on another site for a clickjacking attack; this page has neither.`, category: 'fix', severity: 'medium', confidence: 'confirmed' });
   }
   if (!meta.hasReferrerPolicy) {
-    out.push({ ruleId: 'security.referrer-policy-missing', title: 'Referrer-Policy header is missing', detail: `${pageUrl} did not send a Referrer-Policy header. Without one, the browser's default behavior may leak this page's full URL — including any sensitive query parameters — to third-party destinations linked from it.`, category: 'review', severity: 'low', confidence: 'confirmed' });
+    out.push({ ruleId: 'security.referrer-policy-missing', title: 'Referrer-Policy header is missing', detail: `${pageUrl} did not send a Referrer-Policy header. Without one, the browser's default behavior may leak this page's full URL, including any sensitive query parameters, to third-party destinations linked from it.`, category: 'review', severity: 'low', confidence: 'confirmed' });
   }
   return out;
 }

@@ -94,6 +94,44 @@ fs.copyFileSync(path.join(root,'packages/integrity/apply-report.js'),path.join(o
 // does: pure modules for the tests, one global for the content script. The
 // validator has to be the same code in both places — a second copy of the rule
 // that rejects invented numbers is how one of them quietly stops rejecting them.
+/**
+ * The overlay stylesheet, emitted as a file.
+ *
+ * The extension keeps injecting it from siteAuditCss() exactly as before; this
+ * is the same string written out so a design surface can load what actually
+ * ships rather than a copy of it. Derived at build time from the built script,
+ * after token injection, so it cannot drift: there is one definition and this
+ * is its output.
+ *
+ * Extracted by brace-matching the two function declarations and running them,
+ * rather than by slicing the template literal with a pattern. The literal
+ * contains braces, colons and percent signs on nearly every line, and a regular
+ * expression over it would be a second parser to get wrong.
+ */
+function emitOverlayStylesheet(builtSource, outDir) {
+  const declaration = (name) => {
+    const start = builtSource.indexOf(`function ${name}()`);
+    if (start < 0) throw new Error(`${name} is missing from the built content script`);
+    let depth = 0;
+    for (let i = builtSource.indexOf('{', start); i < builtSource.length; i++) {
+      const ch = builtSource[i];
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) return builtSource.slice(start, i + 1);
+      }
+    }
+    throw new Error(`${name} is not brace-balanced`);
+  };
+
+  const css = new Function(`${declaration('lumenTokens')}\n${declaration('siteAuditCss')}\nreturn siteAuditCss();`)();
+  if (!css.includes(':host{all:initial') || !css.includes('--sa-primary')) {
+    throw new Error('emitted overlay stylesheet is missing its host rule or its tokens');
+  }
+  fs.writeFileSync(path.join(outDir, 'site-audit.css'), css);
+  return css;
+}
+
 function buildBriefBrowserBundle(root, outDir) {
   const strip = (rel) => fs.readFileSync(path.join(root, rel), "utf8")
     .split(/\r?\n/)
@@ -101,11 +139,15 @@ function buildBriefBrowserBundle(root, outDir) {
     .join("\n")
     .replace(/^export const /gm, "const ")
     .replace(/^export function /gm, "function ");
-  const exports = "globalThis.LumenBriefPhrasing = { briefEnvelope, allowedNumbers, BRIEF_PHRASING_RULES, validateBriefPhrasing, mergeBriefPhrasing };";
+  const exports = [
+    "globalThis.LumenBriefPhrasing = { briefEnvelope, allowedNumbers, BRIEF_PHRASING_RULES, validateBriefPhrasing, mergeBriefPhrasing };",
+    "globalThis.LumenChangeDrafts = { DRAFTABLE, DRAFT_RULES, BANNED_CLAIMS, draftableField, draftEnvelope, draftPrompt, validateChangeDraft, groundingTerms, draftableChanges };"
+  ].join("\n");
   const bundle = [
     "(() => {",
     strip("packages/findings/brief-envelope.js"),
     strip("packages/findings/brief-phrasing.js"),
+    strip("packages/findings/change-drafts.js"),
     exports,
     "})();",
     ""
@@ -187,4 +229,7 @@ fs.writeFileSync(path.join(out,'build-revision.json'),`${JSON.stringify({ buildR
   }
   fs.writeFileSync(panelPath,panel);
 }
-console.log(`Built ${out} (buildRevision=${buildRevision})`);
+// Emitted last, so it carries every injection the built script received.
+const overlayCss = emitOverlayStylesheet(fs.readFileSync(path.join(out, 'content.js'), 'utf8'), out);
+
+console.log(`Built ${out} (buildRevision=${buildRevision}, overlay stylesheet ${(overlayCss.length/1024).toFixed(1)} KB)`);

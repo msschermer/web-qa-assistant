@@ -3,7 +3,7 @@ import { buildEvidenceGraph } from './frank-evidence.js';
 import { deterministicFrankPlan, validateFrankPlan } from './frank-plan.js';
 import { attachEnvironmentContext, launchIntegrityFindings, publishedIndexSignalsFromContext, publishedIndexSignalsFromFindings, mergePublishedIndexSignals, reconcileIndexControlWithFindings, buildIndexControl, environmentNotice } from './environment.js';
 import { applyFindingPolicy, presentationPolicySummary } from './policy.js';
-import { buildByoRequest, extractByoText, validateByoEndpoint, byoOriginPattern } from './brief-provider.js';
+import { buildByoRequest, extractByoText, validateByoEndpoint, byoOriginPattern, describeBriefProviders, resolveBriefProvider, BYO_PRESETS } from './brief-provider.js';
 import { attachTargetIntegrity, finalizeBlockedTargetReport } from './apply-report.js';
 import { IMPACT_CLASSES } from './impact.js';
 import { gatewayContextEnvelope, gatewayFrankGraph } from './evidence-contract.js';
@@ -155,7 +155,7 @@ function failurePayload(error, operation='UNKNOWN'){
   // different actions from the operator, and the generic message named neither:
   // a Site Audit against a gateway predating the feature reported only "The
   // extension could not complete this action."
-  if(/Unknown API route|invalid JSON response \(HTTP 404\)/i.test(raw))message='A gateway answered but does not provide this feature — it is running an older version than this extension. Point Lumen at an up-to-date gateway in its settings.';
+  if(/Unknown API route|invalid JSON response \(HTTP 404\)/i.test(raw))message='A gateway answered but does not provide this feature, because it is running an older version than this extension. Point Lumen at an up-to-date gateway in its settings.';
   else if(/Failed to fetch|NetworkError|ERR_CONNECTION|No assistant gateway is available/i.test(raw))message='No assistant gateway could be reached. Start the gateway, or set its URL in Lumen\u2019s settings.';
   else if(/Page access expired|Cannot access|Missing host permission|activeTab/i.test(raw))message='Page access expired. Click the Lumen toolbar icon on this page, then try again.';
   else if(/cannot be inspected|normal HTTP or HTTPS/i.test(raw))message='This browser page cannot be inspected. Open a normal HTTP or HTTPS page.';
@@ -250,7 +250,8 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
     return{ok:true};
   }
   if(msg.type==='PREPARE_FRANK')return prepareFrank(msg);
-  if(msg.type==='BRIEF_AI_SETTINGS')return briefAiSettings();
+  if(msg.type==='BRIEF_AI_SETTINGS')return briefAiSettings(msg);
+  if(msg.type==='BRIEF_AI_TEST')return briefAiTest(msg);
   if(msg.type==='BRIEF_AI_CHECK_ENDPOINT')return briefAiCheckEndpoint(msg);
   if(msg.type==='SAVE_BRIEF_AI_SETTINGS')return saveBriefAiSettings(msg);
   if(msg.type==='BRIEF_AI_PHRASE')return briefAiPhrase(msg);
@@ -316,6 +317,19 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
     const result=await gatewayGet(`/api/audits/${encodeURIComponent(msg.auditId)}/distributions`,15000,'SITE_AUDIT_DISTRIBUTIONS');
     return result;
   }
+  if(msg.type==='SITE_AUDIT_OPTIMIZE'){
+    const qs=new URLSearchParams({...(msg.siteType?{siteType:msg.siteType}:{}),...(msg.templateAccess?{templateAccess:msg.templateAccess}:{})});
+    const result=await gatewayGet(`/api/audits/${encodeURIComponent(msg.auditId)}/optimize?${qs}`,25000,'SITE_AUDIT_OPTIMIZE');
+    return result;
+  }
+  if(msg.type==='SITE_AUDIT_SITE_MODEL'){
+    const result=await gatewayGet(`/api/audits/${encodeURIComponent(msg.auditId)}/site-model`,20000,'SITE_AUDIT_SITE_MODEL');
+    return{model:result.model};
+  }
+  if(msg.type==='SITE_AUDIT_SCHEMA'){
+    const result=await gatewayGet(`/api/audits/${encodeURIComponent(msg.auditId)}/schema`,20000,'SITE_AUDIT_SCHEMA');
+    return result;
+  }
   if(msg.type==='SITE_AUDIT_LINKS'){
     const qs=new URLSearchParams({limit:String(msg.limit||100),offset:String(msg.offset||0),...(msg.status?{status:msg.status}:{}),...(msg.sourceUrl?{sourceUrl:msg.sourceUrl}:{})});
     const result=await gatewayGet(`/api/audits/${encodeURIComponent(msg.auditId)}/links?${qs}`,15000,'SITE_AUDIT_LINKS');
@@ -329,6 +343,11 @@ chrome.runtime.onMessage.addListener((msg,sender,send)=>{
   if(msg.type==='SITE_AUDIT_REPORT'){
     const result=await gatewayGetText(`/api/audits/${encodeURIComponent(msg.auditId)}/report.html`,30000,'SITE_AUDIT_REPORT');
     return{html:result.text,filename:`audit-${msg.auditId}-report.html`};
+  }
+  if(msg.type==='SITE_AUDIT_WORKBOOK'){
+    const include=[msg.scan?'scan':'',msg.plan?'plan':''].filter(Boolean).join(',');
+    const result=await gatewayPostBinary(`/api/audits/${encodeURIComponent(msg.auditId)}/workbook.xlsx?include=${include}`,{drafts:msg.drafts||{}},60000,'SITE_AUDIT_WORKBOOK');
+    return{base64:result.base64,filename:result.filename||`audit-${msg.auditId}.xlsx`};
   }
   if(msg.type==='SITE_AUDIT_DEBUG'){
     const result=await gatewayGetText(`/api/audits/${encodeURIComponent(msg.auditId)}/debug.json`,30000,'SITE_AUDIT_DEBUG');
@@ -431,10 +450,63 @@ async function saveBriefAiSettings(msg){
   });
   return{ok:true};
 }
-async function briefAiSettings(){
+// The panel and the overlay both need the same answer to "who will actually
+// be asked, and if not the one I picked, why not". Computing it in one place
+// is what stops the settings screen and the audit disagreeing.
+async function briefAiSettings(msg){
   const s=await settings();
+  const localAvailable=Boolean(msg?.localAvailable);
   const endpoint=validateByoEndpoint(s.byoAiBaseUrl);
-  return{ok:true,provider:s.briefAiProvider||"on-device",byo:{configured:endpoint.ok&&Boolean(String(s.byoAiModel||"").trim()),origin:endpoint.ok?endpoint.origin:"",reason:endpoint.ok?"":endpoint.message}};
+  const resolved=resolveBriefProvider(s,{localAvailable});
+  return{
+    ok:true,
+    provider:s.briefAiProvider||"byo",
+    providers:describeBriefProviders(s,{localAvailable}),
+    resolved:{id:resolved.id,ready:resolved.ready,substituted:resolved.substituted,reason:resolved.reason},
+    presets:BYO_PRESETS,
+    byo:{configured:endpoint.ok&&Boolean(String(s.byoAiModel||"").trim()),origin:endpoint.ok?endpoint.origin:"",reason:endpoint.ok?"":endpoint.message}
+  };
+}
+
+/**
+ * Does the configured endpoint actually answer?
+ *
+ * A settings screen that accepts a URL and a model name without ever calling
+ * them is a settings screen that reports success and then fails silently hours
+ * later, inside a feature the operator has stopped expecting to work. This
+ * sends the smallest real request the endpoint will see and reports what came
+ * back, including the permission and the latency.
+ */
+async function briefAiTest(msg){
+  const s=await settings();
+  const baseUrl=String(msg?.byoAiBaseUrl||s.byoAiBaseUrl||"").trim();
+  const model=String(msg?.byoAiModel||s.byoAiModel||"").trim();
+  const key=msg?.byoAiKey!==undefined?String(msg.byoAiKey||""):String(s.byoAiKey||"");
+  const endpoint=validateByoEndpoint(baseUrl);
+  if(!endpoint.ok)return{ok:false,code:endpoint.code,message:endpoint.message};
+  if(!model)return{ok:false,code:"BYO_AI_NO_MODEL",message:"Set the model name your endpoint serves."};
+  const pattern=byoOriginPattern(baseUrl);
+  let granted=await chrome.permissions.contains({origins:[pattern]}).catch(()=>false);
+  if(!granted)granted=await chrome.permissions.request({origins:[pattern]}).catch(()=>false);
+  if(!granted)return{ok:false,code:"BYO_AI_NO_PERMISSION",message:"Lumen was not granted access to "+endpoint.origin+"."};
+  let request;
+  try{request=buildByoRequest({baseUrl,apiKey:key,model,system:"Reply with the single word: ready",user:"ready?"});}
+  catch(error){return{ok:false,code:"BYO_AI_BAD_REQUEST",message:String(error?.message||error)};}
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),Number(msg?.timeoutMs||15000));
+  const started=Date.now();
+  try{
+    const res=await fetch(request.url,{...request.init,signal:controller.signal});
+    const body=await res.text();
+    if(!res.ok)return{ok:false,code:"BYO_AI_HTTP_"+res.status,message:body.slice(0,200),origin:endpoint.origin};
+    let payload=null;
+    try{payload=JSON.parse(body);}catch{return{ok:false,code:"BYO_AI_INVALID_JSON",message:"The endpoint did not return JSON."};}
+    const text=extractByoText(payload);
+    if(!text)return{ok:false,code:"BYO_AI_EMPTY",message:"The endpoint answered but returned no content."};
+    return{ok:true,origin:endpoint.origin,model:String(payload?.model||model),latencyMs:Date.now()-started,sample:text.trim().slice(0,80)};
+  }catch(error){
+    return{ok:false,code:controller.signal.aborted?"BYO_AI_TIMEOUT":"BYO_AI_FAILED",message:String(error?.message||error)};
+  }finally{clearTimeout(timer);}
 }
 
 async function briefAiPhrase(msg){
@@ -469,7 +541,7 @@ async function briefAiPhrase(msg){
     return{ok:false,code:controller.signal.aborted?"BYO_AI_TIMEOUT":"BYO_AI_FAILED",message:String(error?.message||error)};
   }finally{clearTimeout(timer);}
 }
-async function settings(){return chrome.storage.local.get({apiBase:'',apiKey:'',cloudAiFallback:false,briefAiProvider:'on-device',byoAiBaseUrl:'',byoAiKey:'',byoAiModel:'',installationId:'',installToken:'',installTokenExpiresAt:0,watchedOrigins:[],scanState:{},siteSessions:{},ignoredRulesByOrigin:{},environmentOverridesByOrigin:{}})}
+async function settings(){return chrome.storage.local.get({apiBase:'',apiKey:'',cloudAiFallback:false,briefAiProvider:'byo',byoAiBaseUrl:'',byoAiKey:'',byoAiModel:'',installationId:'',installToken:'',installTokenExpiresAt:0,watchedOrigins:[],scanState:{},siteSessions:{},ignoredRulesByOrigin:{},environmentOverridesByOrigin:{}})}
 async function ensureInjected(tabId){
   try{await chrome.tabs.sendMessage(tabId,{type:'PING'});return}catch{}
   try{
@@ -879,6 +951,23 @@ async function gatewayGetText(path,timeoutMs=GATEWAY_TIMEOUT_MS,operation='GATEW
       const text=await res.text();
       if(!res.ok)throw Object.assign(new Error(`HTTP ${res.status}`),{status:res.status});
       return{text,contentType:res.headers.get('content-type')||'text/plain'};
+    }catch(error){errors.push(`${root}: ${error?.name==='AbortError'?'timeout':error.message}`)}
+    finally{clearTimeout(timer)}
+  }
+  throw new Error(errors.join(' | ')||'No assistant gateway is available.');
+}
+async function gatewayPostBinary(path,body,timeoutMs=GATEWAY_TIMEOUT_MS,operation='GATEWAY'){
+  const errors=[],rid=requestId(operation);
+  for(const root of await gatewayCandidates()){
+    const credential=await gatewayCredential(root);
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
+    try{
+      const res=await fetch(root+path,{method:'POST',headers:{'content-type':'application/json','x-web-qa-request-id':rid,...(credential.token?{'x-web-qa-key':credential.token}:{})},body:JSON.stringify(body||{}),signal:controller.signal});
+      if(!res.ok)throw Object.assign(new Error(`HTTP ${res.status}`),{status:res.status});
+      const bytes=new Uint8Array(await res.arrayBuffer());
+      let binary='';
+      for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000));
+      return{base64:btoa(binary),filename:res.headers.get('x-web-qa-filename')||''};
     }catch(error){errors.push(`${root}: ${error?.name==='AbortError'?'timeout':error.message}`)}
     finally{clearTimeout(timer)}
   }

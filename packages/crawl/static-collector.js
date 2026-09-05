@@ -17,6 +17,7 @@
  */
 import { JSDOM } from 'jsdom';
 import { isPrivateProbeHost } from '../security/safe-probe.js';
+import { collectSchemaItems } from './schema-items.js';
 
 const MAX_BODY_BYTES = 3 * 1024 * 1024;
 const MAX_REDIRECTS = 8;
@@ -144,22 +145,10 @@ function extractFromHtml(html, pageUrl, { httpStatus, redirected, contentType, r
       if (!hasLabelFor && !wrappedByLabel && !hasAriaLabel && !hasAriaLabelledby) formControlsMissingLabel++;
     }
 
-    const schemaTypes = [];
-    let schemaBlockCount = 0;
-    let schemaInvalidCount = 0;
-    for (const script of document.querySelectorAll('script[type="application/ld+json"]')) {
-      schemaBlockCount++;
-      try {
-        const parsed = JSON.parse(script.textContent || '');
-        for (const node of Array.isArray(parsed) ? parsed : [parsed?.['@graph'] ? parsed['@graph'] : parsed].flat()) {
-          const type = node?.['@type'];
-          if (typeof type === 'string') schemaTypes.push(type);
-          else if (Array.isArray(type)) schemaTypes.push(...type.filter((t) => typeof t === 'string'));
-        }
-      } catch {
-        schemaInvalidCount++;
-      }
-    }
+    // The items themselves, not just the names of their types: an audit that
+    // can only say "structured data is present" cannot say what is wrong with it.
+    const schema = collectSchemaItems(document);
+    const { schemaBlockCount, schemaInvalidCount, schemaTypes } = schema;
 
     const links = [];
     const seen = new Set();
@@ -187,6 +176,7 @@ function extractFromHtml(html, pageUrl, { httpStatus, redirected, contentType, r
       robots: robotsEl?.getAttribute('content') || '',
       h1s, wordCount, links,
       schemaBlockCount, schemaInvalidCount, schemaTypes: [...new Set(schemaTypes)],
+      schemaItems: schema.items, schemaInvalidBlocks: schema.invalidBlocks, schemaTruncated: schema.truncated,
       hasViewport: Boolean(viewportEl), viewport: viewportEl?.getAttribute('content') || '',
       hasCharset, hasOgTitle: Boolean(ogTitle), hasOgDescription: Boolean(ogDescription),
       hreflangTags, headingLevels, htmlLang, h1Text: h1s[0] || '',

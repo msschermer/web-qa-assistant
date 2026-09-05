@@ -146,19 +146,23 @@
           <div id="gateway-integrations" class="integration-list"></div>
           <p class="fine-print">Normal installs use managed installation access when the gateway enables it. On-device AI is preferred on this device. Cloud AI is off by default and may incur provider charges when explicitly enabled. Connected context receives a sanitised, bounded report; whole DOM, cookies and form values are excluded.</p>
         </div></details>
-        <details id="brief-ai-settings" class="panel"><summary><span>Brief wording</span></summary><div class="panel-body settings-grid">
-          <p class="fine-print">Lumen composes the brief itself: which areas appear, their order, their counts and their confidence are decided by the scanners and never by a model. A model may only rewrite the wording, and a reply that changes a number, an order or a confidence level is rejected.</p>
-          <label>Wording by
-            <select id="brief-ai-provider">
-              <option value="on-device">On-device only (Chrome built-in)</option>
-              <option value="byo">On-device, then my own endpoint</option>
-              <option value="off">Lumen only — no model</option>
-            </select>
+        <details id="brief-ai-settings" class="panel"><summary><span>Writing</span></summary><div class="panel-body settings-grid">
+          <p class="fine-print">Lumen composes its own findings, order, counts and confidence. A model is only ever asked to write sentences and to draft replacement text, and a reply that changes a number, an order or a confidence level is rejected.</p>
+          <label>Model
+            <select id="brief-ai-provider"></select>
           </label>
-          <label>Your endpoint <span class="summary-note">OpenAI-compatible</span><input id="byo-ai-url" type="url" placeholder="https://api.openai.com/v1"></label>
-          <label>Model<input id="byo-ai-model" type="text" autocomplete="off" placeholder="gpt-4o-mini"></label>
-          <label>API key <span class="summary-note">stored on this device</span><input id="byo-ai-key" type="password" autocomplete="off" placeholder="Leave blank for a local runtime"></label>
-          <div class="settings-actions"><button id="save-brief-ai" class="btn btn-quiet">Save wording settings</button></div>
+          <p id="brief-ai-resolved" class="gateway-status" role="status" aria-live="polite"></p>
+          <label>Endpoint <span class="summary-note">OpenAI-compatible</span>
+            <input id="byo-ai-url" type="url" list="byo-ai-presets" placeholder="http://localhost:11434/v1">
+          </label>
+          <datalist id="byo-ai-presets"></datalist>
+          <div id="byo-ai-preset-row" class="settings-actions"></div>
+          <label>Model name<input id="byo-ai-model" type="text" autocomplete="off" placeholder="llama3.2"></label>
+          <label>API key <span class="summary-note">stored on this device, blank for a local runtime</span><input id="byo-ai-key" type="password" autocomplete="off" placeholder="Leave blank for Ollama or LM Studio"></label>
+          <div class="settings-actions">
+            <button id="test-brief-ai" class="btn btn-quiet">Test endpoint</button>
+            <button id="save-brief-ai" class="btn btn-quiet">Save</button>
+          </div>
           <p id="brief-ai-status" class="gateway-status" role="status" aria-live="polite"></p>
           <p class="fine-print">What is sent: the discipline names, rule ids, severity, confidence and counts of the ranked areas. Never a URL, a page title, page markup or the site's name. The request goes from this browser to your endpoint; it does not pass through Lumen's servers.</p>
         </div></details>

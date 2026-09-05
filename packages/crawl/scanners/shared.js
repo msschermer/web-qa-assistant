@@ -20,7 +20,7 @@
  */
 import crypto from 'node:crypto';
 
-export const STATIC_EVIDENCE_NOTE = 'Based on the static HTML response — JavaScript was not executed, so content added by client-side scripts (including most single-page apps) will not appear here. The optional render pass checks the rendered DOM instead.';
+export const STATIC_EVIDENCE_NOTE = 'Based on the static HTML response. JavaScript was not executed, so content added by client-side scripts (including most single-page apps) will not appear here. The optional render pass checks the rendered DOM instead.';
 
 export function fingerprintOf(...parts) {
   return crypto.createHash('sha1').update(parts.join('|')).digest('base64url').slice(0, 12);

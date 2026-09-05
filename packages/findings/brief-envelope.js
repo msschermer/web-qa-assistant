@@ -98,9 +98,9 @@ export function briefEnvelope(brief, counts = {}) {
 export const UNEARNED_INTENSITY = ['severely', 'severe', 'critical', 'critically', 'urgent', 'urgently', 'major', 'drastic', 'dire', 'catastrophic', 'massive'];
 
 export const BRIEF_PHRASING_RULES = [
-  'Say what the site or its visitors actually lose. Never restate the action — an area whose reason repeats its own headline has said nothing.',
+  'Say what the site or its visitors actually lose. Never restate the action; an area whose reason repeats its own headline has said nothing.',
   'Give the reason this area is ranked where it is, not merely what it is.',
-  'Keep any number that changes what someone would do — above all where many affected pages share one cause, because that is one fix rather than many.',
+  'Keep any number that changes what someone would do, above all where many affected pages share one cause, because that is one fix rather than many.',
   'Return every area id you were given, once each, in the order you were given them.',
   'Use only numbers that appear in the evidence you were given. Do not compute new totals, percentages or comparisons.',
   'Do not use the words confirmed, corroborated, inferred or inconclusive about an area unless that is the confidence recorded for it.',

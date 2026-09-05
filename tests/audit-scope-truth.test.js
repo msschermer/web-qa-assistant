@@ -21,11 +21,54 @@ test('a status pill never wraps mid-word inside its own pill', () => {
   // The reported defect rendered "broken" as "broke / n" in Links and
   // "queued" as "queue / d" in Pages: .data-table td sets word-break:break-word,
   // which happily breaks a six-letter word when the column is squeezed.
-  const pill = overlay.match(/\.status-pill\{[^}]*\}/);
-  assert.ok(pill, '.status-pill rule should exist');
+  // The defences moved: .status-pill used to be its own implementation and is
+  // now one use of the shared .pill, so this asserts them where they live. That
+  // makes the guard cover every pill in the overlay rather than this one.
+  const pill = overlay.match(/\n\s*\.pill\{[^}]*\}/);
+  assert.ok(pill, 'the .pill base rule should exist');
   assert.match(pill[0], /white-space:nowrap/);
   assert.match(pill[0], /word-break:normal/);
-  assert.match(pill[0], /display:inline-block/);
+  assert.match(pill[0], /overflow-wrap:normal/);
+  // The pill must be an atomic inline box rather than raw inline text, or the
+  // cell's break-word reaches the label again. inline-block was the original
+  // fix; inline-flex is the same atomic box and additionally seats the label.
+  // Verified in the running overlay at 1440, 900 and 700px: one line, same
+  // width, no wrap at any of them.
+  assert.match(pill[0], /display:inline-flex/);
+  assert.match(pill[0], /align-items:center/);
+  // And the status pills are uses of it, not a tenth implementation.
+  assert.match(overlay, /pill\.className = 'pill status-pill'/);
+  assert.doesNotMatch(overlay, /\.status-pill\{/, '.status-pill must not grow its own pill rule again');
+});
+
+test('the overlay locks the audited page and gives it back exactly as it found it', () => {
+  // The overlay is a modal covering the viewport, but the page underneath stayed
+  // scrollable: its own scrollbar sat nine pixels right of the overlay's, so the
+  // right edge read as two parallel bars — one of them the browser's default grey,
+  // and not ours to theme — and a wheel over the backdrop moved a page the
+  // operator could not see. Verified in headed Chrome over a third-party page:
+  // two bars before, one after, and none at all when the overlay does not scroll.
+  assert.match(overlay, /function lockAuditedPageScroll\(\)/);
+  assert.match(overlay, /function releaseAuditedPageScroll\(\)/);
+  // Locked when the root is built, released when the overlay closes. Without the
+  // release this leaves a third-party page permanently unable to scroll.
+  const create = overlay.match(/function createSiteAuditRoot\(\)[\s\S]*?\n  \}/)[0];
+  assert.match(create, /lockAuditedPageScroll\(\)/, 'the lock is applied when the overlay opens');
+  const close = overlay.match(/function closeSiteAudit\(\)[\s\S]*?\n  \}/)[0];
+  assert.match(close, /releaseAuditedPageScroll\(\)/, 'the lock is released when the overlay closes');
+  const lock = overlay.match(/function lockAuditedPageScroll\(\)[\s\S]*?\n  \}/)[0];
+  const release = overlay.match(/function releaseAuditedPageScroll\(\)[\s\S]*?\n  \}/)[0];
+  // The scrollbar's width is handed back as padding, or the page reflows by that
+  // much the instant it locks — visible through a 72%-opacity backdrop.
+  assert.match(lock, /window\.innerWidth - root\.clientWidth/);
+  assert.match(lock, /paddingRight = `\$\{gutter\}px`/);
+  // Per axis, never the shorthand: a page that set only overflow-y reads an empty
+  // style.overflow, and restoring the shorthand would drop its overflow silently.
+  for (const prop of ['overflowX', 'overflowY', 'paddingRight']) {
+    assert.match(lock, new RegExp(`${prop}: root\\.style\\.${prop}`), `${prop} is captured before the lock`);
+    assert.match(release, new RegExp(`root\\.style\\.${prop} = siteAuditScrollLock\\.${prop}`), `${prop} is restored on close`);
+  }
+  assert.doesNotMatch(lock, /root\.style\.overflow =/, 'the shorthand would clobber a page-set overflow-y');
   // The column must also size to its content, or the cell squeezes the pill.
   assert.match(overlay, /\.data-table td\.col-status[^{]*\{[^}]*width:1%/);
   // Both tables' status headers and cells opt into it.
@@ -196,7 +239,7 @@ test('the crawl records its site signals before it starts crawling', () => {
 test('a pending check is never worded as a skipped one', () => {
   // Three surfaces reported "not checked" for work that was either already
   // done or still in flight. Each now distinguishes the two.
-  assert.match(overlay, /Being fetched — this audit reads it before it crawls/);
+  assert.match(overlay, /Being fetched; this audit reads it before it crawls/);
   // The conditions readout is populated from the signals while the crawl is
   // still running, rather than staying blank until the server composes it.
   const summary = overlay.match(/function renderAuditSummary\(audit\)[\s\S]*?\n  \}/);
@@ -222,7 +265,7 @@ test('a withheld sitemap comparison reads as not compared, never as zero', () =>
   assert.ok(builder, 'the sitemaps section builder should exist');
   const body = builder[0];
   assert.match(body, /pageLimitStopped\(audit\)/, 'the page limit is what withholds the comparison');
-  assert.match(body, /label: 'Never reached', value: '—'/, 'an em-dash, not a zero');
+  assert.match(body, /label: 'Never reached', value: '–'/, 'an en-dash, not a zero');
   assert.match(body, /not compared/);
   assert.match(body, /have not been compared against the crawl, because/, 'and the coverage line says why');
   // The gate it mirrors must still exist on the scanner side.
@@ -252,7 +295,7 @@ test('the three published documents are stated once, and can be opened', () => {
   // A proposed convention's absence is context, never a defect.
   const provisional = overlay.match(/function provisionalConditionRows\(signals\)[\s\S]*?\n  \}/)[0];
   assert.match(provisional, /llms\.present === false[\s\S]*?state: 'ok'/, 'no llms.txt is not a fault');
-  assert.match(provisional, /its absence is not a defect/);
+  assert.match(provisional, /Its absence is not a defect/);
   assert.match(overlay, /openBtn\.className = 'cond-open'/);
 });
 
@@ -441,7 +484,7 @@ test('the crawl records its site signals before it starts crawling', () => {
 test('a pending check is never worded as a skipped one', () => {
   // Three surfaces reported "not checked" for work that was either already
   // done or still in flight. Each now distinguishes the two.
-  assert.match(overlay, /Being fetched — this audit reads it before it crawls/);
+  assert.match(overlay, /Being fetched; this audit reads it before it crawls/);
   // The conditions readout is populated from the signals while the crawl is
   // still running, rather than staying blank until the server composes it.
   const summary = overlay.match(/function renderAuditSummary\(audit\)[\s\S]*?\n  \}/);
@@ -467,7 +510,7 @@ test('a withheld sitemap comparison reads as not compared, never as zero', () =>
   assert.ok(builder, 'the sitemaps section builder should exist');
   const body = builder[0];
   assert.match(body, /pageLimitStopped\(audit\)/, 'the page limit is what withholds the comparison');
-  assert.match(body, /label: 'Never reached', value: '—'/, 'an em-dash, not a zero');
+  assert.match(body, /label: 'Never reached', value: '–'/, 'an en-dash, not a zero');
   assert.match(body, /not compared/);
   assert.match(body, /have not been compared against the crawl, because/, 'and the coverage line says why');
   // The gate it mirrors must still exist on the scanner side.
@@ -497,7 +540,7 @@ test('the three published documents are stated once, and can be opened', () => {
   // A proposed convention's absence is context, never a defect.
   const provisional = overlay.match(/function provisionalConditionRows\(signals\)[\s\S]*?\n  \}/)[0];
   assert.match(provisional, /llms\.present === false[\s\S]*?state: 'ok'/, 'no llms.txt is not a fault');
-  assert.match(provisional, /its absence is not a defect/);
+  assert.match(provisional, /Its absence is not a defect/);
   assert.match(overlay, /openBtn\.className = 'cond-open'/);
 });
 

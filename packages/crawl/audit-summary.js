@@ -98,7 +98,7 @@ export function composeAuditSummary({
         `${reachRate}% of discovered URLs were fetched successfully.`,
         errored > 0 ? `${errored} page${errored === 1 ? '' : 's'} could not be fetched.` : null,
         skipped > 0 ? `${skipped} skipped by robots.txt.` : null,
-        limited ? `${queued} still queued when the page limit stopped the crawl — this is a coverage limit, not a site problem.` : null
+        limited ? `${queued} still queued when the page limit stopped the crawl. This is a coverage limit, not a site problem.` : null
       ],
       'confirmed',
       { coverageLimited: limited }));
@@ -197,7 +197,7 @@ export function composeAuditSummary({
       'confirmed', { standard: 'proposed' }));
   } else if (llms.present === false) {
     rows.push(row('llms', 'llms.txt', 'ok', 'Not published',
-      ['/llms.txt returned HTTP ' + llms.status + '. This is a proposed convention, not a standard — its absence is not a defect and is reported here as context only.'],
+      ['/llms.txt returned HTTP ' + llms.status + '. This is a proposed convention, not a standard. Its absence is not a defect and is reported here as context only.'],
       'confirmed', { standard: 'proposed', informational: true }));
   }
 

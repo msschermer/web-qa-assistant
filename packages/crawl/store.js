@@ -73,6 +73,57 @@ CREATE TABLE IF NOT EXISTS audit_links (
 CREATE INDEX IF NOT EXISTS idx_links_audit ON audit_links(audit_id, status);
 CREATE INDEX IF NOT EXISTS idx_links_target ON audit_links(audit_id, normalized_target);
 
+/* Structured-data items, one row per parsed node.
+   Kept as rows rather than as a blob on audit_urls because the questions asked
+   of them are aggregate ones — how many Organizations, under how many @ids,
+   across which pages — and those are queries, not a scan of 300 JSON columns.
+   props_json is the bounded projection packages/crawl/schema-items.js builds;
+   it is never the page's markup. */
+CREATE TABLE IF NOT EXISTS audit_schema_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  audit_id TEXT NOT NULL,
+  url TEXT NOT NULL,
+  format TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT '',
+  node_id TEXT,
+  name TEXT,
+  item_path TEXT,
+  prop_keys TEXT,
+  props_json TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_schema_audit ON audit_schema_items(audit_id, type);
+CREATE INDEX IF NOT EXISTS idx_schema_url ON audit_schema_items(audit_id, url);
+
+/* Blocks that did not parse. A page with broken JSON-LD has no items to record,
+   so without this the audit would report it as a page with no structured data —
+   the opposite of what is true, and the more expensive mistake. */
+CREATE TABLE IF NOT EXISTS audit_schema_blocks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  audit_id TEXT NOT NULL,
+  url TEXT NOT NULL,
+  block_index INTEGER NOT NULL,
+  reason TEXT,
+  truncated INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_schema_blocks_audit ON audit_schema_blocks(audit_id);
+
+/* What the sitemap said, kept rather than counted.
+   The crawl read every sitemap URL into memory, enqueued it, recorded the total
+   and dropped the set. That total answers "how many" and nothing else, so the
+   questions that need membership — is this indexable page absent from the
+   sitemap, does the sitemap list a URL that redirects, do the canonical and the
+   sitemap disagree — were unanswerable after the crawl even though the data had
+   been in hand minutes earlier. Discarding a set you already have is the
+   cheapest kind of evidence loss. */
+CREATE TABLE IF NOT EXISTS audit_sitemap_urls (
+  audit_id TEXT NOT NULL,
+  normalized_url TEXT NOT NULL,
+  url TEXT NOT NULL,
+  source TEXT,
+  PRIMARY KEY (audit_id, normalized_url)
+);
+CREATE INDEX IF NOT EXISTS idx_sitemap_audit ON audit_sitemap_urls(audit_id);
+
 CREATE TABLE IF NOT EXISTS audit_findings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   audit_id TEXT NOT NULL,
@@ -198,6 +249,23 @@ export function openAuditStore(dbPath) {
   }
 
   const stmt = {
+    deleteAudit: db.prepare('DELETE FROM audits WHERE id = ?'),
+    deleteAuditUrls: db.prepare('DELETE FROM audit_urls WHERE audit_id = ?'),
+    deleteAuditLinks: db.prepare('DELETE FROM audit_links WHERE audit_id = ?'),
+    deleteAuditFindings: db.prepare('DELETE FROM audit_findings WHERE audit_id = ?'),
+    deleteAuditSchemaItems: db.prepare('DELETE FROM audit_schema_items WHERE audit_id = ?'),
+    deleteAuditSchemaBlocks: db.prepare('DELETE FROM audit_schema_blocks WHERE audit_id = ?'),
+    deleteAuditSitemapUrls: db.prepare('DELETE FROM audit_sitemap_urls WHERE audit_id = ?'),
+    insertSitemapUrl: db.prepare('INSERT OR REPLACE INTO audit_sitemap_urls (audit_id, normalized_url, url, source) VALUES (?, ?, ?, ?)'),
+    listSitemapUrls: db.prepare('SELECT normalized_url, url, source FROM audit_sitemap_urls WHERE audit_id = ? ORDER BY normalized_url'),
+    countSitemapUrls: db.prepare('SELECT COUNT(*) AS n FROM audit_sitemap_urls WHERE audit_id = ?'),
+    insertSchemaItem: db.prepare('INSERT INTO audit_schema_items (audit_id, url, format, type, node_id, name, item_path, prop_keys, props_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'),
+    deleteSchemaItems: db.prepare('DELETE FROM audit_schema_items WHERE audit_id = ? AND url = ?'),
+    insertSchemaBlock: db.prepare('INSERT INTO audit_schema_blocks (audit_id, url, block_index, reason, truncated) VALUES (?, ?, ?, ?, ?)'),
+    deleteSchemaBlocks: db.prepare('DELETE FROM audit_schema_blocks WHERE audit_id = ? AND url = ?'),
+    listSchemaItems: db.prepare('SELECT * FROM audit_schema_items WHERE audit_id = ? ORDER BY url, id'),
+    listSchemaBlocks: db.prepare('SELECT * FROM audit_schema_blocks WHERE audit_id = ? ORDER BY url, block_index'),
+    countSchemaItems: db.prepare('SELECT COUNT(*) AS n FROM audit_schema_items WHERE audit_id = ?'),
     insertAudit: db.prepare('INSERT INTO audits (id, site_origin, start_url, config_json, status, phase, created_at, owner) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
     getAudit: db.prepare('SELECT * FROM audits WHERE id = ?'),
     listAudits: db.prepare('SELECT * FROM audits WHERE site_origin = ? AND owner = ? ORDER BY created_at DESC LIMIT ?'),
@@ -381,6 +449,99 @@ export function openAuditStore(dbPath) {
         fetched_at: nowIso(),
         schema_types: fields.schemaTypes?.length ? JSON.stringify(fields.schemaTypes) : null
       });
+    },
+    /** Replaces whatever was recorded for this page. A render pass re-visits a
+     * page the static tier already read, and appending would double every item. */
+    /**
+     * Remove an audit and everything recorded under it.
+     *
+     * Added because there was no way to. Every other table keys on audit_id and
+     * none of them cascade, so a deleted audit row would have left its pages,
+     * links, findings, schema items and sitemap behind as rows belonging to an
+     * audit that no longer exists. That is worse than not deleting at all: the
+     * counts still answer, from data nothing can reach.
+     *
+     * Deliberately not exposed over the API. Nothing in the product deletes an
+     * audit today, and a destructive endpoint with no caller is a liability
+     * rather than a feature; this exists for fixtures and maintenance.
+     */
+    deleteAudit(auditId) {
+      const id = String(auditId || '');
+      if (!id) return false;
+      const existed = Boolean(stmt.getAudit.get(id));
+      stmt.deleteAuditSitemapUrls.run(id);
+      stmt.deleteAuditSchemaBlocks.run(id);
+      stmt.deleteAuditSchemaItems.run(id);
+      stmt.deleteAuditFindings.run(id);
+      stmt.deleteAuditLinks.run(id);
+      stmt.deleteAuditUrls.run(id);
+      stmt.deleteAudit.run(id);
+      return existed;
+    },
+    /** The sitemap's URL set, written once as the crawl reads it. */
+    recordSitemapUrls(auditId, entries = []) {
+      for (const entry of entries) {
+        if (!entry?.normalized || !entry?.url) continue;
+        stmt.insertSitemapUrl.run(auditId, entry.normalized, entry.url, entry.source || null);
+      }
+    },
+    /** Membership, as a Set of normalized URLs. Empty when no sitemap was read,
+     * which callers must tell apart from "read and this URL is absent" — the
+     * two support opposite conclusions. */
+    sitemapUrlSet(auditId) {
+      return new Set(stmt.listSitemapUrls.all(auditId).map((r) => r.normalized_url));
+    },
+    sitemapUrlRows(auditId) {
+      return stmt.listSitemapUrls.all(auditId);
+    },
+    sitemapUrlCount(auditId) {
+      return Number(stmt.countSitemapUrls.get(auditId)?.n || 0);
+    },
+    recordSchema(auditId, url, { items = [], invalidBlocks = [], truncated = false } = {}) {
+      stmt.deleteSchemaItems.run(auditId, url);
+      stmt.deleteSchemaBlocks.run(auditId, url);
+      for (const item of items) {
+        stmt.insertSchemaItem.run(
+          auditId, url, item.format || 'json-ld', item.type || '', item.nodeId || null,
+          item.name || null, item.path || null,
+          JSON.stringify(item.propKeys || []), JSON.stringify(item.props || {})
+        );
+      }
+      for (const block of invalidBlocks) {
+        stmt.insertSchemaBlock.run(auditId, url, Number(block.blockIndex) || 0, block.reason || null, 0);
+      }
+      if (truncated) stmt.insertSchemaBlock.run(auditId, url, -1, 'Item limit reached for this page', 1);
+    },
+    /** Every page's schema, in the shape packages/findings/schema-validation.js
+     * reads. Pages with no items are included: a page that was parsed and found
+     * to carry nothing is evidence, and dropping it would make the denominator
+     * of every coverage statement wrong. */
+    schemaPages(auditId, { parsedUrls = null } = {}) {
+      const byUrl = new Map();
+      const ensure = (url) => {
+        if (!byUrl.has(url)) byUrl.set(url, { url, items: [], invalidBlocks: [], truncated: false });
+        return byUrl.get(url);
+      };
+      for (const url of parsedUrls || []) ensure(url);
+      for (const row of stmt.listSchemaItems.all(auditId)) {
+        let props = {};
+        let propKeys = [];
+        try { props = JSON.parse(row.props_json || '{}'); } catch { props = {}; }
+        try { propKeys = JSON.parse(row.prop_keys || '[]'); } catch { propKeys = []; }
+        ensure(row.url).items.push({
+          format: row.format, type: row.type || '', nodeId: row.node_id || '',
+          name: row.name || '', path: row.item_path || '', propKeys, props
+        });
+      }
+      for (const row of stmt.listSchemaBlocks.all(auditId)) {
+        const page = ensure(row.url);
+        if (row.truncated) page.truncated = true;
+        else page.invalidBlocks.push({ blockIndex: row.block_index, reason: row.reason || '' });
+      }
+      return [...byUrl.values()];
+    },
+    schemaItemCount(auditId) {
+      return Number(stmt.countSchemaItems.get(auditId)?.n || 0);
     },
     urlCountsByStatus(auditId) {
       return Object.fromEntries(stmt.countUrlsByStatus.all(auditId).map((r) => [r.status, r.n]));

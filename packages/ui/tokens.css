@@ -109,5 +109,25 @@
   --wqa-hatch:repeating-linear-gradient(45deg,transparent 0 6px,rgba(233,233,242,.07) 6px 7px);
   --wqa-grain:none;
 
+  /* The browser's own chrome, themed from the palette instead of left at the
+     defaults. Scrollbars, carets, checkboxes and select menus ship with a
+     light appearance that belongs to no design system, and on a near-black
+     ground they are the one part of the product that still looks like the
+     browser: `color-scheme` turns them dark, `accent-color` keeps a checked
+     box violet rather than the browser's blue — the only place a colour that
+     is not ours would carry meaning — and `scrollbar-color` names the thumb
+     against a transparent track, so a scroller reads as part of the panel it
+     sits in rather than as a pale rail down the side of it.
+
+     They live here because these are inherited properties and every surface
+     inherits this block: the two compiled sheets link it, and the report
+     embeds it. The two injected surfaces cannot take them this way — their
+     host elements carry `all:initial` as an inline style, which outranks
+     `:host` — so the overlay's .workspace and the coach's .coach alias the
+     same three values on the first element that inline style does not reach. */
+  color-scheme:dark;
+  accent-color:var(--wqa-brand);
+  scrollbar-color:var(--wqa-ink-faint) transparent;
+
   --wqa-paper:var(--wqa-canvas);--wqa-surface-strong:var(--wqa-surface-raised);--wqa-rule:var(--wqa-line-strong);--wqa-rule-soft:var(--wqa-line);--wqa-blue:var(--wqa-brand);--wqa-blue-wash:var(--wqa-brand-soft);--wqa-live:var(--wqa-ok);--wqa-danger:var(--wqa-critical);--wqa-warning:var(--wqa-warn);--wqa-radius:var(--wqa-r);
 }

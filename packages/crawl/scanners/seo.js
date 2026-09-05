@@ -141,7 +141,7 @@ function crossPage(fetchedUrls, ctx) {
       for (const sitemapUrl of ctx.sitemapUrls) {
         if (crawledSet.has(sitemapUrl) || flagged >= 50) continue;
         flagged++;
-        push(sitemapUrl, { ruleId: 'seo.sitemap-unreached', title: 'Sitemap URL was never reached by the crawl', detail: `${sitemapUrl} is listed in the sitemap but the crawl (which finished exploring all discoverable internal links) never reached it — it may be an orphan page with no internal links pointing to it, or a stale sitemap entry.`, category: 'review', severity: 'medium', confidence: 'confirmed' });
+        push(sitemapUrl, { ruleId: 'seo.sitemap-unreached', title: 'Sitemap URL was never reached by the crawl', detail: `${sitemapUrl} is listed in the sitemap but the crawl (which finished exploring all discoverable internal links) never reached it. It may be an orphan page with no internal links pointing to it, or a stale sitemap entry.`, category: 'review', severity: 'medium', confidence: 'confirmed' });
       }
     }
   }

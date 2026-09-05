@@ -111,10 +111,31 @@ export function extractByoText(payload) {
   return '';
 }
 
+/**
+ * The endpoints people actually have.
+ *
+ * Two of these are local runtimes that need no key and no account, which is
+ * the fastest honest answer to "I want this to work today". They are offered
+ * as presets rather than documentation because the failure this replaces was
+ * an empty text field next to a feature that never ran.
+ */
+export const BYO_PRESETS = [
+  { id: 'ollama', label: 'Ollama (this machine)', baseUrl: 'http://localhost:11434/v1', model: 'llama3.2', needsKey: false,
+    note: 'Runs locally. Install Ollama, then: ollama pull llama3.2' },
+  { id: 'lmstudio', label: 'LM Studio (this machine)', baseUrl: 'http://localhost:1234/v1', model: '', needsKey: false,
+    note: 'Runs locally. Start the LM Studio server and load a model.' },
+  { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini', needsKey: true,
+    note: 'Sends the audit summary to OpenAI under your own key.' },
+  { id: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini', needsKey: true,
+    note: 'Sends the audit summary to OpenRouter under your own key.' }
+];
+
 /** A provider is only offered when it could actually answer. An option that
  * cannot work is worse than no option: it turns a settings screen into a
  * guessing game. */
 export function describeBriefProviders(settings = {}, { localAvailable = false } = {}) {
+  // Kept as one table so the picker, the resolver and the status line cannot
+  // disagree about which providers could answer right now.
   const byo = validateByoEndpoint(settings.byoAiBaseUrl);
   return {
     'on-device': {
@@ -141,5 +162,39 @@ export function describeBriefProviders(settings = {}, { localAvailable = false }
         ? 'Uses the assistant gateway, which is metered.'
         : 'Off. Enable cloud AI fallback to use this.'
     }
+  };
+}
+
+/**
+ * Which provider will actually be asked.
+ *
+ * The old behaviour was a fixed preference for Chrome's built-in model, which
+ * on most machines reports "unavailable" and cannot be made to report anything
+ * else. Preferring a provider that cannot answer, and only then falling back,
+ * is how a feature comes to look broken while every part of it works.
+ *
+ * So readiness decides. An explicit choice is honoured when it can answer; when
+ * it cannot, the next ready provider takes it and the caller is told which and
+ * why, so the interface can say so instead of failing silently.
+ */
+const PROVIDER_FALLBACK_ORDER = ['byo', 'on-device', 'gateway'];
+
+export function resolveBriefProvider(settings = {}, { localAvailable = false } = {}) {
+  const chosen = String(settings.briefAiProvider || 'byo');
+  if (chosen === 'off') return { id: 'off', ready: false, substituted: false, reason: 'Wording by a model is turned off.' };
+  const providers = describeBriefProviders(settings, { localAvailable });
+  if (providers[chosen]?.ready) {
+    return { id: chosen, ready: true, substituted: false, reason: providers[chosen].note, providers };
+  }
+  const next = PROVIDER_FALLBACK_ORDER.find((id) => id !== chosen && providers[id]?.ready);
+  if (next) {
+    return {
+      id: next, ready: true, substituted: true, providers,
+      reason: `${providers[chosen]?.label || chosen} cannot answer here, so ${providers[next].label} is being used.`
+    };
+  }
+  return {
+    id: 'none', ready: false, substituted: false, providers,
+    reason: providers[chosen]?.note || 'No model is configured.'
   };
 }

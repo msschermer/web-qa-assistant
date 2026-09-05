@@ -23,11 +23,8 @@ dist
 
 # Local tool installs and their caches.
 .claude
-.cursor
-.impeccable
 .github
 node_modules
-tools/cursor-webqa/node_modules
 
 # Tests, fixtures and developer tooling: no service imports them.
 tests
@@ -48,6 +45,4 @@ docker-compose*.yml
 .env
 .env.*
 !.env.example
-.cursorignore
-.cursorindexingignore
 *.log

@@ -1,12 +1,18 @@
 # Release checklist
 
+This list is version-neutral on purpose. It named `v1.6.0` in two places while
+the product shipped 1.7.5, because a checklist that hardcodes a version is a
+checklist that is wrong for every release after the one it was written for.
+Read `vX.Y.Z` as the version in `package.json`; `BUILD_STATUS.md` records what
+that currently is.
+
 ## Automated gate
 
 - [ ] `npm ci`
 - [ ] `npm run build:extension`
 - [ ] `npm run check`
 - [ ] `npm test`
-- [ ] `RELEASE_TAG=v1.6.0 npm run release:validate` (PowerShell: `$env:RELEASE_TAG="v1.6.0"; npm run release:validate`)
+- [ ] `RELEASE_TAG=vX.Y.Z npm run release:validate` (PowerShell: `$env:RELEASE_TAG="vX.Y.Z"; npm run release:validate`)
 - [ ] package and manifest versions agree
 - [ ] service-worker relative-module graph resolves
 - [ ] no active legacy Preflight runtime dependency
@@ -49,5 +55,5 @@
 - [ ] final product review PASS
 - [ ] feature branch PR CI green
 - [ ] merge to `main`
-- [ ] tag `v1.6.0`
+- [ ] tag `vX.Y.Z`
 - [ ] GitHub Release contains clean extension zip and full-source zip

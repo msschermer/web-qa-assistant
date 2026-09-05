@@ -136,136 +136,21 @@ function groupsByDiscipline(findingGroups) {
     .map((d) => [d, byDiscipline.get(d).sort(byScannerSeverity)]);
 }
 
-export function renderAuditReportHtml({ audit, urls, links, findings, findingGroups }) {
-  const counts = audit.urlCounts || {};
-  const fetched = Number(counts.fetched || 0);
-  const discovered = Object.values(counts).reduce((sum, n) => sum + Number(n || 0), 0);
-  const neverFetched = Math.max(0, discovered - fetched);
-  const observations = findings.length;
-  const patterns = findingGroups.length;
-
-  const brokenLinks = links.filter((l) => l.status === 'broken' || l.status === 'blocked');
-  const renderedFindings = findings.filter((f) => f.collection_method === 'rendered');
-  const renderPassRan = renderedFindings.length > 0 || urls.some((u) => u.rendered);
-
-  const topPriorities = orderByLumenPriority(findingGroups).slice(0, 8);
-  const disciplines = groupsByDiscipline(findingGroups);
-
-  const scopeBanner = neverFetched > 0
-    ? `<p class="scope"><b>Partial crawl</b> — ${plural(fetched, 'page')} of ${discovered} discovered were fetched. ${neverFetched} never fetched. Every count in this report describes those ${fetched} pages, not the whole site.</p>`
-    : fetched > 0
-      ? `<p class="scope scope-full"><b>Complete crawl</b> — every one of the ${plural(discovered, 'page')} discovered from this start URL was fetched.</p>`
-      : '';
-
-  const findingRow = (f) => [
-    `<span class="u">${esc(f.url)}</span>`,
-    `<span class="issue">${esc(String(f.title || '').trim() || f.rule_id)}</span><span class="rule">${esc(f.rule_id)}</span>`,
-    sevPill(f.severity),
-    evidenceDot(f.confidence),
-    esc(f.collection_method)
-  ];
-  const findingHeaders = ['URL', 'Issue', 'Severity', 'Evidence', 'Source'];
-  const linkRow = (l) => [
-    `<span class="u">${esc(l.source_url)}</span>`,
-    `<span class="u">${esc(l.target_url)}</span>`,
-    esc(l.anchor_text || '—'),
-    `<span class="pill pill-status-${esc(l.status)}">${esc(l.status)}</span>`,
-    esc(l.http_status || '')
-  ];
-  const linkHeaders = ['Source', 'Target', 'Anchor text', 'Status', 'HTTP'];
-  const urlRow = (u) => {
-    let schemaTypes = '—';
-    try { const parsed = JSON.parse(u.schema_types || '[]'); if (parsed.length) schemaTypes = esc(parsed.join(', ')); } catch {}
-    return [
-      `<span class="u">${esc(u.url)}</span>`,
-      esc(u.http_status || u.status),
-      esc(u.title || ''),
-      esc(u.canonical || ''),
-      u.indexable ? 'Yes' : 'No',
-      esc(u.word_count ?? '—'),
-      schemaTypes,
-      u.rendered ? 'Yes' : 'No'
-    ];
-  };
-  const urlHeaders = ['URL', 'Status', 'Title', 'Canonical', 'Indexable', 'Words', 'Schema', 'Rendered'];
-
-  const statStrip = `<dl class="stats">
-      <div><dt>Observations</dt><dd>${observations}</dd></div>
-      <div><dt>Issue patterns</dt><dd>${patterns}</dd></div>
-      <div><dt>Pages crawled</dt><dd>${fetched}</dd><dd class="sub">${neverFetched > 0 ? `of ${discovered} discovered` : 'all discovered'}</dd></div>
-      <div><dt>Broken or blocked links</dt><dd>${brokenLinks.length}</dd></div>
-    </dl>`;
-
-  const prioritiesHtml = topPriorities.length
-    ? `<ol class="priorities">${topPriorities.map((g, i) => `
-        <li>
-          <span class="p-rank">${String(i + 1).padStart(2, '0')}</span>
-          <div class="p-body">
-            <p class="p-top">${sevPill(g.severity)}<b>${esc(label(g))}</b>${evidenceDot(g.confidence)}</p>
-            <p class="p-scope">${esc(disciplineLabel(disciplineOf(g.rule_id)))} · ${plural(g.instances, 'instance')} across ${plural(g.affected_urls, 'page')} · <span class="rule-inline">${esc(g.rule_id)}</span></p>
-            <p class="p-guidance">${esc(guidanceForRule(g.rule_id))}</p>
-          </div>
-        </li>`).join('')}</ol>`
-    : '<p class="empty">No findings recorded.</p>';
-
-  const findingsSections = patterns
-    ? disciplines.map(([discipline, groups]) => `
-        <h3 class="d-head">${esc(disciplineLabel(discipline))} <span class="d-count">${plural(groups.length, 'pattern')}</span></h3>
-        ${table(['Issue', 'Severity', 'Affected', 'Instances', 'Evidence', 'Recommended next move'], groups.map((g) => [
-          `<span class="issue">${esc(label(g))}</span><span class="rule">${esc(g.rule_id)}</span>`,
-          sevPill(g.severity),
-          plural(g.affected_urls, 'page'),
-          String(g.instances),
-          evidenceDot(g.confidence),
-          `<span class="guide">${esc(guidanceForRule(g.rule_id))}</span>`
-        ]), 'Nothing to show here.', ['26%', '9%', '9%', '8%', '11%', '37%'])}`).join('')
-    : '<p class="empty">No findings recorded.</p>';
-
-  const browserSection = renderPassRan
-    ? `<h2>Browser checks</h2>
-       <p class="lede">Collected by loading each page in a real browser — accessibility, runtime behaviour and performance facts the static crawl cannot see.</p>
-       ${table(findingHeaders, renderedFindings.map(findingRow), 'The render pass ran and recorded no findings on these pages.')}`
-    : `<h2>Browser checks</h2>
-       <div class="notrun"><b>Not run for this audit.</b>
-       <span>Accessibility, runtime and performance evidence requires loading each page in a real browser. It was not collected here, so this report makes no claim either way about those areas — an empty section is not a clean bill of health.</span></div>`;
-
-  const sections = [
-    { id: 'overview', label: 'Overview', group: '', content: `
-        <h2>Overview</h2>
-        ${statStrip}
-        ${severityRail(findingGroups)}
-        ${conditionsHtml(audit?.stats?.auditSummary)}
-        <h2>What to fix first</h2>
-        <p class="lede">Ordered by Lumen: a confirmed availability failure leads, then the scanner's own severity, then how many pages carry it. Severity and evidence labels are exactly as recorded — this ordering does not change them.</p>
-        ${prioritiesHtml}` },
-    { id: 'findings', label: 'Findings', count: patterns, group: '', content: `
-        <h2>Findings</h2>
-        <p class="lede">${observations} observation${observations === 1 ? '' : 's'} grouped into ${plural(patterns, 'issue pattern')}, by discipline. Availability leads because a confirmed broken destination is a functional failure, not a suggestion.</p>
-        ${findingsSections}` },
-    { id: 'pages', label: 'Pages', count: urls.length, group: 'Explore', content: `
-        <h2>Pages</h2>
-        <p class="lede">Every URL this crawl discovered, and what was read from the ones it fetched. A row with no title or word count was discovered but never fetched — the page limit stopped the crawl before it got there.</p>
-        ${table(urlHeaders, urls.map(urlRow), 'No pages were crawled.')}` },
-    { id: 'links', label: 'Links', count: links.length, group: 'Explore', content: `
-        <h2>Broken and blocked links</h2>
-        ${table(linkHeaders, brokenLinks.map(linkRow), 'Every link checked resolved.')}
-        <h3>All checked links</h3>
-        ${table(linkHeaders, links.map(linkRow), 'No links were checked.')}` },
-    { id: 'browser', label: 'Browser checks', group: 'Validate', content: browserSection }
-  ];
-
-  const navGroups = [];
-  for (const section of sections) {
-    const last = navGroups[navGroups.length - 1];
-    if (last && last.label === section.group) last.items.push(section);
-    else navGroups.push({ label: section.group, items: [section] });
-  }
-
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Site audit — ${esc(audit.site_origin)}</title><style>
+/**
+ * The document's stylesheet, named rather than inlined.
+ *
+ * It is exported for the same reason `scripts/build-extension.mjs` emits
+ * `dist/extension/site-audit.css`: the state gallery renders report specimens
+ * through this exact cascade, and a specimen rendered against a second copy of
+ * a stylesheet only ever proves the two copies agree. The exported document
+ * below interpolates the same function, so there is one definition.
+ */
+export function reportCss() {
+  return `
     ${FONT_FACE_CSS}
     ${TOKENS_CSS}
     :root{color-scheme:dark;--r-mono:var(--wqa-mono)}
-    *{box-sizing:border-box}
+    *{box-sizing:border-box;scrollbar-width:thin}
     /* The flex column keeps the footer at the foot of the window rather than
        halfway up it when a short section — Browser checks, say — is open. */
     body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--wqa-canvas);color:var(--wqa-ink);
@@ -352,7 +237,14 @@ export function renderAuditReportHtml({ audit, urls, links, findings, findingGro
        text colour, and the sealed ramp only as a hairline tint or — for
        critical alone — a solid fill under white. The ramp is not text. */
     .pill{display:inline-flex;align-items:center;border-radius:99px;padding:2px 9px;font-size:11.5px;font-weight:600;text-transform:capitalize;white-space:nowrap;border:1px solid transparent;color:var(--wqa-ink-faint)}
-    .pill-critical,.pill-status-broken{background:var(--wqa-sev-critical);color:#fff}
+    /* The solid pill deepens its own ground from the sealed ramp rather than
+       sitting on it. White on --wqa-sev-critical at this size is 4.09:1, under
+       the 4.5 floor; against the same colour mixed 78% into the backdrop it is
+       6.02:1. The ramp itself is untouched, and this is the treatment the
+       overlay's critical-solid pill already carries: the state gallery found
+       the identical defect here the first time it rendered a report specimen,
+       because until then nothing had ever looked at the two side by side. */
+    .pill-critical,.pill-status-broken{background:color-mix(in srgb,var(--wqa-sev-critical) 78%,var(--wqa-backdrop));color:#fff}
     .pill-high{background:var(--wqa-critical-soft);color:var(--wqa-critical);border-color:color-mix(in srgb,var(--wqa-sev-high) 40%,transparent)}
     .pill-medium,.pill-low{background:var(--wqa-warn-soft);color:var(--wqa-warn);border-color:color-mix(in srgb,var(--wqa-sev-medium) 40%,transparent)}
     /* Blocked is a limit on what Lumen could check, not a defect in the site,
@@ -415,10 +307,140 @@ export function renderAuditReportHtml({ audit, urls, links, findings, findingGro
       .pill,.rail-seg,.rail-key i,.mark,.ev::before{-webkit-print-color-adjust:exact;print-color-adjust:exact}
       a{color:inherit}
     }
+`;
+}
+
+export function renderAuditReportHtml({ audit, urls, links, findings, findingGroups }) {
+  const counts = audit.urlCounts || {};
+  const fetched = Number(counts.fetched || 0);
+  const discovered = Object.values(counts).reduce((sum, n) => sum + Number(n || 0), 0);
+  const neverFetched = Math.max(0, discovered - fetched);
+  const observations = findings.length;
+  const patterns = findingGroups.length;
+
+  const brokenLinks = links.filter((l) => l.status === 'broken' || l.status === 'blocked');
+  const renderedFindings = findings.filter((f) => f.collection_method === 'rendered');
+  const renderPassRan = renderedFindings.length > 0 || urls.some((u) => u.rendered);
+
+  const topPriorities = orderByLumenPriority(findingGroups).slice(0, 8);
+  const disciplines = groupsByDiscipline(findingGroups);
+
+  const scopeBanner = neverFetched > 0
+    ? `<p class="scope"><b>Partial crawl</b>: ${plural(fetched, 'page')} of ${discovered} discovered were fetched. ${neverFetched} never fetched. Every count in this report describes those ${fetched} pages, not the whole site.</p>`
+    : fetched > 0
+      ? `<p class="scope scope-full"><b>Complete crawl</b>: every one of the ${plural(discovered, 'page')} discovered from this start URL was fetched.</p>`
+      : '';
+
+  const findingRow = (f) => [
+    `<span class="u">${esc(f.url)}</span>`,
+    `<span class="issue">${esc(String(f.title || '').trim() || f.rule_id)}</span><span class="rule">${esc(f.rule_id)}</span>`,
+    sevPill(f.severity),
+    evidenceDot(f.confidence),
+    esc(f.collection_method)
+  ];
+  const findingHeaders = ['URL', 'Issue', 'Severity', 'Evidence', 'Source'];
+  const linkRow = (l) => [
+    `<span class="u">${esc(l.source_url)}</span>`,
+    `<span class="u">${esc(l.target_url)}</span>`,
+    esc(l.anchor_text || '–'),
+    `<span class="pill pill-status-${esc(l.status)}">${esc(l.status)}</span>`,
+    esc(l.http_status || '')
+  ];
+  const linkHeaders = ['Source', 'Target', 'Anchor text', 'Status', 'HTTP'];
+  const urlRow = (u) => {
+    let schemaTypes = '–';
+    try { const parsed = JSON.parse(u.schema_types || '[]'); if (parsed.length) schemaTypes = esc(parsed.join(', ')); } catch {}
+    return [
+      `<span class="u">${esc(u.url)}</span>`,
+      esc(u.http_status || u.status),
+      esc(u.title || ''),
+      esc(u.canonical || ''),
+      u.indexable ? 'Yes' : 'No',
+      esc(u.word_count ?? '–'),
+      schemaTypes,
+      u.rendered ? 'Yes' : 'No'
+    ];
+  };
+  const urlHeaders = ['URL', 'Status', 'Title', 'Canonical', 'Indexable', 'Words', 'Schema', 'Rendered'];
+
+  const statStrip = `<dl class="stats">
+      <div><dt>Observations</dt><dd>${observations}</dd></div>
+      <div><dt>Issue patterns</dt><dd>${patterns}</dd></div>
+      <div><dt>Pages crawled</dt><dd>${fetched}</dd><dd class="sub">${neverFetched > 0 ? `of ${discovered} discovered` : 'all discovered'}</dd></div>
+      <div><dt>Broken or blocked links</dt><dd>${brokenLinks.length}</dd></div>
+    </dl>`;
+
+  const prioritiesHtml = topPriorities.length
+    ? `<ol class="priorities">${topPriorities.map((g, i) => `
+        <li>
+          <span class="p-rank">${String(i + 1).padStart(2, '0')}</span>
+          <div class="p-body">
+            <p class="p-top">${sevPill(g.severity)}<b>${esc(label(g))}</b>${evidenceDot(g.confidence)}</p>
+            <p class="p-scope">${esc(disciplineLabel(disciplineOf(g.rule_id)))} · ${plural(g.instances, 'instance')} across ${plural(g.affected_urls, 'page')} · <span class="rule-inline">${esc(g.rule_id)}</span></p>
+            <p class="p-guidance">${esc(guidanceForRule(g.rule_id))}</p>
+          </div>
+        </li>`).join('')}</ol>`
+    : '<p class="empty">No findings recorded.</p>';
+
+  const findingsSections = patterns
+    ? disciplines.map(([discipline, groups]) => `
+        <h3 class="d-head">${esc(disciplineLabel(discipline))} <span class="d-count">${plural(groups.length, 'pattern')}</span></h3>
+        ${table(['Issue', 'Severity', 'Affected', 'Instances', 'Evidence', 'Recommended next move'], groups.map((g) => [
+          `<span class="issue">${esc(label(g))}</span><span class="rule">${esc(g.rule_id)}</span>`,
+          sevPill(g.severity),
+          plural(g.affected_urls, 'page'),
+          String(g.instances),
+          evidenceDot(g.confidence),
+          `<span class="guide">${esc(guidanceForRule(g.rule_id))}</span>`
+        ]), 'Nothing to show here.', ['26%', '9%', '9%', '8%', '11%', '37%'])}`).join('')
+    : '<p class="empty">No findings recorded.</p>';
+
+  const browserSection = renderPassRan
+    ? `<h2>Browser checks</h2>
+       <p class="lede">Collected by loading each page in a real browser: accessibility, runtime behaviour and performance facts the static crawl cannot see.</p>
+       ${table(findingHeaders, renderedFindings.map(findingRow), 'The render pass ran and recorded no findings on these pages.')}`
+    : `<h2>Browser checks</h2>
+       <div class="notrun"><b>Not run for this audit.</b>
+       <span>Accessibility, runtime and performance evidence requires loading each page in a real browser. It was not collected here, so this report makes no claim either way about those areas. An empty section is not a clean bill of health.</span></div>`;
+
+  const sections = [
+    { id: 'overview', label: 'Overview', group: '', content: `
+        <h2>Overview</h2>
+        ${statStrip}
+        ${severityRail(findingGroups)}
+        ${conditionsHtml(audit?.stats?.auditSummary)}
+        <h2>What to fix first</h2>
+        <p class="lede">Ordered by Lumen: a confirmed availability failure leads, then the scanner's own severity, then how many pages carry it. Severity and evidence labels are exactly as recorded; this ordering does not change them.</p>
+        ${prioritiesHtml}` },
+    { id: 'findings', label: 'Findings', count: patterns, group: '', content: `
+        <h2>Findings</h2>
+        <p class="lede">${observations} observation${observations === 1 ? '' : 's'} grouped into ${plural(patterns, 'issue pattern')}, by discipline. Availability leads because a confirmed broken destination is a functional failure, not a suggestion.</p>
+        ${findingsSections}` },
+    { id: 'pages', label: 'Pages', count: urls.length, group: 'Explore', content: `
+        <h2>Pages</h2>
+        <p class="lede">Every URL this crawl discovered, and what was read from the ones it fetched. A row with no title or word count was discovered but never fetched, because the page limit stopped the crawl before it got there.</p>
+        ${table(urlHeaders, urls.map(urlRow), 'No pages were crawled.')}` },
+    { id: 'links', label: 'Links', count: links.length, group: 'Explore', content: `
+        <h2>Broken and blocked links</h2>
+        ${table(linkHeaders, brokenLinks.map(linkRow), 'Every link checked resolved.')}
+        <h3>All checked links</h3>
+        ${table(linkHeaders, links.map(linkRow), 'No links were checked.')}` },
+    { id: 'browser', label: 'Browser checks', group: 'Validate', content: browserSection }
+  ];
+
+  const navGroups = [];
+  for (const section of sections) {
+    const last = navGroups[navGroups.length - 1];
+    if (last && last.label === section.group) last.items.push(section);
+    else navGroups.push({ label: section.group, items: [section] });
+  }
+
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Site audit: ${esc(audit.site_origin)}</title><style>
+${reportCss()}
   </style></head><body>
     <header>
       <span class="mark">L</span>
-      <h1>Site audit — ${esc(audit.site_origin)}</h1>
+      <h1>Site audit: ${esc(audit.site_origin)}</h1>
       <p class="prov">${esc(audit.start_url)} · ${esc(new Date().toISOString().replace('T', ' ').slice(0, 16))} UTC · ${esc(audit.status)}</p>
     </header>
     ${scopeBanner}
@@ -429,7 +451,7 @@ export function renderAuditReportHtml({ audit, urls, links, findings, findingGro
       </nav>
       <main>${sections.map((s) => `<section id="tab-${s.id}" class="${s.id === 'overview' ? 'active' : ''}">${s.content}</section>`).join('')}</main>
     </div>
-    <footer>Generated by Lumen. A point-in-time snapshot of this audit — reopen it in the extension for live status. Nothing in this report was generated by a language model: the ordering is a deterministic sort and the recommendations are a fixed lookup.</footer>
+    <footer>Generated by Lumen. A point-in-time snapshot of this audit; reopen it in the extension for live status. Nothing in this report was generated by a language model: the ordering is a deterministic sort and the recommendations are a fixed lookup.</footer>
     <script>
       document.querySelectorAll('nav button').forEach(function(btn){
         btn.addEventListener('click', function(){

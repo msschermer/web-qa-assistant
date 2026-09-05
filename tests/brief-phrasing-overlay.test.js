@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { resolveBriefProvider } from '../packages/ai/brief-provider.js';
 
 /**
  * The overlay side of brief phrasing, exercised without a browser.
@@ -29,7 +30,14 @@ function lift(names) {
   return parts.join('\n') + '\nreturn { ' + names.join(', ') + ' };';
 }
 
-function harness({ languageModel = undefined, kicker = null, provider = 'on-device', byoReady = false, byoReply = null } = {}) {
+function harness({ languageModel = undefined, kicker = null, provider = 'byo', byoReady = false, byoReply = null, localAvailable = undefined } = {}) {
+  const settings = {
+    briefAiProvider: provider,
+    byoAiBaseUrl: byoReady ? 'https://models.example.com/v1' : '',
+    byoAiModel: byoReady ? 'a-model' : ''
+  };
+  const canRunLocally = localAvailable === undefined ? Boolean(languageModel) : localAvailable;
+  const resolved = resolveBriefProvider(settings, { localAvailable: canRunLocally });
   const scope = {};
   new Function('globalThis', fs.readFileSync(BUNDLE, 'utf8'))(scope);
   const repaints = [];
@@ -44,7 +52,9 @@ function harness({ languageModel = undefined, kicker = null, provider = 'on-devi
     runtime: {
       sendMessage: async (msg) => {
         sent.push(msg);
-        if (msg.type === 'BRIEF_AI_SETTINGS') return { ok: true, provider, byo: { configured: byoReady } };
+        if (msg.type === 'BRIEF_AI_SETTINGS') {
+          return { ok: true, provider, resolved: { id: resolved.id, ready: resolved.ready, substituted: resolved.substituted, reason: resolved.reason } };
+        }
         if (msg.type === 'BRIEF_AI_PHRASE') return byoReply || { ok: false, code: 'BYO_AI_FAILED' };
         return {};
       }
@@ -52,14 +62,20 @@ function harness({ languageModel = undefined, kicker = null, provider = 'on-devi
   };
   const globals = { LumenBriefPhrasing: scope.LumenBriefPhrasing, LanguageModel: languageModel, chrome };
   const api = new Function(
-    'globalThis', 'siteAudit', 'BRIEF_PROVENANCE', 'renderLumenBrief', 'chrome',
-    lift(['briefPromptFor', 'acceptBriefPhrasing', 'phraseBriefWithOwnAi', 'phraseBriefOnDevice', 'briefPhrasingProvider', 'requestBriefPhrasing', 'renderBriefProvenance'])
+    'globalThis', 'siteAudit', 'BRIEF_PROVENANCE', 'BRIEF_UNAVAILABLE_REASON', 'BRIEF_NOT_A_FAILURE', 'BRIEF_AI_DEADLINE_MS', 'renderLumenBrief', 'chrome',
+    lift(['withDeadline', 'briefPromptFor', 'acceptBriefPhrasing', 'phraseBriefWithOwnAi', 'phraseBriefOnDevice', 'localModelUsable', 'briefUnavailableReason', 'briefPhrasingProvider', 'requestBriefPhrasing', 'renderBriefProvenance'])
   )(globals, siteAudit, {
-    deterministic: 'grounded in scan evidence',
-    pending: 'grounded in scan evidence · asking AI for wording',
-    model: 'scan evidence · wording by on-device AI',
-    byo: 'scan evidence · wording by your own AI'
-  }, () => repaints.push('repaint'), chrome);
+    deterministic: 'written by Lumen from scan evidence',
+    pending: 'written by Lumen from scan evidence · rewriting',
+    model: 'scan evidence · written by the model on this device',
+    byo: 'scan evidence · written by your model',
+    unavailable: 'written by Lumen from scan evidence'
+  }, {
+    BRIEF_AI_NO_PROVIDER: 'no model is configured',
+    LOCAL_AI_API_UNAVAILABLE: 'this browser has no built-in model',
+    BRIEF_AI_TIMEOUT: 'the model did not answer in time'
+  }, new Set(['BRIEF_AI_OFF', 'BRIEF_AI_NO_PROVIDER', 'LOCAL_AI_API_UNAVAILABLE']),
+  200, () => repaints.push('repaint'), chrome);
   return { api, siteAudit, repaints, sent };
 }
 
@@ -84,7 +100,13 @@ test('with no on-device model the request refuses quietly and repaints nothing',
 
   api.requestBriefPhrasing(brief(), audit());
   await new Promise((r) => setTimeout(r, 30));
-  assert.equal(siteAudit.briefPhrasing.status, 'deterministic', 'the brief stays as composed');
+  assert.equal(siteAudit.briefPhrasing.status, 'unavailable', 'a refusal is recorded, not hidden');
+  // With nothing configured the resolver reaches no provider at all, which is
+  // a truer answer than the built-in model's own error and, unlike it, is not
+  // rendered as a failure on a screen where nothing went wrong.
+  assert.equal(siteAudit.briefPhrasing.code, 'BRIEF_AI_NO_PROVIDER', 'and it says why');
+  assert.equal(api.briefUnavailableReason('BRIEF_AI_NO_PROVIDER'), '', 'an absence is not badged as a fault');
+  assert.ok(api.briefUnavailableReason('BRIEF_AI_TIMEOUT').length > 5, 'a real failure still is');
   assert.equal(repaints.length, 0, 'a refusal must not repaint the brief');
 });
 
@@ -180,10 +202,10 @@ test('provenance names the author of the words, not the source of the facts', { 
   const kicker = { textContent: '' };
   const { api, siteAudit } = harness({ kicker });
   api.renderBriefProvenance();
-  assert.match(kicker.textContent, /grounded in scan evidence/);
+  assert.match(kicker.textContent, /written by Lumen from scan evidence/);
   siteAudit.briefPhrasing = { auditId: 'audit-1', status: 'model' };
   api.renderBriefProvenance();
-  assert.match(kicker.textContent, /on-device AI/, 'the reader must be told when a model wrote the words');
+  assert.match(kicker.textContent, /written by the model on this device/, 'the reader must be told when a model wrote the words');
 });
 
 // --- bring your own AI ------------------------------------------------------
@@ -196,22 +218,37 @@ const byoGood = () => ({
   })
 });
 
-test('on-device is tried before the operator endpoint, and wins when it answers', { skip: !built }, async () => {
-  // The only option where nothing leaves the machine is the one tried first.
+test('exactly one provider is asked, and it is one that can answer', { skip: !built }, async () => {
+  // The defect this closes: the overlay always tried Chrome's built-in model
+  // first and only then fell back. On the machines where that reports
+  // "unavailable" and cannot be made to report anything else, a configured
+  // endpoint was reached only after a guaranteed failure, and every surface
+  // showed the built-in model's error. Readiness now decides, in the worker,
+  // and the overlay asks the one provider it is given.
   const languageModel = {
     availability: async () => 'available',
     create: async () => ({ prompt: async () => byoGood().text, destroy() {} })
   };
-  const { api, siteAudit, sent } = harness({ languageModel, provider: 'byo', byoReady: true, byoReply: byoGood() });
-  api.requestBriefPhrasing(brief(), audit());
+  // A chosen endpoint is used even where the built-in model would also work.
+  const own = harness({ languageModel, provider: 'byo', byoReady: true, byoReply: byoGood() });
+  own.api.requestBriefPhrasing(brief(), audit());
   await new Promise((r) => setTimeout(r, 40));
-  assert.equal(siteAudit.briefPhrasing.status, 'model', 'on-device wording is used');
-  assert.equal(sent.some((m) => m.type === 'BRIEF_AI_PHRASE'), false, 'the endpoint is not called when on-device answered');
+  assert.equal(own.siteAudit.briefPhrasing.status, 'byo', 'the operator chose their endpoint, so it is used');
+
+  // And choosing on-device where it works asks nothing of any endpoint.
+  const local = harness({ languageModel, provider: 'on-device', byoReady: true, byoReply: byoGood() });
+  local.api.requestBriefPhrasing(brief(), audit());
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(local.siteAudit.briefPhrasing.status, 'model');
+  assert.equal(local.sent.some((m) => m.type === 'BRIEF_AI_PHRASE'), false, 'nothing leaves the machine');
 });
 
-test('the operator endpoint answers when on-device cannot', { skip: !built }, async () => {
+test('a chosen provider that cannot answer is substituted, not simply failed', { skip: !built }, async () => {
+  // The whole point of resolving by readiness: an operator who left the
+  // default on the built-in model, on a machine that cannot run it, still gets
+  // the endpoint they configured rather than an error.
   const { api, siteAudit, sent, repaints } = harness({
-    languageModel: undefined, provider: 'byo', byoReady: true, byoReply: byoGood()
+    languageModel: undefined, provider: 'on-device', byoReady: true, byoReply: byoGood()
   });
   api.requestBriefPhrasing(brief(), audit());
   await new Promise((r) => setTimeout(r, 40));
@@ -236,7 +273,7 @@ test('the same gate applies to the operator endpoint', { skip: !built }, async (
   const { api, siteAudit } = harness({ provider: 'byo', byoReady: true, byoReply: invented });
   api.requestBriefPhrasing(brief(), audit());
   await new Promise((r) => setTimeout(r, 40));
-  assert.equal(siteAudit.briefPhrasing.status, 'deterministic');
+  assert.equal(siteAudit.briefPhrasing.status, 'unavailable');
   assert.equal(siteAudit.briefPhrasing.code, 'BRIEF_AI_INVENTED_NUMBER');
 });
 
@@ -245,7 +282,10 @@ test('an unconfigured endpoint is never called', { skip: !built }, async () => {
   api.requestBriefPhrasing(brief(), audit());
   await new Promise((r) => setTimeout(r, 40));
   assert.equal(sent.some((m) => m.type === 'BRIEF_AI_PHRASE'), false);
-  assert.equal(siteAudit.briefPhrasing.status, 'deterministic');
+  assert.equal(siteAudit.briefPhrasing.status, 'unavailable');
+  // Nothing was configured and nothing failed, so the reader is told who wrote
+  // the words and not that something is broken.
+  assert.equal(siteAudit.briefPhrasing.code, 'BRIEF_AI_NO_PROVIDER');
 });
 
 test('choosing off asks nothing of anyone', { skip: !built }, async () => {
@@ -256,7 +296,7 @@ test('choosing off asks nothing of anyone', { skip: !built }, async () => {
   const { api, siteAudit, sent } = harness({ languageModel, provider: 'off', byoReady: true, byoReply: byoGood() });
   api.requestBriefPhrasing(brief(), audit());
   await new Promise((r) => setTimeout(r, 40));
-  assert.equal(siteAudit.briefPhrasing.status, 'deterministic');
+  assert.equal(siteAudit.briefPhrasing.status, 'unavailable');
   assert.equal(siteAudit.briefPhrasing.code, 'BRIEF_AI_OFF');
   assert.equal(sent.some((m) => m.type === 'BRIEF_AI_PHRASE'), false);
 });
@@ -273,5 +313,5 @@ test('every provenance state is distinguishable to a reader', { skip: !built }, 
   assert.equal(seen.size, 4, 'a reader must be able to tell the four states apart');
   siteAudit.briefPhrasing = { auditId: 'audit-1', status: 'byo' };
   api.renderBriefProvenance();
-  assert.match(kicker.textContent, /your own AI/);
+  assert.match(kicker.textContent, /written by your model/);
 });

@@ -9,7 +9,7 @@ Chrome extension / public web
 assistant.msschermer.us (Caddy / TLS)
         |
         v
-127.0.0.1:8787  Web QA Assistant API
+127.0.0.1:8787  Lumen API
         |
         +--> Meta State
         +--> Performance Monitor

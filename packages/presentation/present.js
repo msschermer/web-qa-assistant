@@ -67,7 +67,7 @@ export function presentFinding(finding={},environment={type:'unknown'}){
   let summary=clip(guidance.interpretation||f.detail||'',260);
   if(/broken-link|link-404|link-410/.test(id)&&f.link?.url){const text=clip(f.link?.text||'Internal link',70);summary=`${text} points to ${pathname(f.link.url)}, which returned a confirmed missing-page response.`}
   if(id==='performance.browser.lcp'&&f.performanceObservation?.largestContentfulPaintMs!=null)summary=`This browser observed LCP at ${(f.performanceObservation.largestContentfulPaintMs/1000).toFixed(1)}s. Treat it as a current lab observation, not a field regression.`;
-  if(id==='performance.browser.cls'&&f.performanceObservation?.cumulativeLayoutShift!=null)summary=`This browser observed cumulative layout shift of ${f.performanceObservation.cumulativeLayoutShift}. Aggregate CLS only — no shift contributor was identified. Treat as a current lab observation, not a field Core Web Vitals score.`;
+  if(id==='performance.browser.cls'&&f.performanceObservation?.cumulativeLayoutShift!=null)summary=`This browser observed cumulative layout shift of ${f.performanceObservation.cumulativeLayoutShift}. Aggregate CLS only; no shift contributor was identified. Treat as a current lab observation, not a field Core Web Vitals score.`;
   if(id==='performance.browser.ttfb'&&f.performanceObservation?.ttfbMs!=null)summary=`This browser waited ${Math.round(f.performanceObservation.ttfbMs)}ms for the first byte before rendering work could begin.`;
   if(/link-in-text-block/.test(id)){
     const evidence=linkInTextEvidence(f, f.linkInTextHints || f.linkInText);

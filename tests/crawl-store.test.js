@@ -265,3 +265,32 @@ test('newAuditId produces distinct, url-safe ids', () => {
   assert.equal(ids.size, 50);
   for (const id of ids) assert.match(id, /^audit_[A-Za-z0-9_-]+$/);
 });
+
+test('deleting an audit takes everything recorded under it', () => {
+  // Every table keys on audit_id and none of them cascade, so removing only the
+  // audit row would leave its pages, links, findings, schema and sitemap behind
+  // as rows belonging to an audit that no longer exists. Those still answer a
+  // COUNT, from data nothing can reach, which is worse than not deleting.
+  const store = openAuditStore(':memory:');
+  const id = store.createAudit({ siteOrigin: 'https://example.com', startUrl: 'https://example.com/', config: {} });
+  store.enqueueUrl(id, 'https://example.com/a', 'link', 1);
+  store.recordUrlResult(id, 'https://example.com/a', { status: 'fetched', httpStatus: 200, title: 'A' });
+  store.recordFindings(id, 'https://example.com/a', [{ ruleId: 'seo.title-long', title: 'x', category: 'fix', severity: 'low', confidence: 'confirmed' }]);
+  store.recordSchema(id, 'https://example.com/a', { items: [{ type: 'Article', props: {}, propKeys: [] }] });
+  store.recordSitemapUrls(id, [{ normalized: 'https://example.com/a', url: 'https://example.com/a' }]);
+
+  assert.equal(store.listUrls(id, { limit: 10 }).length, 1);
+  assert.equal(store.sitemapUrlCount(id), 1);
+  assert.equal(store.schemaItemCount(id), 1);
+
+  assert.equal(store.deleteAudit(id), true);
+  assert.equal(store.getAudit(id), null);
+  assert.equal(store.listUrls(id, { limit: 10 }).length, 0);
+  assert.equal(store.listFindings(id, { limit: 10 }).length, 0);
+  assert.equal(store.sitemapUrlCount(id), 0);
+  assert.equal(store.schemaItemCount(id), 0);
+
+  // Deleting what is not there is not an error, and says so.
+  assert.equal(store.deleteAudit(id), false);
+  assert.equal(store.deleteAudit(''), false);
+});

@@ -1285,7 +1285,7 @@
         title:row.party.roleHint==='embed'?'Embedded third-party resource failed to load':'Cross-origin resource failed to load',
         detail:row.party.roleHint==='embed'
           ?`A third-party embed-related ${row.kind} request for ${row.url} completed with HTTP ${row.status}. Impact depends on whether the visible embed depends on this asset; treat as Worth Checking rather than a confirmed page defect.`
-          :`A cross-origin ${row.kind} request for ${row.url} completed with HTTP ${row.status}. This may affect page features when the asset is required, but cross-origin failures are often blocked by privacy tools or expected CDN conditions — confirm impact before treating it as a defect.`,
+          :`A cross-origin ${row.kind} request for ${row.url} completed with HTTP ${row.status}. This may affect page features when the asset is required, but cross-origin failures are often blocked by privacy tools or expected CDN conditions. Confirm impact before treating it as a defect.`,
         category:'review',severity:'low',confidence:'inferred',targetType:'document',
         evidence:`http-${row.status} ${row.url}; origin=${ownership}`,
         extra:{
@@ -1740,7 +1740,7 @@
     return[finding({
       ruleId:'seo.soft-404-probable',
       title:'Page content resembles a not-found response',
-      detail:`The document appears to load successfully${Number.isFinite(status)?` (HTTP ${status})`:''}, but ${signals} independent signals suggest an error or empty-shell page (title/H1/body wording, sparse content, or very few links). This is a probable soft 404 — not a confirmed HTTP 404. Verify with server logs, the intended URL, and whether the route should return a real 404 status.`,
+      detail:`The document appears to load successfully${Number.isFinite(status)?` (HTTP ${status})`:''}, but ${signals} independent signals suggest an error or empty-shell page (title/H1/body wording, sparse content, or very few links). This is a probable soft 404, not a confirmed HTTP 404. Verify with server logs, the intended URL, and whether the route should return a real 404 status.`,
       category:'review',severity:'medium',confidence:'inferred',targetType:'document',
       evidence:`soft-404-signals=${signals}; title=${clip(page.title||'',80)}`,extra:{worthChecking:true,soft404Signals:signals}
     })];
@@ -2286,8 +2286,8 @@
           ruleId:'ux.disclosure-toggle-failed',
           title:'Disclosure control did not change state when activated',
           detail:embeddedContext
-            ?`Inside an embedded same-origin document, a safe local disclosure control was activated. Expected aria-expanded to become "${expectedExpanded}" (or the controlled panel visibility to change) within the bounded verification window, including a short extended settle for delayed UI. No qualifying state change was observed. This may be a slow animation or an inert control — it does not identify the exact JavaScript root cause.`
-            :`A safe local disclosure control was activated in a non-destructive check. Expected aria-expanded to become "${expectedExpanded}" (or the controlled panel visibility to change) within the bounded verification window, including a short extended settle for delayed UI. No qualifying state change was observed. This may be a slow animation or an inert control — it does not identify the exact JavaScript root cause.`,
+            ?`Inside an embedded same-origin document, a safe local disclosure control was activated. Expected aria-expanded to become "${expectedExpanded}" (or the controlled panel visibility to change) within the bounded verification window, including a short extended settle for delayed UI. No qualifying state change was observed. This may be a slow animation or an inert control; it does not identify the exact JavaScript root cause.`
+            :`A safe local disclosure control was activated in a non-destructive check. Expected aria-expanded to become "${expectedExpanded}" (or the controlled panel visibility to change) within the bounded verification window, including a short extended settle for delayed UI. No qualifying state change was observed. This may be a slow animation or an inert control; it does not identify the exact JavaScript root cause.`,
           category:'review',severity:'medium',confidence:'inferred',element:embeddedContext?null:btn,
           evidence:`interaction=disclosure-toggle; initial=${initialExpanded}; observed=${afterExpanded}; settled=${observation.settleDurationBucket}; restored=${restored}${embeddedContext?'; context=iframe':''}`,
           extra

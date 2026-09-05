@@ -1,6 +1,6 @@
 # Privacy and data boundary
 
-Web QA Assistant is designed to inspect only the page state required for a user-requested QA action.
+Lumen is designed to inspect only the page state required for a user-requested QA action.
 
 ## Local inspection
 

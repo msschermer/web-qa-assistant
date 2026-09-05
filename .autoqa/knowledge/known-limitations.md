@@ -9,7 +9,5 @@
 - Cross-origin iframe interiors and closed shadow roots not observable.
 - PSI / field CWV not implemented.
 - Live Chrome toolbar / Prompt API not proven by unit tests alone.
-- Cursor AutoQA is session-resumable, not a permanent daemon unless an external runner is added.
 - Activation readiness `build:extension` stamps `dist/`; those must be restored before beginCycle, and control-plane bookkeeping must be committed, or the next cycle refuses a dirty tree.
 - AutoQA requires installed Google Chrome; Playwright bundled Chromium absence is irrelevant when Chrome is present.
-- Cursor Auto-review `.cursor/permissions.json` must not treat approved corpus members as “external site needs review.”
