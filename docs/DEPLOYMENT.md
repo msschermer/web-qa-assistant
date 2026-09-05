@@ -56,11 +56,17 @@ On the Linux host:
 git clone https://github.com/msschermer/web-qa-assistant.git
 cd web-qa-assistant
 git fetch origin --tags
-git switch --detach ccdcddc
+git switch --detach <release commit or tag>
 cp .env.example .env
 ```
 
-Use tag `v1.7.5` or later on `origin/main` for a working server install. Tag `v1.7.4` (`e3ad225`) is missing the post-release `undici` dependency required by the renderer; do not check out that tag alone.
+Deploy a revision that is an ancestor of `origin/main` and has passed the gates. Confirm it before switching:
+
+```bash
+git merge-base --is-ancestor <revision> origin/main && echo "clean forward"
+```
+
+Historical note: tag `v1.7.4` (`e3ad225`) is missing the post-release `undici` dependency the renderer needs; never deploy that tag alone.
 
 Generate independent random values:
 
@@ -109,7 +115,7 @@ docker compose ps
 curl http://127.0.0.1:8787/api/health
 ```
 
-Expected API fields include version `1.7.5`, OpenAI configuration state and `publicAiEnabled`.
+Expected API fields include the deployed `version`, OpenAI configuration state and `publicAiEnabled`. It should match `git describe` on the box.
 
 The renderer has a Docker healthcheck. The API waits for a healthy renderer before the normal container dependency is considered ready.
 
@@ -239,7 +245,7 @@ After a tested release is published, on the production droplet:
 ssh portfolio
 cd ~/web-qa-assistant
 git fetch origin --tags
-git switch --detach v1.7.5
+git switch --detach <release commit or tag>
 git describe --tags --always
 docker network ls | grep portfolio-infra_web
 docker compose -f docker-compose.yml -f docker-compose.portfolio.yml config --quiet
@@ -248,16 +254,16 @@ curl -s http://127.0.0.1:8787/api/health
 curl -s https://assistant.msschermer.us/api/health
 ```
 
-**Tag note:** deploy **1.7.5** from tag `v1.7.5`. That tag includes the renderer `undici` dependency. Historical tag `v1.7.4` (`e3ad225`) still omits that hotfix; do not use it for server deploys.
+**Always detach.** `git switch --detach` is what keeps production on a fixed revision rather than a moving branch, and it is not optional: production sat on `main` for a while, which meant nobody could say from the box alone what was deployed. Run `git describe --tags --always` afterwards; that output is the record of what actually shipped.
 
-Replace `ccdcddc` with the exact release commit or tag being deployed. Use `git switch --detach` so production tracks a fixed revision, not a moving branch.
+This document deliberately names no version. It pinned `v1.7.5` and a bare `ccdcddc` in four places while the product moved past both, which is how a deployment guide starts describing a release nobody ships any more.
 
 Drop the `-f docker-compose.portfolio.yml` flags if you are not using the shared portfolio network.
 
 Confirm the upgrade landed:
 
 ```bash
-curl -s http://127.0.0.1:8787/api/health | grep 1.7.5
+curl -s http://127.0.0.1:8787/api/health
 curl -s -H "x-web-qa-key: <team-access-token>" \
   http://127.0.0.1:8787/api/health/integrations
 ```

@@ -4,7 +4,7 @@ Lumen is an evidence-first web QA and site-auditing product, built for **agencie
 
 It works at two scales. **Page Scan** inspects the current page in the real browser: axe-core accessibility, browser rules, verified link checks, live element highlighting. **Site Audit** crawls a whole site from the assistant gateway — a cheap static fetch, never a server-side render — and then offers an optional per-page browser pass for the checks that need a real browser. Walkthroughs turn a verified finding into a clear sequence of evidence, impact, remediation and re-verification.
 
-The project evolved from the original **Preflight** prototype. The legacy implementation is preserved in Git on the `legacy-preflight` branch and `preflight-legacy` tag. The active product no longer depends on the old Preflight service.
+The project evolved from an earlier **Preflight** prototype, which it no longer depends on in any form. That prototype is not part of this repository and none of its history is carried here; this tree begins at the first Lumen commit.
 
 ## Product rule
 
